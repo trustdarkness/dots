@@ -127,6 +127,7 @@ IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
 alias grep="grep -E -v \"$BLK\"|grep -E"
 PATH=$PATH:/home/mt/bin:/home/mt/src/github/networkmanager-dmenu:~/src/google/flutter/bin:~/src/github/eww/target/release
+D="$HOME/src/github/dots"
 
 distro="$(lsb_release -a);"
 function stringContains() {
@@ -188,7 +189,7 @@ alias ssup="sudo systemctl start"
 alias ssdn="sudo systemctl stop"
 alias ssr="sudo systemctl restart"
 alias ssst="sudo systemctl status"
-alias vbrc="vim ~/.bashrc && . ~/.bashrc"
+alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
 alias brc="vimcat ~/.bashrc"
 alias pau="ps auwx"
 alias paug="ps auwx|grep "
@@ -211,4 +212,12 @@ if [ -n "$PNPM" ]; then
   # pnpm end
 fi
 
-
+FIREWALLD=$(which firewall-cmd)
+if [ -n "$FIREWALLD" ]; then
+  function sfwp () {
+    sudo firewall-cmd --add-port $1 --zone public --permanent
+    sudo firewall-cmd --reload
+    ssr firewalld
+  }
+  export -f sfwp
+fi
