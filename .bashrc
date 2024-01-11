@@ -175,11 +175,25 @@ if stringContains "(debian|ubuntu)" "$distro"; then
   export -f sapg
 fi
 
+function wwwify () {
+  sudo sed -i.bak '/www-data/ s#/usr/sbin/nologin#/bin/bash#' /etc/passwd;
+  sudo -i -u www-data $@;
+  sudo sed -i.bak '/www-data/ s#/bin/bash#/usr/sbin/nologin#' /etc/passwd;
+}
+export -f wwwify
+
+function mastodonify () {
+  sudo sed -i.bak '/mastodon/ s#/usr/sbin/nologin#/bin/bash#' /etc/passwd;
+  sudo -i -u mastodon $@;
+  sudo sed -i.bak '/mastodon/ s#/bin/bash#/usr/sbin/nologin#' /etc/passwd;
+}
+export  -f mastodonify
+
 alias du0="du -h --max-depth=0"
 alias du1="du -h --max-depth=1"
 alias ns="sudo systemctl status nginx"
 alias nr="sudo systemctl restart nginx"
-alias nt="sudo sed -i.bak '/www-data/ s#/usr/sbin/nologin#/bin/bash#' /etc/passwd && sudo -i -u www-data nginx -t && sudo sed -i.bak '/www-data/ s#/bin/bash#/usr/sbin/nologin#' /etc/passwd"
+alias nt="wwwify nginx -t"
 alias nT="sudo nginx -T"
 alias di="sudo dpkg -i"
 alias sdw="sudo -i -u www-data"
