@@ -120,14 +120,31 @@ if ! shopt -oq posix; then
     . /etc/bash_completion
   fi
 fi
+
 export NO_ATI_BUS=1
 export PYTHONPATH=/usr/lib/python3.11:/usr/lib/python3/dist-packages
 alias use27="export PYTHONPATH=/usr/local/lib/python2.7/dist-packages"
 IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
 alias grep="grep -E -v \"$BLK\"|grep -E"
+alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 PATH=$PATH:/home/mt/bin:/home/mt/src/github/networkmanager-dmenu:~/src/google/flutter/bin:~/src/github/eww/target/release
-D="$HOME/src/github/dots"
+export D="$HOME/src/github/dots"
+
+function restore() {
+  BK=$HOME/$TARGET/$BACKUP/personal/$(hostname)/$(whoami)_latest
+  mounted=$(mountpoint $HOME/$TARGET);
+  if [ $? -ne 0 ]; then
+    $LH/mounter-t.sh
+  fi
+  if [ -d "$BK" ]; then
+    mkdir -p $HOME/.bak
+    cp -r $HOME/$1 $HOME/.bak
+    cp -r $BK/$1 $HOME/
+  else
+    &2 printf "Didn't find a backup directory at $BK. exiting."
+  fi
+}
 
 distro="$(lsb_release -a);"
 function stringContains() {
@@ -189,6 +206,35 @@ function mastodonify () {
 }
 export  -f mastodonify
 
+function symlink_child_dirs () {
+  # Argument should be a directory who's immediate children
+  # are themes such that you want to have each directory  
+  # at the top level (under the parent) symlinked in a 
+  # target directory.  Intended for use under ~/.themes
+  # but presumably, there are other ways this is useful. 
+  TARGET=$1
+  LNAME=$2
+
+  # give success a silly nonsensical value that the shell would never.
+  success=257
+
+  if [ -d "$TARGET" ]; then
+    if [ -d "$LNAME" ]; then
+      e=$(find $TARGET -maxdepth 1 -type d -exec ln -s '{}' $LNAME/ \;)
+      success=$?
+    fi
+  fi
+  if [ $success -eq 257 ]; then
+    >&2 printf "Specify a target parent directory whose children\n"
+    >&2 printf "should be symlinked into the desitination directory:\n"
+    >&2 printf "\$ symlink_child_dirs [target] [destination]"
+  fi
+}
+export -f symlink_child_dirs
+
+# thats too long to type though.
+alias scd="symlink_child_dirs"
+
 alias du0="du -h --max-depth=0"
 alias du1="du -h --max-depth=1"
 alias ns="sudo systemctl status nginx"
@@ -205,10 +251,12 @@ alias ssr="sudo systemctl restart"
 alias ssst="sudo systemctl status"
 alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
 alias brc="vimcat ~/.bashrc"
+alias sbrc="source $HOME/.bashrc"
 alias pau="ps auwx"
 alias paug="ps auwx|grep "
 alias paugi="ps awux|grep -i "
 alias rst="sudo shutdown -r now"
+alias gh="mkdir -p src/github && cd src/github"
 
 CARGO=$(which cargo);
 if [ -n "$CARGO" ]; then
@@ -234,4 +282,10 @@ if [ -n "$FIREWALLD" ]; then
     ssr firewalld
   }
   export -f sfwp
+  function sfwrm () {
+    sudo firewall-cmd --remove-port $1 --zone public --permanent
+    sudo firewall-cmd --reload 
+    ssr firewalld
+  }
+  export -f sfwrm
 fi

@@ -1,4 +1,5 @@
 #!/bin/bash
+export BACKUP="egdod/Backup"
 export TARGET=vulcan
 export VIDLIB=mmzzkk
 export PHOTOLIB=fodder
