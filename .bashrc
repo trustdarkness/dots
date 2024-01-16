@@ -175,7 +175,7 @@ function restore() {
     cp -r $HOME/$1 $HOME/.bak
     cp -r $BK/$1 $HOME/
   else
-    &2> printf "Didn't find a backup directory at $BK. exiting."
+    >&2 printf "Didn't find a backup directory at $BK. exiting."
   fi
 }
 export -f restore
