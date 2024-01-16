@@ -164,7 +164,7 @@ function restore() {
   if [ $global -eq 1 ]; then 
     BK="$HOME/$TARGET/$BACKUP/Software/Linux/"
   else
-    BK="$HOME/$TARGET/$BACKUP/personal/$(hostname)/$(whoami)_latest"
+    BK="$HOME/$TARGET/$BACKUP/Devices/personal/$(hostname)/$(whoami)_latest"
   fi
   mounted=$(mountpoint $HOME/$TARGET);
   if [ $? -ne 0 ]; then
@@ -172,7 +172,11 @@ function restore() {
   fi
   if [ -d "$BK" ]; then
     mkdir -p $HOME/.bak
-    cp -r $HOME/$1 $HOME/.bak
+    if [ -d "$HOME/$1" ]; then 
+      old="$HOME/$1"
+      echo "Backing up existing $old to .bak"
+      cp -r "$old" "$HOME/.bak"
+    fi
     cp -r $BK/$1 $HOME/
   else
     >&2 printf "Didn't find a backup directory at $BK. exiting."
@@ -239,6 +243,7 @@ function mastodonify () {
   sudo sed -i.bak '/mastodon/ s#/bin/bash#/usr/sbin/nologin#' /etc/passwd;
 }
 export  -f mastodonify
+
 
 function hn () {
   if [ $# -eq 0 ]; then 
