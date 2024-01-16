@@ -132,7 +132,40 @@ PATH=$PATH:/home/mt/bin:/home/mt/src/github/networkmanager-dmenu:~/src/google/fl
 export D="$HOME/src/github/dots"
 
 function restore() {
-  BK=$HOME/$TARGET/$BACKUP/personal/$(hostname)/$(whoami)_latest
+  global=0
+  POSITIONAL_ARGS=()
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      -g|--global)
+        global=1
+        shift # past argument
+        shift # past value
+        ;;
+      -h|--help)
+        echo "A simple wrapper function to restore from a backup dir on a"
+        echo "fresh install."
+        echo " " 
+        echo "-g is for global, non-personalized software from a local source"
+        echo "but still restored to \$HOME."
+        shift # past argument
+        shift # past value
+        ;;
+      -*|--*)
+        echo "Unknown option $1"
+        return 1
+        ;;
+      *)
+        POSITIONAL_ARGS+=("$1") # save positional arg
+        shift # past argument
+        ;;
+    esac
+  done
+  set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters
+  if [ $global -eq 1 ]; then 
+    BK="$HOME/$TARGET/$BACKUP/Software/Linux/"
+  else
+    BK="$HOME/$TARGET/$BACKUP/personal/$(hostname)/$(whoami)_latest"
+  fi
   mounted=$(mountpoint $HOME/$TARGET);
   if [ $? -ne 0 ]; then
     $LH/mounter-t.sh
@@ -145,6 +178,7 @@ function restore() {
     &2 printf "Didn't find a backup directory at $BK. exiting."
   fi
 }
+export -f restore
 
 distro="$(lsb_release -a);"
 function stringContains() {
@@ -205,6 +239,31 @@ function mastodonify () {
   sudo sed -i.bak '/mastodon/ s#/bin/bash#/usr/sbin/nologin#' /etc/passwd;
 }
 export  -f mastodonify
+
+function hn () {
+  if [ $# -eq 0 ]; then 
+    >&2 printf "give me a list of hosts to get ips for"
+    return 1;
+  fi
+
+  IPR='^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.){3}(25[0-5]|(2[0-4]|1\d|[1-9]|)\d)$'
+
+  # get hosts from ssh config
+  for h in $(echo $@| tr " " "\n"); do
+    SSHOST="$(grep -A2 $h $HOME/.ssh/config|grep hostname)"
+    if [ $? -ne 0 ]; then
+      IP="$(echo $SSHOST|grep '$IPR')"
+      if [ $? -ne 0 ]; then
+        echo "$h: $IP"
+      fi
+    fi
+    if [ -n "$IP" ]; then 
+      dig $h
+    fi
+    IP=""
+  done
+}
+export -f hn
 
 function symlink_child_dirs () {
   # Argument should be a directory who's immediate children
@@ -282,7 +341,7 @@ if [ -n "$FIREWALLD" ]; then
     ssr firewalld
   }
   export -f sfwp
-  
+
   function sfwrm () {
     sudo firewall-cmd --remove-port $1 --zone public --permanent
     sudo firewall-cmd --reload 
