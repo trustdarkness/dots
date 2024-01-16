@@ -282,6 +282,7 @@ if [ -n "$FIREWALLD" ]; then
     ssr firewalld
   }
   export -f sfwp
+  
   function sfwrm () {
     sudo firewall-cmd --remove-port $1 --zone public --permanent
     sudo firewall-cmd --reload 
