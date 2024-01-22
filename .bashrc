@@ -123,7 +123,11 @@ fi
 
 export NO_ATI_BUS=1
 export PYTHONPATH=/usr/lib/python3.11:/usr/lib/python3/dist-packages
-alias use27="export PYTHONPATH=/usr/local/lib/python2.7/dist-packages"
+function use27 {
+  export PYTHONPATH=/usr/local/lib/python2.7/dist-packages
+  export PATH=/usr/local/deprecated/bin:$PATH
+  alias python=/usr/deprecated/bin/python2.7
+}
 IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
 alias grep="grep -E -v \"$BLK\"|grep -E"
@@ -228,6 +232,22 @@ if stringContains "(debian|ubuntu)" "$distro"; then
     sudo apt purge *$pattern*
   }
   export -f sapg
+  function sas_oldskool {
+    pattern=$1
+    sudo sed -i.bak 's@#deb\ http://archive@deb\ http://archive@g' /etc/apt/sources.list
+    sau
+    sas $i
+    sudo sed -i.bak 's@deb\ http://archive@#deb\ http://archive@g'  /etc/apt sources.list
+  }
+  export -f sas_oldskool
+  function sai_oldskool {
+    pattern=$1
+    sudo sed -i.bak '/archive/ s@#deb\ http://archive@deb\ http://archive@g' /etc/apt/sources.list
+    sau
+    sai $i
+    sudo sed -i.bak '/archive/ s@deb\ http://archive@#deb\ http://archive@g'  /etc/apt sources.list
+  }
+  export -f sai_oldskool
 fi
 
 function wwwify () {
@@ -320,7 +340,9 @@ alias pau="ps auwx"
 alias paug="ps auwx|grep "
 alias paugi="ps awux|grep -i "
 alias rst="sudo shutdown -r now"
-alias gh="mkdir -p src/github && cd src/github"
+alias gh="mkdir -p $HOME/src/github && cd $HOME/src/github"
+alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
+alias gc="git clone"
 
 CARGO=$(which cargo);
 if [ -n "$CARGO" ]; then
