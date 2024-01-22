@@ -137,11 +137,13 @@ export D="$HOME/src/github/dots"
 
 function restore() {
   global=0
+  LOC=$1
   POSITIONAL_ARGS=()
   while [[ $# -gt 0 ]]; do
     case $1 in
       -g|--global)
         global=1
+	LOC=$2
         shift # past argument
         shift # past value
         ;;
@@ -168,20 +170,22 @@ function restore() {
   if [ $global -eq 1 ]; then 
     BK="$HOME/$TARGET/$BACKUP/Software/Linux/"
   else
-    BK="$HOME/$TARGET/$BACKUP/Devices/personal/$(hostname)/$(whoami)_latest"
+    BK="$HOME/$TARGET/$BACKUP/Devices/personal/$(hostname)/$(whoami)_latest/$(whoami)"
   fi
   mounted=$(mountpoint $HOME/$TARGET);
   if [ $? -ne 0 ]; then
     $LH/mounter-t.sh
   fi
   if [ -d "$BK" ]; then
+    new="$BK/$LOC"
+    old="$HOME/$LOC"
+    confirm_yes "restoring $new to $old... ok?"
     mkdir -p $HOME/.bak
-    if [ -d "$HOME/$1" ]; then 
-      old="$HOME/$1"
+    if [ -d "$old" ]; then 
       echo "Backing up existing $old to .bak"
-      cp -r "$old" "$HOME/.bak"
+      cp -vr "$old" "$HOME/.bak"
     fi
-    cp -r $BK/$1 $HOME/
+    cp -vr $new $HOME/
   else
     >&2 printf "Didn't find a backup directory at $BK. exiting."
   fi
