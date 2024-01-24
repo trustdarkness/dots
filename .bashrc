@@ -325,18 +325,56 @@ if stringContains "(debian|ubuntu)" "$distro"; then
     pattern=$1
     sudo sed -i.bak 's@#deb\ http://archive@deb\ http://archive@g' /etc/apt/sources.list
     sau
-    sas $i
+    sas $pattern
     sudo sed -i.bak 's@deb\ http://archive@#deb\ http://archive@g'  /etc/apt sources.list
+    sau
   }
   export -f sas_oldskool
+  function sas_oldstable {
+    pattern=$1
+    sudo sed -i.bak 's@#deb\ https://deb.debian.org/debian/\ oldstable@deb\ https://deb.debian.org/debian/\ oldstable@g' /etc/apt/sources.list
+    sau
+    sas $pattern
+    sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ oldstable@#deb\ https://deb.debian.org/debian/\ oldstable@g' /etc/apt/sources.list
+    sau
+  }
+  export -f sas_oldstable
+  function sas_unstable {
+    pattern=$1
+    sudo sed -i.bak 's@#deb\ https://deb.debian.org/debian/\ sid@deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
+    sau
+    sas $pattern
+    sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ sid@#deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
+    sau
+  }
+  export -f sas_unstable
   function sai_oldskool {
     pattern=$1
     sudo sed -i.bak '/archive/ s@#deb\ http://archive@deb\ http://archive@g' /etc/apt/sources.list
     sau
-    sai $i
+    sai $pattern
     sudo sed -i.bak '/archive/ s@deb\ http://archive@#deb\ http://archive@g'  /etc/apt sources.list
+    sau
   }
   export -f sai_oldskool
+  function sai_oldstable {
+    pattern=$1
+    sudo sed -i.bak 's@#deb\ https://deb.debian.org/debian/\ oldstable@deb\ https://deb.debian.org/debian/\ oldstable@g' /etc/apt/sources.list
+    sau
+    sai $pattern
+    sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ oldstable@#deb\ https://deb.debian.org/debian/\ oldstable@g' /etc/apt/sources.list
+    sau
+  }
+  export -f sai_oldstable
+  function sai_unstable {
+    pattern=$1
+    sudo sed -i.bak 's@#deb\ https://deb.debian.org/debian/\ sid@deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
+    sau
+    sai $pattern
+    sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ sid@#deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
+    sau
+  }
+  export -f sai_unstable
 fi
 
 function wwwify () {
@@ -481,3 +519,4 @@ if [ -n "$FIREWALLD" ]; then
   }
   export -f sfwrm
 fi
+export PATH=$PATH:/usr/sbin:/sbin:$HOME/bin
