@@ -162,11 +162,7 @@ export -f confirm_yes
 
 export NO_ATI_BUS=1
 export PYTHONPATH=/usr/lib/python3.11:/usr/lib/python3/dist-packages
-function use27 {
-  export PYTHONPATH=/usr/local/lib/python2.7/dist-packages
-  export PATH=/usr/local/deprecated/bin:$PATH
-  alias python=/usr/deprecated/bin/python2.7
-}
+use27="source $HOME/.python27_diablito"
 IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
 alias grep="grep -E -v \"$BLK\"|grep -E"
