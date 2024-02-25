@@ -211,38 +211,57 @@ alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 PATH=$PATH:$HOME/bin:$HOME/Applications:$HOME/src/github/networkmanager-dmenu:$HOME/src/google/flutter/bin:$HOME/src/github/eww/target/release
 export D="$HOME/src/github/dots"
 
-function restore() {
+function restore() (
   global=0
   LOC=$1
-  POSITIONAL_ARGS=()
-  while [[ $# -gt 0 ]]; do
+  merge=1
+  clobber=0
+  help () {
+    echo "A simple wrapper function to restore from a backup dir on a"
+    echo "fresh install."
+    echo " " 
+    echo "-g is for global, non-personalized software from a local source"
+    echo "but still restored to \$HOME."
+    echo "-o will overwrite any existing files / dirs.  Default is to merge"
+    echo "-c, when used with -o, will clobber newer files in the destination directory."
+    echo "    default is to only update."
+  }
+  args=$(getopt -o goch --long global,overwrite,clobber,help -- "$@")
+  if [[ $? -gt 0 ]]; then
+    help
+  fi
+  eval set -- ${args}
+  while :
+  do
     case $1 in
       -g|--global)
         global=1
-	LOC=$2
-        shift # past argument
-        shift # past value
+        shift 
+        ;;
+      -o|--overwrite)
+        merge=0
+        shift
+        ;;
+      -c|--clobber)
+        clobber=1
+        shift
         ;;
       -h|--help)
-        echo "A simple wrapper function to restore from a backup dir on a"
-        echo "fresh install."
-        echo " " 
-        echo "-g is for global, non-personalized software from a local source"
-        echo "but still restored to \$HOME."
-        shift # past argument
-        shift # past value
+        help
+        return 1
         ;;
       -*|--*)
         echo "Unknown option $1"
         return 1
         ;;
-      *)
-        POSITIONAL_ARGS+=("$1") # save positional arg
-        shift # past argument
-        ;;
+
     esac
   done
-  set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters
+  LOC="$@"
+  if stringContains "/" $LOC; then
+    >&2 printf "nested directories not yet supported."
+    exit 1
+  fi
   if [ $global -eq 1 ]; then 
     BK="$HOME/$TARGET/$BACKUP/Software/Linux/"
   else
@@ -252,20 +271,28 @@ function restore() {
   if [ $? -ne 0 ]; then
     $LH/mounter-t.sh
   fi
-  if [ -d "$BK" ]; then
-    new="$BK/$LOC"
-    old="$HOME/$LOC"
-    confirm_yes "restoring $new to $old... ok?"
-    mkdir -p $HOME/.bak
-    if [ -d "$old" ]; then 
-      echo "Backing up existing $old to .bak"
-      cp -vr "$old" "$HOME/.bak"
+  if [ $merge -ne 0 ]; then
+    if [ -d "$BK" ]; then
+      new="$BK/$LOC"
+      old="$HOME/$LOC"
+      confirm_yes "restoring $new to $old... ok?"
+      mkdir -p $HOME/.bak
+      if [ -d "$old" ]; then 
+        echo "Backing up existing $old to .bak"
+        cp -vr "$old" "$HOME/.bak"
+      fi
+      cp -vr $new $HOME/
+    else
+      >&2 printf "Didn't find a backup directory at $BK. exiting."
     fi
-    cp -vr $new $HOME/
+  elif [ $clobber -eq 1 ]; then
+    confirm_yes "merging $new to $old, clobbering newer files... ok?"
+    rsync -rltv "new" "$home"
   else
-    >&2 printf "Didn't find a backup directory at $BK. exiting."
+    confirm_yes "merging $new to $old if it exists... ok?"
+    rsync -rlutv "$new" "$home"
   fi
-}
+)
 export -f restore
 
 distro="$(lsb_release -a);"
