@@ -218,7 +218,7 @@ IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
 alias grep="grep -E -v \"$BLK\"|grep -E"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
-PATH=$PATH:/home/mt/bin:/home/mt/.local/share/yabridge:/home/mt/.local/bin:/home/mt/src/github/networkmanager-dmenu:~/src/google/flutter/bin:~/src/github/eww/target/release
+PATH=$PATH:$HOME/bin:$HOME/Applications:$HOME/src/github/networkmanager-dmenu:$HOME/src/google/flutter/bin:$HOME/src/github/eww/target/release
 export D="$HOME/src/github/dots"
 
 function restore() (
