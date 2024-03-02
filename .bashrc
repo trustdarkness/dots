@@ -496,6 +496,30 @@ function yainst() {
   fi
 }
 
+function killkactivity() {
+  # cache sudo 
+  runnning=$(sudo $PS kactivitymanagerd)
+  if ! [ -n "$running"]; then
+    echo "kactivitymanagerd doesn't seem to be running.  Exiting."
+    return 0
+  fi
+  echo "TO banish kactiviymanagerd, we will try the following trickery:"
+  echo "
+  pkill -9 kactivitymanag
+  rm -r ~/.local/share/kactivitymanagerd && 
+  touch ~/.local/share/kactivitymanagerd && 
+  sudo chmod -x /usr/lib/x86_64-linux-gnu/libexec/kactivitymanagerd && 
+  sudo chmod -x /usr/lib/x86_64-linux-gnu/qt5/plugins/kactivitymanagerd"
+
+  confirm_yes "OK?"
+  # pkill: pattern that searches for process name longer than 15 characters will result in zero matchess
+  pkill -9 kactivitymanag
+  rm -r ~/.local/share/kactivitymanagerd && 
+  touch ~/.local/share/kactivitymanagerd && 
+  sudo chmod -x /usr/lib/x86_64-linux-gnu/libexec/kactivitymanagerd && 
+  sudo chmod -x /usr/lib/x86_64-linux-gnu/qt5/plugins/kactivitymanagerd
+}
+
 # thats too long to type though.
 alias scd="symlink_child_dirs"
 
