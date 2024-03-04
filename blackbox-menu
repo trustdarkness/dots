@@ -1,0 +1,113 @@
+# Automatically generated file. Do not edit (see /usr/share/doc/menu/README)
+
+[begin] (Debian)
+   [submenu] (Applications) 
+      [submenu] (Accessibility) 
+         [exec] (xbindkeys)  {/usr/bin/xbindkeys} 
+      [end]
+      [submenu] (Data Management) 
+         [exec] (Innotop)  {x-terminal-emulator  -T "Innotop" -e sh -c "/usr/bin/innotop"} 
+      [end]
+      [submenu] (Graphics) 
+         [exec] (dotty)  {/usr/bin/dotty} 
+         [exec] (lefty)  {/usr/bin/lefty} 
+      [end]
+      [submenu] (Network) 
+         [submenu] (Web Browsing) 
+            [exec] (w3m)  {x-terminal-emulator  -T "w3m" -e sh -c "/usr/bin/w3m /usr/share/doc/w3m/MANUAL.html"} 
+         [end]
+      [end]
+      [submenu] (Science) 
+         [submenu] (Mathematics) 
+            [exec] (Bc)  {x-terminal-emulator  -T "Bc" -e sh -c "/usr/bin/bc"} 
+            [exec] (Dc)  {x-terminal-emulator  -T "Dc" -e sh -c "/usr/bin/dc"} 
+         [end]
+      [end]
+      [submenu] (Shells) 
+         [exec] (Bash)  {x-terminal-emulator  -T "Bash" -e sh -c "/bin/bash --login"} 
+         [exec] (Dash)  {x-terminal-emulator  -T "Dash" -e sh -c "/bin/dash -i"} 
+         [exec] (Sh)  {x-terminal-emulator  -T "Sh" -e sh -c "/bin/sh --login"} 
+      [end]
+      [submenu] (Sound) 
+         [exec] (jack-plumbing)  {x-terminal-emulator  -T "jack-plumbing" -e sh -c "/usr/bin/jack-plumbing"} 
+         [exec] (jack-scope)  {x-terminal-emulator  -T "jack-scope" -e sh -c "/usr/bin/jack-scope"} 
+         [exec] (jack-transport)  {x-terminal-emulator  -T "jack-transport" -e sh -c "/usr/bin/jack-transport"} 
+         [exec] (ncmpcpp)  {x-terminal-emulator  -T "ncmpcpp" -e sh -c "/usr/bin/ncmpcpp"} 
+      [end]
+      [submenu] (System) 
+         [submenu] (Administration) 
+            [exec] (Editres)  {editres} 
+            [exec] (GTK+ 2.0 Theme Switch)  {/usr/bin/gtk-theme-switch2} 
+            [exec] (Logout \(obsession\))  {/usr/bin/obsession-logout} 
+            [exec] (stalonetray)  {/usr/bin/stalonetray} 
+            [exec] (Xfontsel)  {xfontsel} 
+            [exec] (Xkill)  {xkill} 
+            [exec] (Xrefresh)  {xrefresh} 
+         [end]
+         [submenu] (Hardware) 
+            [exec] (DDCcontrol)  {x-terminal-emulator  -T "DDCcontrol" -e sh -c "/usr/bin/ddccontrol"} 
+            [exec] (Xvidtune)  {xvidtune} 
+         [end]
+         [submenu] (Monitoring) 
+            [exec] (Pstree)  {x-terminal-emulator  -T "Pstree" -e sh -c "/usr/bin/pstree.x11"} 
+            [exec] (Xev)  {x-terminal-emulator -e xev} 
+         [end]
+         [submenu] (Package Management) 
+            [exec] (Aptitude Package Manager \(text\))  {x-terminal-emulator  -T "Aptitude Package Manager \(text\)" -e sh -c "/usr/bin/aptitude-curses"} 
+         [end]
+      [end]
+      [submenu] (Terminal Emulators) 
+         [exec] (Eterm)  {/usr/bin/Eterm} 
+      [end]
+      [submenu] (Text) 
+         [exec] (Fortune)  {sh -c 'while /usr/games/fortune | col -x | xmessage -center -buttons OK:1,Another:0 -default OK -file - ; do :; done'} 
+         [exec] (txt2tags)  {x-terminal-emulator  -T "txt2tags" -e sh -c "/usr/bin/txt2tags"} 
+      [end]
+      [submenu] (Viewers) 
+         [exec] (docker)  {/usr/bin/wmdocker} 
+      [end]
+   [end]
+   [submenu] (Blackbox) 
+      [config] (Configuration) 
+      [submenu] (Styles) 
+         [stylesdir] (~/.blackbox/styles) 
+         [sep]
+         [stylesdir] (/usr/share/blackbox/styles) 
+      [end]
+      [submenu] (Extras)
+         [workspaces] (Workspaces) 
+         [sep]
+         [editplugins] (editplugs)
+         [toggleplugins] (toggleplugs)
+         [aboutplugins]  (aboutplugs)
+         [sep]
+         [reconfig] (Reconfigure) 
+         [restart] (Restart) 
+         [exit] (Exit)
+      [end] 
+   [end]
+   [submenu] (Screen) 
+      [submenu] (Locking) 
+         [exec] (Lock Screen \(XScreenSaver\))  {/usr/bin/xscreensaver-command -lock} 
+      [end]
+      [submenu] (Saving) 
+         [exec] (Activate ScreenSaver \(Next\))  {/usr/bin/xscreensaver-command -next} 
+         [exec] (Activate ScreenSaver \(Previous\))  {/usr/bin/xscreensaver-command -prev} 
+         [exec] (Activate ScreenSaver \(Random\))  {/usr/bin/xscreensaver-command -activate} 
+         [exec] (Demo Screen Hacks)  {/usr/bin/xscreensaver-command -demo} 
+         [exec] (Disable XScreenSaver)  {/usr/bin/xscreensaver-command -exit} 
+         [exec] (Enable XScreenSaver)  {/usr/bin/xscreensaver} 
+         [exec] (Reinitialize XScreenSaver)  {/usr/bin/xscreensaver-command -restart} 
+         [exec] (ScreenSaver Preferences)  {/usr/bin/xscreensaver-command -prefs} 
+      [end]
+   [end]
+   [submenu] (Window Managers) 
+      [restart] (Blackbox)  {/usr/bin/blackbox} 
+   [end]
+[sep]
+   [submenu] (System)
+      [reboot] (likeaphoenix)
+      [logoff] (exittotheenter)
+      [shutdown] (cutloosethemortalcoil)
+   [end]
+[end]

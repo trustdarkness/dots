@@ -121,89 +121,23 @@ if ! shopt -oq posix; then
   fi
 fi
 
-export BACKUP="egdod/Backup"
-export TARGET=vulcan
-export VIDLIB=mmzzkk
-export PHOTOLIB=fodder
-export MUSICLIB="/mmzzkk/Music"
-export MBKS="/egdod/Backup/xMusic/"
-export MARCH="/egdod/Backup/xMusic/Music_Archived"
-export LH="$HOME/src/github/library-helpers"
-
-
+source 
 source $LH/util.sh
-
-# use px if available
-PS=$(which px)
-if ! [ -n "$PS" ]; then
-  PS="ps awux |grep"
-fi
-
-function start_if_not_list() {
-  running="$($PS `whoami`)"
-  for i in $@; do 
-    if ! stringContains "$i" "$running"; then
-      $i &
-    else
-      echo "$i already running."
-    fi
-  done
-}
-export -f start_if_not_list
-
-function start_if_not_args() { 
-  running="$($PS `whoami`)"
-  if ! stringContains "$1" "$running"; then
-    $@ &
-  else
-    echo "$1 already running."
-  fi
-}
-export -f start_if_not_args
-
-
-# Read a single char from /dev/tty, prompting with "$*"
-# Note: pressing enter will return a null string. Perhaps a version terminated with X and then remove it in caller?
-# See https://unix.stackexchange.com/a/367880/143394 for dealing with multi-byte, etc.
-function get_keypress {
-  local REPLY IFS=
-  >/dev/tty printf '%s' "$*"
-  [[ $ZSH_VERSION ]] && read -rk1  # Use -u0 to read from STDIN
-  # See https://unix.stackexchange.com/q/383197/143394 regarding '\n' -> ''
-  [[ $BASH_VERSION ]] && </dev/tty read -rn1
-  printf '%s' "$REPLY"
-}
-export -f get_keypress
-
-# Get a y/n from the user, return yes=0, no=1 enter=$2
-# Prompt using $1.
-# If set, return $2 on pressing enter, useful for cancel or defualting
-function get_yes_keypress {
-  local prompt="${1:-Are you sure}"
-  local enter_return=$2
-  local REPLY
-  # [[ ! $prompt ]] && prompt="[y/n]? "
-  while REPLY=$(get_keypress "$prompt"); do
-    [[ $REPLY ]] && printf '\n' # $REPLY blank if user presses enter
-    case "$REPLY" in
-      Y|y)  return 0;;
-      N|n)  return 1;;
-      '')   [[ $enter_return ]] && return "$enter_return"
-    esac
-  done
-}
-export -f get_yes_keypress
-
-# Prompt to confirm, defaulting to YES on <enter>
-function confirm_yes {
-  local prompt="${*:-Are you sure} [Y/n]? "
-  get_yes_keypress "$prompt" 0
-}
-export -f confirm_yes
+source $MTEBENV/.conditional_starters
 
 export NO_ATI_BUS=1
 export PYTHONPATH=/usr/lib/python3.11:/usr/lib/python3/dist-packages
-use27="source $HOME/.python27_diablito"
+function use27 {
+  export PYTHONPATH=/usr/local/lib/python2.7/dist-packages:/usr/deprecated/lib/python2.7/
+  export PATH=/usr/local/deprecated/bin:$PATH
+  alias python=/usr/deprecated/bin/python2.7
+}
+function use310 {
+  export PYTHONPATH=/usr/deprecated/lib/python3.10
+  export PATH=/usr/local/deprecated/bin:$PATH
+  alias python=/usr/deprecated/bin/python3.10
+  alias python3=/usr/deprecated/bin/python3.10
+}
 IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
 alias grep="grep -E -v \"$BLK\"|grep -E"
@@ -219,17 +153,22 @@ function restore() (
   LOC=$1
   merge=1
   clobber=0
+  glob=0
   help () {
     echo "A simple wrapper function to restore from a backup dir on a"
     echo "fresh install."
     echo " " 
-    echo "-g is for global, non-personalized software from a local source"
-    echo "but still restored to \$HOME."
-    echo "-o will overwrite any existing files / dirs.  Default is to merge"
-    echo "-c, when used with -o, will clobber newer files in the destination directory."
-    echo "    default is to only update."
+    echo "-n is for non-personalized software from a local source"
+    echo "   but still restored to \$HOME."
+    echo "-g globs the restore target, will try to restore anything"
+    echo "   that exists in the backup like '*term*'.  We glob so you"
+    echo "   don't have to."sent
+    echo "-o will overwrite any existing files / dirs."
+    echo "   Default is to merge"
+    echo "-c when used with -o, will clobber newer files in the"
+    echo "   destination directory. Default is to only update."
   }
-  args=$(getopt -o goch --long global,overwrite,clobber,help -- "$@")
+  args=$(getopt -o ngoch --long nonpersonalized,glob,overwrite,clobber,help -- "$@")
   if [[ $? -gt 0 ]]; then
     help
   fi
@@ -237,8 +176,12 @@ function restore() (
   while :
   do
     case $1 in
-      -g|--global)
+      -n|--nonpersonalized)
         global=1
+        shift 
+        ;;
+      -g|--glob)
+        glob=1
         shift 
         ;;
       -o|--overwrite)
@@ -347,7 +290,7 @@ if stringContains "(debian|ubuntu)" "$distro"; then
     sudo aptitude search $pattern|grep ^i
   }
   export -f sasi
-  function sas_oldskool {
+  function sas-oldskool {
     pattern=$1
     sudo sed -i.bak 's@#deb\ http://archive@deb\ http://archive@g' /etc/apt/sources.list
     sau
@@ -355,8 +298,8 @@ if stringContains "(debian|ubuntu)" "$distro"; then
     sudo sed -i.bak 's@deb\ http://archive@#deb\ http://archive@g'  /etc/apt sources.list
     sau
   }
-  export -f sas_oldskool
-  function sas_oldstable {
+  export -f sas-oldskool
+  function sas-oldstable {
     pattern=$1
     sudo sed -i.bak 's@#deb\ https://deb.debian.org/debian/\ oldstable@deb\ https://deb.debian.org/debian/\ oldstable@g' /etc/apt/sources.list
     sau
@@ -364,8 +307,8 @@ if stringContains "(debian|ubuntu)" "$distro"; then
     sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ oldstable@#deb\ https://deb.debian.org/debian/\ oldstable@g' /etc/apt/sources.list
     sau
   }
-  export -f sas_oldstable
-  function sas_unstable {
+  export -f sas-oldstable
+  function sas-unstable {
     pattern=$1
     sudo sed -i.bak 's@#deb\ https://deb.debian.org/debian/\ sid@deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
     sau
@@ -373,8 +316,8 @@ if stringContains "(debian|ubuntu)" "$distro"; then
     sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ sid@#deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
     sau
   }
-  export -f sas_unstable
-  function sai_oldskool {
+  export -f sas-unstable
+  function sai-oldskool {
     pattern=$1
     sudo sed -i.bak '/archive/ s@#deb\ http://archive@deb\ http://archive@g' /etc/apt/sources.list
     sau
@@ -382,8 +325,8 @@ if stringContains "(debian|ubuntu)" "$distro"; then
     sudo sed -i.bak '/archive/ s@deb\ http://archive@#deb\ http://archive@g'  /etc/apt sources.list
     sau
   }
-  export -f sai_oldskool
-  function sai_oldstable {
+  export -f sai-oldskool
+  function sai-oldstable {
     pattern=$1
     sudo sed -i.bak 's@#deb\ https://deb.debian.org/debian/\ oldstable@deb\ https://deb.debian.org/debian/\ oldstable@g' /etc/apt/sources.list
     sau
@@ -391,8 +334,8 @@ if stringContains "(debian|ubuntu)" "$distro"; then
     sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ oldstable@#deb\ https://deb.debian.org/debian/\ oldstable@g' /etc/apt/sources.list
     sau
   }
-  export -f sai_oldstable
-  function sai_unstable {
+  export -f sai-oldstable
+  function sai-unstable {
     pattern=$1
     sudo sed -i.bak 's@#deb\ https://deb.debian.org/debian/\ sid@deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
     sau
@@ -400,7 +343,7 @@ if stringContains "(debian|ubuntu)" "$distro"; then
     sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ sid@#deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
     sau
   }
-  export -f sai_unstable
+  export -f sai-unstable
 fi
 
 function wwwify () {
@@ -468,6 +411,41 @@ function symlink_child_dirs () {
   fi
 }
 export -f symlink_child_dirs
+
+function yainst() {
+  if [ -d $HOME/Downloads/yabridge ]; then 
+    cp -r $HOME/Downloads/yabridge $HOME/.local/share/
+  elif [ -d $HOME/bin/yabridge ]; then 
+    cp -r $HOME/bin/yabridge $HOME/.local/share/
+  else
+    >&2 printf "Can't find yabridge updates in"
+    >&2 printf "$HOME/Downloads or $HOME/bin"
+  fi
+}
+
+function killkactivity() {
+  # cache sudo 
+  runnning=$(sudo $PS kactivitymanagerd)
+  if ! [ -n "$running"]; then
+    echo "kactivitymanagerd doesn't seem to be running.  Exiting."
+    return 0
+  fi
+  echo "TO banish kactiviymanagerd, we will try the following trickery:"
+  echo "
+  pkill -9 kactivitymanag
+  rm -r ~/.local/share/kactivitymanagerd && 
+  touch ~/.local/share/kactivitymanagerd && 
+  sudo chmod -x /usr/lib/x86_64-linux-gnu/libexec/kactivitymanagerd && 
+  sudo chmod -x /usr/lib/x86_64-linux-gnu/qt5/plugins/kactivitymanagerd"
+
+  confirm_yes "OK?"
+  # pkill: pattern that searches for process name longer than 15 characters will result in zero matchess
+  pkill -9 kactivitymanag
+  rm -r ~/.local/share/kactivitymanagerd && 
+  touch ~/.local/share/kactivitymanagerd && 
+  sudo chmod -x /usr/lib/x86_64-linux-gnu/libexec/kactivitymanagerd && 
+  sudo chmod -x /usr/lib/x86_64-linux-gnu/qt5/plugins/kactivitymanagerd
+}
 
 # thats too long to type though.
 alias scd="symlink_child_dirs"
