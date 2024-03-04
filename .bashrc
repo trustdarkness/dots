@@ -210,6 +210,9 @@ alias grep="grep -E -v \"$BLK\"|grep -E"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 PATH=$PATH:$HOME/bin:$HOME/Applications:$HOME/src/github/networkmanager-dmenu:$HOME/src/google/flutter/bin:$HOME/src/github/eww/target/release
 export D="$HOME/src/github/dots"
+function sublist-xdg-data-dirs() {
+  IFS=":"; for dir in $XDG_DATA_DIRS; do ls $dir; done
+}
 
 function restore() (
   global=0
