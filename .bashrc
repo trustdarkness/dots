@@ -121,10 +121,16 @@ if ! shopt -oq posix; then
   fi
 fi
 
-source 
+source $HOME/.globals
 source $LH/util.sh
 source $MTEBENV/.conditional_starters
 
+ssudo () # super sudo
+{
+  [[ "$(type -t $1)" == "function" ]] &&
+    ARGS="$@" && sudo bash -c "$(declare -f $1); $ARGS"
+}
+alias ssudo="ssudo "
 export NO_ATI_BUS=1
 export PYTHONPATH=/usr/lib/python3.11:/usr/lib/python3/dist-packages
 function use27 {
