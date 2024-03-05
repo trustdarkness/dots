@@ -392,7 +392,7 @@ function hn () {
 }
 export -f hn
 
-function symlink_child_dirs () {
+function symlink-child-dirs () {
   # Argument should be a directory who's immediate children
   # are themes such that you want to have each directory  
   # at the top level (under the parent) symlinked in a 
@@ -416,7 +416,7 @@ function symlink_child_dirs () {
     >&2 printf "\$ symlink_child_dirs [target] [destination]"
   fi
 }
-export -f symlink_child_dirs
+export -f symlink-child-dirs
 
 function yainst() {
   if [ -d $HOME/Downloads/yabridge ]; then 
