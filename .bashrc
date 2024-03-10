@@ -125,6 +125,12 @@ source $HOME/.globals
 source $LH/util.sh
 source $MTEBENV/.conditional_starters
 
+ssudo () # super sudo
+{
+  [[ "$(type -t $1)" == "function" ]] &&
+    ARGS="$@" && sudo bash -c "$(declare -f $1); $ARGS"
+}
+alias ssudo="ssudo "
 export NO_ATI_BUS=1
 export PYTHONPATH=/usr/lib/python3.11:/usr/lib/python3/dist-packages
 function use27 {
@@ -144,6 +150,9 @@ alias grep="grep -E -v \"$BLK\"|grep -E"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 PATH=$HOME/bin:$HOME/Applications:$HOME/src/github/networkmanager-dmenu:$HOME/src/google/flutter/bin:$HOME/src/github/eww/target/release:$PATH
 export D="$HOME/src/github/dots"
+function sublist-xdg-data-dirs() {
+  IFS=":"; for dir in $XDG_DATA_DIRS; do ls $dir; done
+}
 
 function restore() (
   global=0
@@ -383,7 +392,7 @@ function hn () {
 }
 export -f hn
 
-function symlink_child_dirs () {
+function symlink-child-dirs () {
   # Argument should be a directory who's immediate children
   # are themes such that you want to have each directory  
   # at the top level (under the parent) symlinked in a 
@@ -407,7 +416,7 @@ function symlink_child_dirs () {
     >&2 printf "\$ symlink_child_dirs [target] [destination]"
   fi
 }
-export -f symlink_child_dirs
+export -f symlink-child-dirs
 
 function yainst() {
   if [ -d $HOME/Downloads/yabridge ]; then 
