@@ -3,6 +3,10 @@
 # I use this as part of my personal environment setup
 # so it should be linked from the git repo to $HOME/mtebenv/
 
+# This is broken out from .conditional_starters for modularity
+# and updatability, but it is sourced in that file, and ideally
+# this file should not be sourced directly.
+
 # use px if available
 PS=$(which px)
 if ! [ -n "$PS" ]; then
