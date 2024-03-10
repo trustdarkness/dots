@@ -13,9 +13,12 @@
 export MTEBENV="$HOME/.mtebenv"
 export BACKUP="egdod/Backup"
 export TARGET=vulcan
+export TRIAGE="1984"
 export VIDLIB=mmzzkk
+export VIDTRIAGE="/$TRIAGE/$VIDLIB_triage"
 export PHOTOLIB=fodder
 export MUSICLIB="/mmzzkk/Music"
 export MBKS="/egdod/Backup/xMusic/"
 export MARCH="/egdod/Backup/xMusic/Music_Archived"
-export LH="$HOME/src/github/library-helpers"
+export GH="$HOME/src/github"
+export LH="$GH/library-helpers"
