@@ -121,7 +121,7 @@ if ! shopt -oq posix; then
   fi
 fi
 
-source 
+source $HOME/.globals
 source $LH/util.sh
 source $MTEBENV/.conditional_starters
 
@@ -142,7 +142,7 @@ IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
 alias grep="grep -E -v \"$BLK\"|grep -E"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
-PATH=$PATH:$HOME/bin:$HOME/Applications:$HOME/src/github/networkmanager-dmenu:$HOME/src/google/flutter/bin:$HOME/src/github/eww/target/release
+PATH=$HOME/bin:$HOME/Applications:$HOME/src/github/networkmanager-dmenu:$HOME/src/google/flutter/bin:$HOME/src/github/eww/target/release:$PATH
 export D="$HOME/src/github/dots"
 
 function restore() (
