@@ -1,0 +1,7 @@
+#! /usr/bin/env ruby
+# stolen cheerfully from https://git-scm.com/book/en/v2/Customizing-Git-Git-Attributes
+# ideally should be moved or symlinked somewhere in the users PATH
+data = STDIN.read
+last_date = `git log --pretty=format:"%ad" -1`
+puts data.gsub('$Date$', '$Date: ' + last_date.to_s + '$')
+
