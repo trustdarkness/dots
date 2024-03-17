@@ -150,6 +150,7 @@ BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
 alias sglobals="source $HOME/.globals"
 alias globals="vimcat $HOME/.globals"
 alias grep="grep -E -v \"$BLK\"|grep -E"
+alias slhu="source $LH/util.sh"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 PATH=$HOME/bin:$HOME/Applications:$HOME/src/github/networkmanager-dmenu:$HOME/src/google/flutter/bin:$HOME/src/github/eww/target/release:$PATH
 export D="$HOME/src/github/dots"
