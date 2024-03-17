@@ -16,6 +16,7 @@ export TARGET=vulcan
 export TRIAGE="1984"
 export VIDLIB=mmzzkk
 export VIDTRIAGE="/$TRIAGE/${VIDLIB}_triage"
+export DEFAULT_PLAYER="terra"
 export PHOTOLIB=fodder
 export MUSICLIB="/mmzzkk/Music"
 export MBKS="/egdod/Backup/xMusic/"
