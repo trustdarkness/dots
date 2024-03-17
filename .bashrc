@@ -144,8 +144,11 @@ function use310 {
   alias python=/usr/deprecated/bin/python3.10
   alias python3=/usr/deprecated/bin/python3.10
 }
+# Top of mteb aliases TODO: relocate somewhere more purposeful
 IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
+alias sglobals="source $HOME/.globals"
+alias globals="vimcat $HOME/.globals"
 alias grep="grep -E -v \"$BLK\"|grep -E"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 PATH=$HOME/bin:$HOME/Applications:$HOME/src/github/networkmanager-dmenu:$HOME/src/google/flutter/bin:$HOME/src/github/eww/target/release:$PATH
@@ -276,6 +279,7 @@ if stringContains "(debian|ubuntu)" "$distro"; then
   alias sar="sudo aptitude remove"
   alias sap='sudo aptitude purge'
   alias saar="sudo apt-add-repository"
+  alias vasl="sudo vim /etc/apt/sources.list"
   function saig() {
     pattern=$1
     sudo apt install *$pattern*
