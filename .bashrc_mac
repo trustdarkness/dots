@@ -1,0 +1,151 @@
+eval "$(ssh-agent -s)"
+
+function showHidden() {
+  isShown=$(defaults read com.apple.finder AppleShowAllFiles)
+  if [[ $isShown == "false" ]]; then
+    defaults write com.apple.finder AppleShowAllFiles true
+    killall Finder
+  fi
+}
+showHidden
+defaults write -g com.apple.mouse.scaling -integer -1
+
+export GH=$HOME/src/github
+source $GH/dots/.user_prompts
+
+# usage stringContains needle haystack
+# returns true if needle in haystack
+function stringContains() {
+  $(echo "$2"|grep -Eqi $1);
+  return $?;
+}
+
+# in a folder with mixed installable things, 
+# builds a map (bash 4 and above only) of
+# those installable things like
+# install_by_ext[ext] = files
+function get_installables () {
+  software_exts="pkg mpkg dmg vst3 vst component"
+  declare -A install_by_ext
+  # initialize the map with empty strings for each ext
+  for ext in $software_exts; do 
+    files=()
+    for filename in $potentials; do 
+      if stringContains $ext "$filename"; then
+        files+=("$filename")
+      fi
+    done
+    install_by_ext[$ext] = files
+  done
+
+}
+
+function install_pkgs() {
+  for f in ./*.pkg; do
+    sudo installer -verbose -pkg "$f" -target /
+  done
+}
+
+function install_dmgs() {
+    datestr=$(date "+%Y%m%d%H%M")
+    mountdir="/tmp/$datestr"
+    if [ -d $mountdir ]; then
+      confirm_yes "$mountdir exists, rm first?"
+    fi
+    for dmg in *.dmg; do 
+      echo "mounting $dmg under $mountdir"
+      mkdir -p "$mountdir"
+      mounted="$(hdiutil attach -nobrowse -mountroot "$mountdir" "$dmg" |grep private|awk -F'\t' '{print$3}')"
+      cd "$mounted"
+      install_pkgs 
+      cd -
+      umount "$mounted"
+    done
+}
+
+function install_vst3s() {
+  # install in user Library by default
+  system=0
+  if [ -n "$1" ]; then
+    if [[ "$1" == "system" ]]; then 
+      system=1
+    fi
+  fi
+  # pickup any vst3 in a child of $(pwd)
+  # and install in the current users' library
+  # or the system library
+  if system; then
+    sudo find ./ -type d -iname '*.vst3' -exec cp -r {} /Library/Audio/Plug-Ins/VST3/ \;
+  else
+    find ./ -type d -iname '*.vst3' -exec cp -r {} $HOME/Library/Audio/Plug-Ins/VST3/ \;
+  fi
+}
+
+function install_vsts() {
+  # install in user Library by default
+  system=0
+  if [ -n "$1" ]; then
+    if [[ "$1" == "system" ]]; then 
+      system=1
+    fi
+  fi
+  # pickup any vst in a child of $(pwd)
+  # and install in the current users' library
+  # or the system library
+  if system; then
+    sudo find ./ -type d -iname '*.vst' -exec cp -r {} /Library/Audio/Plug-Ins/VST/ \;
+  else
+    find ./ -type d -iname '*.vst' -exec cp -r {} $HOME/Library/Audio/Plug-Ins/VST/ \;
+  fi
+}
+
+function install_AUs() {
+  # install in user Library by default
+  system=0
+  if [ -n "$1" ]; then
+    if [[ "$1" == "system" ]]; then 
+      system=1
+    fi
+  fi
+  # pickup any component in a child of $(pwd)
+  # and install in the current users' library
+  # or the system library
+  if system; then
+    sudo find ./ -type d -iname '*.component' -exec cp -r {} /Library/Audio/Plug-Ins/Components/ \;
+  else
+    find ./ -type d -iname '*.component' -exec cp -r {} $HOME/Library/Audio/Plug-Ins/Components/ \;
+  fi
+}
+
+alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
+alias brc="vimcat ~/.bashrc"
+alias sbrc="source $HOME/.bashrc"
+
+alias pau="ps auwx"
+alias paug="ps auwx|grep "
+alias paugi="ps awux|grep -i "
+alias rst="sudo shutdown -r now"
+alias gh="mkdir -p $HOME/src/github && cd $HOME/src/github"
+alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
+alias gc="git clone"
+
+
+function sudo-only-commands () {
+    # cache sudo password
+    sudo ls
+    # for a set of .command files, run only the 
+    # lines starting with sudo
+    files=$(ls *.command)
+    IFS=$'\n'
+    for f in $files; do
+      lines=$(cat "$f" |grep sudo|cut -c 5-)
+      echo $lines
+    done
+    confirm_yes "OK to run?"
+    for f in $files; do
+      lines=$(cat "$f" |grep sudo|cut -c 5-)
+      for line in $lines; do
+        sudo -i -u root bash -c "$line"
+      done
+    done
+}
