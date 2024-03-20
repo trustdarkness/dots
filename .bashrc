@@ -280,6 +280,7 @@ if stringContains "(debian|ubuntu)" "$distro"; then
   alias sar="sudo aptitude remove"
   alias sap='sudo aptitude purge'
   alias saar="sudo apt-add-repository"
+  alias sAAR="sudo apt auto-remove"
   alias vasl="sudo vim /etc/apt/sources.list"
   function saig() {
     pattern=$1
@@ -292,8 +293,10 @@ if stringContains "(debian|ubuntu)" "$distro"; then
   }
   export -f sarg
   function sapg {
-    pattern=$1
-    sudo apt purge *$pattern*
+    for term in $@; do
+      pattern="*$term*"
+      sudo apt purge $pattern
+    done
   }
   export -f sapg
   function sasi {
