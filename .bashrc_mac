@@ -1,6 +1,18 @@
-eval "$(ssh-agent -s)"
+#!/usr/local/bin/bash
+#echo "Runing bash version $(/usr/local/bin/bash --version)"
+#eval "$(ssh-agent -s)"
+# Powerline
+powerline-daemon -q
+POWERLINE_BASH_CONTINUATION=1
+POWERLINE_BASH_SELECT=1
+source /usr/local/lib/python3.10/site-packages/powerline/bindings/bash/powerline.sh
 
-function showHidden() {
+# Setting PATH for Python 3.12
+# The original version is saved in .bash_profile.pysave
+PATH="/Library/Frameworks/Python.framework/Versions/3.12/bin:${PATH}"
+export PATH
+
+function showHidden {
   isShown=$(defaults read com.apple.finder AppleShowAllFiles)
   if [[ $isShown == "false" ]]; then
     defaults write com.apple.finder AppleShowAllFiles true
@@ -12,110 +24,482 @@ defaults write -g com.apple.mouse.scaling -integer -1
 
 export GH=$HOME/src/github
 source $GH/dots/.user_prompts
+source $GH/dots/.ps_filter
 
 # usage stringContains needle haystack
 # returns true if needle in haystack
-function stringContains() {
-  $(echo "$2"|grep -Eqi $1);
+function stringContains {
+  $(echo "$2"|grep "$1");
   return $?;
+}
+
+function bash_major_version() {
+  return $BASH_VERSINFO[0]
+}
+
+archive_extensions="zip rar 7z tar.gz tar.xz tgz"
+img_extensions="dmg img iso"
+pkg_extensions="pkg mpkg"
+plugin_extensions="vst vst3 component"
+software_exts="$archive_extensions $img_extensions $pkg_extensions $plugin_extensions"
+downloads="$HOME/Downloads"
+
+# last arg is debug flag
+function recursive_file_collector_by_ext {
+  debug=$1
+  if $debug; then
+    echo "Attempting to find files"
+    echo "in subdirs of: $(pwd)"
+    echo "with filenames that end in:"
+    echo "$software_exts"
+  fi
+  IFS=$' '
+  for ext in $software_exts; do
+    while IFS= read -d '' filename; do
+      run=$(write_file_count "${filename}") </dev/null
+    done < <(find ~+ -type f -iname "*.$ext" -print0)
+  done
+  if $debug; then stacktrace; fi
+}
+
+function find_files_per_ext {
+  filenames=()
+  for ext in $software_exts; do
+    readarray -t filenames < <(find ~+ -type f -iname "*.$ext" -print0)
+    for filename in "${filenames[@]}"; do
+      if [[ -n "${filneame}" ]]; then
+        echo "$filename"
+        run=$(write_status_to_tmp "${filename}")
+      fi
+    done
+  done
+}
+
+function glob_files_per_ext {
+  for ext in $software_exts; do
+    readarray -d '' filenames < <(find ~+ -type f -iname "*.$ext" -print0)
+    for filename in "${filenames[@]}"; do
+      if [[ -n "${filneame}" ]]; then
+        echo "$filename"
+        run=$(write_status_to_tmp "${filename}")
+      fi
+    done
+  done
+}
+
+# expect the first argutment to be one of our xxx_extensions above
+# last arg is debug flag
+function count_type_files {
+  count=0
+  extensions=$1
+  debug=$2
+  for ext in $extensions; do
+    if [ -f "/tmp/$ext/files" ]; then
+      local_count=$(cat /tmp/$ext/files|wc -l)
+      ((count=count+local_count))
+    fi
+  done
+  echo $count
+  return $count
+  if $debug; then stacktrace; fi
+}
+
+
+# expect the first argutment to be one of our xxx_extensions above
+# second argument to be a flag on whether to print pacifist data
+# last arg is debug flag
+function print_type_files {
+  count=0
+  extensions=$1
+  print=$2
+  debug=$3
+  for ext in $extensions; do
+    if [ -f "/tmp/$ext/files" ]; then
+      files=$(cat /tmp/$ext/files)
+      for file in $files; do
+        echo "$file"
+        if $print; then
+          echo "Contents as found by pacifist:"
+          pacifist list $file
+        fi
+      done
+    fi
+  done
+  if $debug; then stacktrace; fi
+}
+
+function stacktrace { 
+  #  local i=1 line file func
+  #  while read -r line func file < <(caller $i); do
+  #     echo >&2 "[$i] $file:$line $func(): $(sed -n ${line}p $file)"
+  #     ((i++))
+  #  done
+  :
+}
+
+# expect first arg xxx_extensions second arg a printable description
+# of the general file type arg3 is whether to print pacifist info.
+# last arg is debug flag
+function print_list_info {
+  extensions=$1
+  description=$2
+  pacifist=$3
+  debug=$4
+  count=$(count_type_files "$extensions" $debug)
+  if [ $count -gt 0 ]; then 
+    echo " - ${description}:"
+    print_type_files "$extensions" $pacifist $debug
+  fi
+  if $debug; then stacktrace; fi
+}
+
+# arguments should be filename
+# last arg is debug flag
+function write_file_count {
+  filename=$1
+  debug=$2
+  ext=${filename: -3}
+  if ! [ -d "/tmp/$ext" ]; then 
+      mkdir -p /tmp/$ext
+  fi
+  echo "   $filename" >> /tmp/$ext/files
+  if $debug; then stacktrace; fi
 }
 
 # in a folder with mixed installable things, 
 # builds a map (bash 4 and above only) of
 # those installable things like
 # install_by_ext[ext] = files
-function get_installables () {
-  software_exts="pkg mpkg dmg vst3 vst component"
-  declare -A install_by_ext
-  # initialize the map with empty strings for each ext
+function get_installables  {
+  cleanup_tmp
+  list=false
+  contents=false
+  install=false
+  debug=false
+  args=$(getopt -o lcid --long list,contents,install,debug -- "$@")
+  POSITIONAL_ARGS=()
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      -l|--list)
+        list=true
+        shift 
+        ;;
+      -c|--contents)
+        contents=true
+        shift 
+        ;;
+      -i|--install)
+        install=true
+        shift
+        ;;
+      -d|--debug)
+        debug=true
+        shift
+        ;;
+      *)
+        POSITIONAL_ARGS+=("$1") 
+        shift 
+        ;;
+    esac
+  done
+  set -- "${POSITIONAL_ARGS[@]}"
+  function switches {
+    if $debug; then echo "list: $list, contents: $contents, install: $install, debug: $debug"; fi
+  }
+  dir_to_search="$(pwd)"
+  echo "searching $dir_to_search for:"
+  echo " - Disk images ($img_extensions)"
+  echo " - Archives ($archive_extensions)"
+  echo " - Installable Packages ($pkg_extensions)"
+  echo " - Audio Plugins ($plugin_extensions)"
+  echo " "
+  switches
+  recursive_file_collector_by_ext $debug
+  if $list; then
+    echo "Installable files found:"
+    print_list_info "$img_extensions" "Disk Images" $contents $debug
+    print_list_info "$archive_extensions" "Archive Files" $contents $debug
+    print_list_info "$pkg_extensions" "Installable Packages" $contents $debug
+    print_list_info "$plugin_extensions" "Audio Plugins" $contents $debug
+  fi
+  if $install; then
+    recursively_extract
+    recursively_install_dmgs
+    recursively_install_pkgs
+    install_vst3s
+    install_vsts
+    install_AUs
+    backup
+  fi
+  switches
+  cleanup_tmp
+}
+
+function cleanup_tmp {
   for ext in $software_exts; do 
-    files=()
-    for filename in $potentials; do 
-      if stringContains $ext "$filename"; then
-        files+=("$filename")
-      fi
-    done
-    install_by_ext[$ext] = files
-  done
-
-}
-
-function install_pkgs() {
-  for f in ./*.pkg; do
-    sudo installer -verbose -pkg "$f" -target /
+    rm -rf /tmp/$ext
   done
 }
 
-function install_dmgs() {
-    datestr=$(date "+%Y%m%d%H%M")
-    mountdir="/tmp/$datestr"
-    if [ -d $mountdir ]; then
-      confirm_yes "$mountdir exists, rm first?"
+function pkginstall {
+  IFS=$' '
+  for ext in $pkg_extensions; do 
+    count=$(ls *.$ext 2>/dev/null |wc -l)
+    if [[ $count -gt 0 ]]; then
+      for f in *.$ext; do
+        sudo installer -verbose -pkg "$f" -target /
+      done
     fi
-    for dmg in *.dmg; do 
-      echo "mounting $dmg under $mountdir"
-      mkdir -p "$mountdir"
-      mounted="$(hdiutil attach -nobrowse -mountroot "$mountdir" "$dmg" |grep private|awk -F'\t' '{print$3}')"
-      cd "$mounted"
-      install_pkgs 
-      cd -
-      umount "$mounted"
-    done
+  done
+  # flag=${1:-}
+  # if [ -n "$flag" ]; then 
+  #   if [[ "$flag" == "-b" ]]; then
+  #     working_dir="$(find ~+ -type d -maxdepth 0)"
+  #     download_root="$(echo $working_dir|awk -F'/' '{print$5}')"
+  #     if [ -n "$download_root" ]; then
+  #       dir_to_back="$downloads/$download_root"
+  #     else
+  #       download_root="$working_dir"
+  #     fi
+  #     timed_confirm_yes "Backing up $dir_to_back"
+  #     exes=$(find ~+ -type f -iname '*.exe')
+  #     wincount=$(echo $exes|wc -l)
+  #     cd $HOME/Downloads
+  #     if [ $wincount -gt 0 ]; then
+  #       cp -r "$dir_to_back" Windows/Plug-Ins/
+  #     fi
+  #     rsync -rlutv "$dir_to_back" Plugins/_installed_federation/
+  #     # out of excessive caution, move to tmp instead of rm -rf
+  #     # reboot will delete, but if we screwed up, we can recover  
+  #     datestr=$(date "+%Y%m%d%H%M")
+  #     movedir="/tmp/$datestr"
+  #     mv "$dir_to_back" "$movedir"
+  #   fi
+  # fi
 }
 
-function install_vst3s() {
+function backup() {
+  working_dir="$(find ~+ -type d -maxdepth 0)"
+  download_root="$(echo $working_dir|awk -F'/' '{print$5}')"
+  if [ -n "$download_root" ]; then
+    dir_to_back="$downloads/$download_root"
+  else
+    download_root="$working_dir"
+  fi
+  timed_confirm_yes "Backing up $dir_to_back"
+  exes=$(find ~+ -type f -iname '*.exe')
+  wincount=$(echo $exes|wc -l)
+  cd $HOME/Downloads
+  if [ $wincount -gt 0 ]; then
+    cp -r "$dir_to_back" Windows/Plug-Ins/
+  fi
+  rsync -rlutv "$dir_to_back" Plugins/_installed_federation/
+  # out of excessive caution, move to tmp instead of rm -rf
+  # reboot will delete, but if we screwed up, we can recover  
+  datestr=$(date "+%Y%m%d%H%M")
+  movedir="/tmp/$datestr"
+  mv "$dir_to_back" "$movedir"
+}
+
+
+function install_pkgs_in_dir {
+  starting_dir=$(pwd)
+  filename="${1:-}"
+  dir=$(dirname "$filename")
+  echo "installing packages in $dir"
+  cd "$dir"
+  pkginstall -b
+  cd $starting_dir
+}
+
+function unarchive {
+  starting_dir=$(pwd)
+  filename="${1:-}"
+  dir=$(dirname "$filename")
+  echo "extracting archives in $dir"
+  cd "$dir"
+  if [[ "$filename" == *.7z ]]; then
+    7z e "$filename"
+  elif [[ "$filename" == *.rar ]]; then
+    unrar x "$filename"
+  elif [[ "$filename" == *.zip ]]; then
+    unzip "$filename"
+  elif [[ "$filename" == *.tar.gz ]]; then
+    tar -xf "$filename"
+  elif [[ "$filename" == *.tar.bz ]]; then
+    tar -xf "$filename"
+  elif [[ "$filename" == *.tar.xz ]]; then
+    tar -xf "$filename"
+  else
+    >&2 printf "Couldn't find a filetype to extract."
+    >&2 printf "exiting."
+    return 1 
+  fi
+  cd $starting_dir
+}
+
+function recursively_extract {
+  echo "Attempting to find and extract all archives"
+  echo "in subdirs of: $(pwd)"   
+  echo "with filenames that end in:"
+  echo "$archive_extensions"
+  IFS=$' '
+  for ext in $archive_extensions; do
+    while IFS= read -d '' filename; do
+      unarchive "${filename}" </dev/null
+    done < <(find ~+ -type f -iname "*.$ext" -print0)
+  done
+}
+
+function recursively_install_pkgs {
+  if ${DEBUG}; then
+    echo "Attempting to find and install all package installers"
+    echo "in subdirs of: $(pwd)"
+    echo "with filenames that emd in:"
+    echo "$pkg_extensions"
+  fi
+  IFS=$' '
+  for ext in $pkg_extensions; do
+    while IFS= read -d '' filename; do
+      install_pkgs_in_dir "${filename}" </dev/null
+    done < <(find ~+ -type f -iname "*.$ext" -print0)
+  done
+}
+
+function install_dmgs {
+  list_contents=false
+  flag={$1:-}
+  if [ -n "$flag" ]; then
+    if [[ "$flag" == "-l" ]]; then
+      list_contents=true
+    elif [[ "$flag" == "-r" ]]; then
+      processing="$(pwd)"
+      # remember, unless deliberately specified otherwise
+      # everything is in the current scope in bash
+      if stringContains "$processing" "$processed_dirs"; then 
+        echo "$img_extensions files in $processing have already"
+        echo "been processed, moving along."
+        return 0
+      else
+        processed_dirs="${processed_dirs} ${processing}"
+      fi
+    fi
+  fi
+  datestr=$(date "+%Y%m%d%H%M")
+  mountdir="/tmp/$datestr"
+  # if [ -d $mountdir ]; then
+  #   confirm_yes "$mountdir exists, rm first?"
+  # fi
+  for ext in $img_extensions; do
+    count=$(ls *.$ext 2>/dev/null |wc -l)
+    if [[ $count -gt 0 ]]; then
+
+      for dmg in *.$ext; do 
+        if $list_contents; then 
+          pacifist list $dmg
+        fi
+        echo "mounting $dmg under $mountdir"
+        mkdir -p "$mountdir"
+        mounted="$(hdiutil attach -nobrowse -mountroot "$mountdir" "$dmg" |grep private|awk -F'\t' '{print$3}')"
+        cd "$mounted"
+        pkginstall 
+        cd -
+        umount "$mounted"
+      done
+    fi
+  done
+}
+export -f install_dmgs
+
+function install_dmgs_in_dir {
+  starting_dir=$(pwd)
+  filename="$1"
+  dir=$(dirname "$filename")
+  echo "installing packages in image files in $dir"
+  cd "$dir"
+  install_dmgs -r
+  cd $starting_dir
+}
+
+function recursively_install_dmgs {
+  echo "Attempting to find and install all package installers"
+  echo "in subdirs of: $(pwd)"
+  echo "on disk images with filenames that end in:"
+  echo "$img_extensions"
+  export processed_dirs=""
+  IFS=$' '
+  for ext in $img_extensions; do
+    while IFS= read -d '' filename; do
+      install_dmgs_in_dir "${filename}" </dev/null
+    done < <(find ~+ -type f -iname "*.$ext" -print0)
+  done
+}
+
+function install_vst3s {
   # install in user Library by default
-  system=0
+  system=false
   if [ -n "$1" ]; then
-    if [[ "$1" == "system" ]]; then 
-      system=1
+    if [[ "$1" == "-s" ]]; then 
+      system=true
     fi
   fi
   # pickup any vst3 in a child of $(pwd)
   # and install in the current users' library
   # or the system library
-  if system; then
-    sudo find ./ -type d -iname '*.vst3' -exec cp -r {} /Library/Audio/Plug-Ins/VST3/ \;
+  vst3="/Library/Audio/Plug-Ins/VST3/"
+  if $system; then
+    echo "installing vst3s to $vst3"
+    sudo find . -type f -iname '*.vst3' -exec cp -r {} $vst3 \;
   else
-    find ./ -type d -iname '*.vst3' -exec cp -r {} $HOME/Library/Audio/Plug-Ins/VST3/ \;
+    echo "installing vst3s to $HOME$vst3"
+    find . -type f -iname '*.vst3' -exec cp -r {} $HOME$vst3 \;
   fi
 }
+export -f install_vst3s
 
-function install_vsts() {
+function install_vsts {
   # install in user Library by default
-  system=0
+  system=false
   if [ -n "$1" ]; then
-    if [[ "$1" == "system" ]]; then 
-      system=1
+    if [[ "$1" == "-s" ]]; then 
+      system=true
     fi
   fi
   # pickup any vst in a child of $(pwd)
   # and install in the current users' library
   # or the system library
-  if system; then
-    sudo find ./ -type d -iname '*.vst' -exec cp -r {} /Library/Audio/Plug-Ins/VST/ \;
+  vst="/Library/Audio/Plug-Ins/VST/"
+  if $system; then
+    echo "installing vsts to $vst"
+    sudo find . -type f -iname '*.vst' -exec cp -r {} $vst \;
   else
-    find ./ -type d -iname '*.vst' -exec cp -r {} $HOME/Library/Audio/Plug-Ins/VST/ \;
+    echo "installing vsts to $HOME$vst"
+    find . -type f -iname '*.vst' -exec cp -r {} $HOME$vst \;
   fi
 }
+export -f install_vsts
 
-function install_AUs() {
+function install_AUs {
   # install in user Library by default
-  system=0
+  system=false
   if [ -n "$1" ]; then
     if [[ "$1" == "system" ]]; then 
-      system=1
+      system=true
     fi
   fi
   # pickup any component in a child of $(pwd)
   # and install in the current users' library
   # or the system library
-  if system; then
-    sudo find ./ -type d -iname '*.component' -exec cp -r {} /Library/Audio/Plug-Ins/Components/ \;
+  component="/Library/Audio/Plug-Ins/Components"
+  if $system; then
+    echo "installing AUs to $component"
+    sudo find . -type f -iname '*.component' -exec cp -r {} $component \;
   else
-    find ./ -type d -iname '*.component' -exec cp -r {} $HOME/Library/Audio/Plug-Ins/Components/ \;
+    echo "installing AUs to $HOME$component"
+    find . -type f -iname '*.component' -exec cp -r {} $HOME$component \;
   fi
 }
+export -f install_AUs
 
 alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
 alias brc="vimcat ~/.bashrc"
@@ -130,7 +514,7 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 
 
-function sudo-only-commands () {
+function sudo-only-commands  {
     # cache sudo password
     sudo ls
     # for a set of .command files, run only the 
