@@ -1,6 +1,18 @@
-eval "$(ssh-agent -s)"
+#!/usr/local/bin/bash
+#echo "Runing bash version $(/usr/local/bin/bash --version)"
+#eval "$(ssh-agent -s)"
+# Powerline
+powerline-daemon -q
+POWERLINE_BASH_CONTINUATION=1
+POWERLINE_BASH_SELECT=1
+source /usr/local/lib/python3.10/site-packages/powerline/bindings/bash/powerline.sh
 
-function showHidden() {
+# Setting PATH for Python 3.12
+# The original version is saved in .bash_profile.pysave
+PATH="/Library/Frameworks/Python.framework/Versions/3.12/bin:${PATH}"
+export PATH
+
+function showHidden {
   isShown=$(defaults read com.apple.finder AppleShowAllFiles)
   if [[ $isShown == "false" ]]; then
     defaults write com.apple.finder AppleShowAllFiles true
@@ -12,109 +24,1643 @@ defaults write -g com.apple.mouse.scaling -integer -1
 
 export GH=$HOME/src/github
 source $GH/dots/.user_prompts
+source $GH/dots/.ps_filter
 
 # usage stringContains needle haystack
 # returns true if needle in haystack
-function stringContains() {
-  $(echo "$2"|grep -Eqi $1);
+function stringContains {
+  $(echo "$2"|grep -Eqi "$1");
   return $?;
 }
+
+function bash_major_version() {
+  echo "${BASH_VERSINFO[0]}"
+}
+
+function bash_minor_version() {
+  echo "${BASH_VERSINFO[1]}"
+}
+
+function bash_version() {
+  major=$(bash_major_version)
+  minor=$(bash_minor_version)
+  echo "${major}.${minor}"
+}
+
+# stolen from https://stackoverflow.com/questions/8654051/how-can-i-compare-two-floating-point-numbers-in-bash
+is_first_floating_number_bigger () {
+    number1="$1"
+    number2="$2"
+
+    [ ${number1%.*} -eq ${number2%.*} ] && [ ${number1#*.} \> ${number2#*.} ] || [ ${number1%.*} -gt ${number2%.*} ];
+    result=$?
+    if [ "$result" -eq 0 ]; then result=1; else result=0; fi
+
+    __FUNCTION_RETURN="${result}"
+}
+
+declare -A ext_types
+# declare -A INSTALL_LEAVES
+doc_extensions="doc rtf pdf nfo txt"
+archive_extensions="zip rar 7z tar.gz tar.xz tgz"
+img_extensions="dmg img iso"
+ext_types["dmg"]="${img_extensions}"
+pkg_extensions="pkg mpkg"
+ext_types["pkg"]="${pkg_extensions}"
+plugin_extensions="vst vst3 component"
+ext_types["plugin"]="${plugin_extensions}"
+PLUGIN_HOME="/Library/Audio/Plug-Ins"
+# INSTALL_LEAVES["vst3"]="${PLUGIN_LEAF}/VST3"
+# INSTALL_LEAVES["vst"]="${PLUGIN_LEAF}/VST"
+# INSTALL_LEAVES["component"]="${PLUGIN_LEAF}/Components"
+software_exts="$archive_extensions $img_extensions $pkg_extensions $plugin_extensions"
+downloads="$HOME/Downloads"
+backup="${downloads}/Plugins/_installed_federation/"
+secondary_backup="${downloads}/Windows/Plug-Ins/"
+secondary_criteria="*.exe"
+# we use the system's tmp preference in installable or main, this is a fallback
+TMPDIR="/tmp/bellicose"
+
+function err() {
+  local message="${1:-}"
+  local ts # timestamp for log file inclusion
+  if [[ "${LOGFILE}" == "/dev/stderr" ]]; then 
+    printf "${message}\n" > ${LOGFILE}
+  else
+    printf "(ERROR)    | $LINENO | ${BASH_LINENO[0]} | ${ts} > ${message}\n" > "${LOGFILE}"
+  fi
+}
+
+function debug() {
+  local message="${1:-}"
+  local ts # timestamp for log file inclusion
+  if $DEBUG || ${VERBOSE}; then 
+    printf "(DEBUG)    | $LINENO | ${BASH_LINENO[0]} | ${ts} > ${message}\n" > "${LOGFILE}"
+  fi
+}
+
+function ui() {
+  local message="$@"
+  local ts # timestamp for log file inclusion
+  echo "${message}"
+  if $VERBOSE; then  
+    if [[ "${LOGFILE}" != "/dev/stderr" ]]; then 
+      printf "(INFO)    | $LINENO | ${BASH_LINENO[0]} | ${ts} > ${message}\n"  > "${LOGFILE}"
+    fi
+  fi
+}
+
+function verbose() {
+  local message="${1:-}"
+  local ts # timestamp for log file inclusion
+  if [ -z "${LOGFILE}" ]; then 
+    LOGFILE="/dev/stderr"
+  fi
+  if $VERBOSE; then
+    ts="$(date '+%Y%m%d %H:%M:%S')"
+    printf "(VERBOSE) | $LINENO | ${BASH_LINENO[0]} | ${ts} > ${message}\n"  > "${LOGFILE}"
+    #stacktrace
+  fi
+}
+
+# Args: return code of the failed command
+#       command string of the failed command
+# prints instructions for the user to submit a detailed error report
+function non_fatal_error_request() {
+  local rc="${1:-}"
+  local command="${2-}"
+  err "return code ${rc} on cmd: ${command}"
+  err "this is not fatal, but your package contents may not display propoerly"
+  err "or more likely, at all.  If the error continues, please feel free to submit"
+  err "a detailed error report by running:"
+  err "bellicose -v -f <filname> contents"
+  err ""
+  err "from the same directory you started from this time."
+}
+
+SEPARATOR=" | "
+CONTENT_SEPARATOR=" | "
+ARCHIVE_TL="<archive>"
+DMG_TL="<disk image>"
+PKG_TL="<pkg>"
+PLUGIN_TL="<plugin>"
+
+# Args: line_header
+#       filename
+function list_item() {
+  local layer="${1:-1}"
+  local line_header="${2:-}"
+  local filepath="${3:-}"
+  local filename=$(basename "${filepath}")
+  local content_header="${4:-}"
+  local lienno="${5:-}"
+  local line="${6:-}"
+  case ${layer} in
+    1)
+      printf "%-12s %-15s %s %s %s\n" "${line_header}" "${SEPARATOR}" "${filename}" "${SEPARATOR}" "${filepath}" > "${LOGFILE}"
+      #echo "${out}"
+      ;;
+    2)
+      printf "%-12s %-15s %s %6s %s\n" "${line_header}" "${SEPARATOR}" "${content_header}" "${CONTENT_SEPARATOR}" "${filename}" > "${LOGFILE}"
+      #echo "${out}"
+      ;;
+    3)
+      printf "%-12s %-15s %s %6s %s\n" "${line_header}" "${SEPARATOR}" "${content_header}" "${CONTENT_SEPARATOR}" "${layer3_hader}" "${layer3_separator}" "${filename}" > "${LOGFILE}"
+      # echo "${out}"
+      ;;
+    4)
+      # special package file translations -
+      # layer: layer
+      # line_header: parentpackage
+      # filename: filename
+      # content_header: special file type
+      # lineno: lineno
+      # line: line
+      printf "%s ++metadata %s file++ <filename: %s> line %s: %s\n" "${parentpackage}" "${content_header}" "${filename}" "${lineno}" "${line}" > $LOGFILE
+      # echo "${out}"
+      ;;
+    *)
+      err "error reading input from list_item"
+      ;;
+    esac
+}
+
+function list_tl {
+  local filepath="${1:-}"
+  local filename=$(basename "${filepath}")
+  if is_in_types "${filename}" "${archive_extensions}"; then
+    tl_header="${ARCHIVE_TL}"
+  elif is_in_types "${filename}" "${img_extensions}"; then
+    tl_header="${DMG_TL}"
+  elif is_in_types "${filename}" "${pkg_extensions}"; then
+    tl_header="${PKG_TL}"
+  elif is_in_types "${filename}" "${plugin_extensions}"; then
+    tl_header="${PLUGIN_T:}"
+  else
+    local ext="${filename##*.}"
+    tl_header="<${ext}>"
+  fi
+  list_item 1 "${tl_header}" "${filepath}"
+}
+
+function list_contents {
+  local filepath="${1:-}"
+  local filename=$(basename "${filepath}")
+  local ext="${filename##*.}"
+  local container="${2:-}"
+  if [ -n "${container}" ]; then
+    local layer="${3:-2}"
+  else
+    local layer="${3:-1}"
+  fi
+  local parent="${4:-}"
+  list_item ${layer} " " "${filepath}" "<${ext}>"
+}
+
+function list_special_package_file {
+  local type="${1:-}"
+  local filepath="${2:-}"
+  local filename=$(basename "${filepath}")
+  local lineno="${3:-}"
+  local line="${4:-}"
+  local parentlayer="${5:-}"
+  local parentpackage="${6:-}"
+  local parentparent="${7:-}"
+  local layer=$(($parentlayer+1))
+  list_item ${layer} "${parentpackage}" "${filepath}" "${type}" "${lienno}" "${line}"
+}
+
+# # last arg is debug flag
+# function recursive_file_collector_by_ext {
+#   debug=$1
+#   if $debug; then
+#     echo "Attempting to find files"
+#     echo "in subdirs of: $(pwd)"
+#     echo "with filenames that end in:"
+#     echo "$software_exts"
+#   fi
+#   IFS=$' '
+#   for ext in $software_exts; do
+#     while IFS= read -d '' filename; do
+#       run=$(write_file_count "${filename}") </dev/null
+#     done < <(find ~+ -type f -iname "*.$ext" -print0)
+#   done
+#   if $debug; then stacktrace; fi
+# }
+
+# function find_files_per_ext {
+#   filenames=()
+#   for ext in $software_exts; do
+#     readarray -t filenames < <(find ~+ -type f -iname "*.$ext" -print0)
+#     for filename in "${filenames[@]}"; do
+#       if [[ -n "${filneame}" ]]; then
+#         echo "$filename"
+#         run=$(write_status_to_tmp "${filename}")
+#       fi
+#     done
+#   done
+# }
+
+# function glob_files_per_ext {
+#   for ext in $software_exts; do
+#     readarray -d '' filenames < <(find ~+ -type f -iname "*.$ext" -print0)
+#     for filename in "${filenames[@]}"; do
+#       if [[ -n "${filneame}" ]]; then
+#         echo "$filename"
+#         run=$(write_status_to_tmp "${filename}")
+#       fi
+#     done
+#   done
+# }
+
+# expect the first argutment to be one of our xxx_extensions above
+# last arg is debug flag
+# function count_type_files {
+#   count=0
+#   extensions=$1
+#   debug=$2
+#   for ext in $extensions; do
+#     if [ -f "/tmp/$ext/files" ]; then
+#       local_count=$(cat /tmp/$ext/files|wc -l)
+#       ((count=count+local_count))
+#     fi
+#   done
+#   echo $count
+#   return $count
+#   if $debug; then stacktrace; fi
+# }
+
+
+# # expect the first argutment to be one of our xxx_extensions above
+# # second argument to be a flag on whether to print pacifist data
+# # last arg is debug flag
+# function print_type_files {
+#   count=0
+#   extensions=$1
+#   print=$2
+#   debug=$3
+#   for ext in $extensions; do
+#     if [ -f "/tmp/$ext/files" ]; then
+#       files=$(cat /tmp/$ext/files)
+#       for file in $files; do
+#         echo "$file"
+#         if $print; then
+#           echo "Contents as found by pacifist:"
+#           pacifist list $file
+#         fi
+#       done
+#     fi
+#   done
+#   if $debug; then stacktrace; fi
+# }
+
+function stacktrace { 
+   local i=1 line file func
+   while read -r line func file < <(caller $i); do
+      debug "stacktrace: [$i] $file:$line $func(): $(sed -n ${line}p $file)"
+      ((i++))
+   done
+}
+
+# expect first arg xxx_extensions second arg a printable description
+# of the general file type arg3 is whether to print pacifist info.
+# last arg is debug flag
+# function print_list_info {
+#   extensions=$1
+#   description=$2
+#   pacifist=$3
+#   debug=$4
+#   count=$(count_type_files "$extensions" $debug)
+#   if [ $count -gt 0 ]; then 
+#     echo " - ${description}:"
+#     print_type_files "$extensions" $pacifist $debug
+#   fi
+#   if $debug; then stacktrace; fi
+# }
+
+# # arguments should be filename
+# # last arg is debug flag
+# function write_file_count {
+#   filename=$1
+#   debug=$2
+#   ext=${filename: -3}
+#   if ! [ -d "/tmp/$ext" ]; then 
+#       mkdir -p /tmp/$ext
+#   fi
+#   echo "   $filename" >> /tmp/$ext/files
+#   if $debug; then stacktrace; fi
+# }
 
 # in a folder with mixed installable things, 
 # builds a map (bash 4 and above only) of
 # those installable things like
 # install_by_ext[ext] = files
-function get_installables () {
-  software_exts="pkg mpkg dmg vst3 vst component"
-  declare -A install_by_ext
-  # initialize the map with empty strings for each ext
-  for ext in $software_exts; do 
-    files=()
-    for filename in $potentials; do 
-      if stringContains $ext "$filename"; then
-        files+=("$filename")
+# function get_installables  {
+#   cleanup_tmp
+#   list=false
+#   contents=false
+#   install=false
+#   debug=false
+#   args=$(getopt -o lcid --long list,contents,install,debug -- "$@")
+#   POSITIONAL_ARGS=()
+#   while [[ $# -gt 0 ]]; do
+#     case $1 in
+#       -l|--list)
+#         list=true
+#         shift 
+#         ;;
+#       -c|--contents)
+#         contents=true
+#         shift 
+#         ;;
+#       -i|--install)
+#         install=true
+#         shift
+#         ;;
+#       -d|--debug)
+#         debug=true
+#         shift
+#         ;;
+#       *)
+#         POSITIONAL_ARGS+=("$1") 
+#         shift 
+#         ;;
+#     esac
+#   done
+#   set -- "${POSITIONAL_ARGS[@]}"
+#   function switches {
+#     if $debug; then echo "list: $list, contents: $contents, install: $install, debug: $debug"; fi
+#   }
+#   dir_to_search="$(pwd)"
+#   echo "searching $dir_to_search for:"
+#   echo " - Disk images ($img_extensions)"
+#   echo " - Archives ($archive_extensions)"
+#   echo " - Installable Packages ($pkg_extensions)"
+#   echo " - Audio Plugins ($plugin_extensions)"
+#   echo " "
+#   switches
+#   recursive_file_collector_by_ext $debug
+#   if $list; then
+#     echo "Installable files found:"
+#     print_list_info "$img_extensions" "Disk Images" $contents $debug
+#     print_list_info "$archive_extensions" "Archive Files" $contents $debug
+#     print_list_info "$pkg_extensions" "Installable Packages" $contents $debug
+#     print_list_info "$plugin_extensions" "Audio Plugins" $contents $debug
+#   fi
+#   if $install; then
+#     recursively_extract
+#     recursively_install_dmgs
+#     recursively_install_pkgs
+#     install_vst3s
+#     install_vsts
+#     install_AUs
+#     backup
+#   fi
+#   switches
+#   cleanup_tmp
+# }
+
+# function cleanup_tmp {
+#   for ext in $software_exts; do 
+#     rm -rf /tmp/$ext
+#   done
+# }
+
+
+# Args: filename: a filename to check
+#       extension_list: a space delimited string of filename extensions
+# Returns 0 if filename does end in one of the extensions, 1 otherwise
+function is_in_types() {
+  local f="${1:-}"
+  local exts="${2:-}"
+  local regex=""
+  for ext in ${exts}; do
+    regex+=$(printf '.*.%s$||' "${ext}")
+  done
+  # remove the last || from the term
+  regex="${regex%??}"
+  return $(echo "${f}"|grep "${regex}")
+}
+
+
+function pkg_caller() {
+  #confirm_yes "Search for and install any pkgs (${pkg_extensions}) found under $(pwD)?"
+  process_pkgs
+}
+
+function pkg_lister() {
+  #confirm_yes "List pkgs (${pkg_extensions}) found under $(pwD)?"
+  process_pkgs
+}
+
+function pkg_contents() {
+  #confirm_yes "List pkgs (and display their contents) found under $(pwd)?"
+  process_pkgs
+}
+
+function process_pkgs {
+  verbose "process_pkgs in $(pwd)"
+  local caller="${1:-}"
+  local datestr
+  local tmpdir
+  local status
+  local pkgdir
+  local contents
+  local file
+  local pkgtmp="${TMPDIR}/process_pkgs"
+  mkdir -p "${pkgtmp}"
+  if [[ $(counts "${pkg_extensions}") -gt 0 ]]; then 
+    
+    # if ${LIST}; then
+    #   if [[ "${caller}" != "install_dmg" ]]; then
+    #     ui "Found the following package files:"
+    #   fi
+    # fi
+    IFS=$' '
+    for ext in $pkg_extensions; do 
+      count=$(counts "${ext}")
+      if [[ ${count} -gt 0 ]]; then
+
+        gobblefind_by_ext "${ext}"
+        for f in "${gobbled[@]}"; do
+          if ${LIST}; then
+            if stringContains "dmg" "${caller}"; then
+              list_contents "${f}" "${caller}"
+              local contents_layer=3
+            else
+              list_tl "${f}"
+              local contents_layer=2
+            fi
+            if ${CONTENTS} && is_in_types "${f}" "${pkg_extensions}"; then
+              list_package_contents "${f}" ${contents_layer} "${caller}"
+            fi
+          fi
+          if ${INSTALL}; then
+            verbose "calling $(which installer) on ${f}"
+            sudo installer -verbose -pkg "${f}" -target /
+          fi
+        done
       fi
     done
-    install_by_ext[$ext] = files
-  done
-
+  else
+    err "No package files found with exts: ${pkg_extensions}"
+  fi
 }
 
-function install_pkgs() {
-  for f in ./*.pkg; do
-    sudo installer -verbose -pkg "$f" -target /
-  done
-}
-
-function install_dmgs() {
-    datestr=$(date "+%Y%m%d%H%M")
-    mountdir="/tmp/$datestr"
-    if [ -d $mountdir ]; then
-      confirm_yes "$mountdir exists, rm first?"
+# Args: filename to list contents of, must be pkg or mpkg
+#       layer deep we are in listing contents, for display purposes
+function list_package_contents() {
+  local f="${1:-}"
+  local layer="${2:-2}"
+  local parent="${3:-}"
+  # local regex=""
+  # ui "Contents of package file ${f}"
+  # ui "==============================================================="
+  pkgdir="${TMPDIR}/list_package_contents/${f}"
+  mkdir -p "${pkgdir}"
+  local status=$(pkgutil --expand "${f}" "${pkgdir}")
+  local rc=$?
+  if [ ${rc} -gt 0 ]; then
+    non_fatal_error_request "$rc" "pkgutil --expand \"${f}\" \"${pkgdir}\""
+  fi
+  local paxfiles=()
+  gobblefind "${pkgdir}"
+  for file in "${haggussed[@]}"; do 
+    if stringContains "bom" "${file}"; then
+      local bomfile="${file}"
+    elif stringContains "pax" "${file}"; then
+      paxfiles+=("${file}")
+    else
+      list_contents "${file}" "${f}" ${layer} "${parent}"
     fi
-    for dmg in *.dmg; do 
-      echo "mounting $dmg under $mountdir"
-      mkdir -p "$mountdir"
-      mounted="$(hdiutil attach -nobrowse -mountroot "$mountdir" "$dmg" |grep private|awk -F'\t' '{print$3}')"
-      cd "$mounted"
-      install_pkgs 
-      cd -
-      umount "$mounted"
+  done
+  if [ -n "${bomfile}" ]; then
+    bomcontents=$(cat "${bomfile}")
+    local lineno=0
+    for line in ${bomcontents}; do
+      ((lineno+=1)) 
+      list_special_pacakage_file "bom" "${file}" ${lineno} "${line}" ${layer} "${f}" "${parent}"
+      verbose "bomcontents: ${line}"
     done
-}
-
-function install_vst3s() {
-  # install in user Library by default
-  system=0
-  if [ -n "$1" ]; then
-    if [[ "$1" == "system" ]]; then 
-      system=1
-    fi
   fi
-  # pickup any vst3 in a child of $(pwd)
-  # and install in the current users' library
-  # or the system library
-  if system; then
-    sudo find ./ -type d -iname '*.vst3' -exec cp -r {} /Library/Audio/Plug-Ins/VST3/ \;
-  else
-    find ./ -type d -iname '*.vst3' -exec cp -r {} $HOME/Library/Audio/Plug-Ins/VST3/ \;
-  fi
-}
-
-function install_vsts() {
-  # install in user Library by default
-  system=0
-  if [ -n "$1" ]; then
-    if [[ "$1" == "system" ]]; then 
-      system=1
-    fi
-  fi
-  # pickup any vst in a child of $(pwd)
-  # and install in the current users' library
-  # or the system library
-  if system; then
-    sudo find ./ -type d -iname '*.vst' -exec cp -r {} /Library/Audio/Plug-Ins/VST/ \;
-  else
-    find ./ -type d -iname '*.vst' -exec cp -r {} $HOME/Library/Audio/Plug-Ins/VST/ \;
+  if [ ${#paxfiles[@]} -gt 0 ]; then
+    for paxfile in "${paxfiles[@]}"; do
+      # ui "pax file: ${paxfile} with contents:"
+      if [[ "${paxfile}" == *.gz ]]; then 
+        paxcontents=$(gzcat "${paxfile}" | pax)
+      elif [[ "${paxfile}" == *.xz ]]; then
+        paxcontents=$(xzcat "${paxfile}" | pax)
+      elif [[ "${paxfile}" == *.pax ]]; then 
+        paxcontents=$(pax < "${paxfile}")
+      else 
+        err "unable to open paxfile, please run with -c -l -v -f bugreport.log and submit a bugreport"
+      fi
+      if [ -n "${paxcontents}" ]; then
+        for line in ${paxconents}; do 
+          list_special_pacakage_file "pax" "${file}" ${lineno} "${line}" ${layer} "${f}" "${parent}"
+          verbose "paxcontents (${paxfile}): ${line}"
+        done
+      fi
+    done
   fi
 }
 
-function install_AUs() {
-  # install in user Library by default
-  system=0
-  if [ -n "$1" ]; then
-    if [[ "$1" == "system" ]]; then 
-      system=1
+function backup() {
+  verbose "backup in $(pwd)"
+  local status # for holding status of random subshells
+  local dir_to_back # the directory we will copy to the backup location(s)
+  local secondaries # files we find that meet the secondary backup condition
+  local secondarycount # number of files found that meet the criteria
+  local datestr # a string from the date command to create a tmp directory instead of rm
+  local movedir # the directory in tmp where we'll mv instead of rm
+  local working_dir="$(find ~+ -type d -maxdepth 0)"
+  local download_root="$(echo $working_dir|awk -F'/' '{print$5}')"
+  verbose "Running backup from ${working_dir} with download root ${download_root}"
+  local dir_to_back="${working_dir}"
+  local known_roots="instruments Plugins DAWs drivers Samples Plug-Ins Windows"
+  if [ -n "${download_root}" ]; then
+    if ! stringContains "${download_root}" "${known_roots}"; then 
+      dir_to_back="${downloads}/${download_root}"
     fi
   fi
-  # pickup any component in a child of $(pwd)
-  # and install in the current users' library
-  # or the system library
-  if system; then
-    sudo find ./ -type d -iname '*.component' -exec cp -r {} /Library/Audio/Plug-Ins/Components/ \;
-  else
-    find ./ -type d -iname '*.component' -exec cp -r {} $HOME/Library/Audio/Plug-Ins/Components/ \;
+  verbose "asking for user confirmation on backup to ${dir_to_back}"
+  status=$(timed_confirm_yes "Backing up ${dir_to_back}")
+  if [ $? == 255 ]; then 
+    rreturn 2
   fi
+  verbose "proceeding with backup, $? status, ${status} from timed_confirm_yes"
+  secondaries="$(find ~+ -type f -iname "${secondary_criteria}")"
+  secondarycount="$(echo ${secondaries}|wc -l)"
+  cd ${downloads} # so we're not in a dir we're moving
+  if [ ${secondarycount} -gt 0 ]; then
+    ui "${secondarycount} secondary criteria (${secondary_criteria}) found, backing up to ${secondary_backup}"
+    cp -r "${dir_to_back}" "${secondary_backup}"
+  fi
+  ui "Backing up to ${backup}"
+  rsync -rlutv "${dir_to_back}" "${backup}"
+  # out of excessive caution, move to tmp instead of rm -rf
+  # reboot will delete, but if we screwed up, we can recover  
+  datestr=$(date "+%Y%m%d%H%M")
+  movedir="/tmp/$datestr"
+  verbose "copying ${dir_to_back} to ${movedir} in place of rm -rf"
+  mv "${dir_to_back}" "${movedir}"
+}
+
+
+# function install_pkgs_in_dir {
+#   starting_dir=$(pwd)
+#   filename="${1:-}"
+#   dir=$(dirname "$filename")
+#   echo "installing packages in $dir"
+#   cd "$dir"
+#   pkginstall -b
+#   cd $starting_dir
+# }
+
+function list(){
+  local filename="${1:-}"
+  if ${LIST}; then 
+    echo "${filename}"
+  fi
+}
+
+function contents(){
+  local filepath="${1:-}"
+  local filename="$(basename \"${filename}\")"
+  local contents
+  local file
+  if ${CONTENTS}; then
+    # we assume if not already extracted, the user didn't run with -e and use tmp
+    if ! $(extracted "${filename}"); then 
+      extract "${filename}" 
+    fi
+    contents=$(find "${tmpdir}/archives/${filename}"})
+    for file in ${contents}; do
+      echo " * ${file}"
+      verbose "${filename} contents: ${file}"
+    done 
+  fi
+}
+
+# function extract(){
+#   local filename="${1:-}"
+#   local extract_path="${2:-}"
+#   local dir=$(pwd)
+#   if echo "${filename}" |grep "7z$"; then
+#     options=$(printf "e -y -o%s" "${extract_path}")
+#     verbose "matched 7z with ${filename} from ${dir} with options ${options}"
+#     7zz ${options} "${filename}" 
+#   elif [[ $(echo "${filename}" |grep "rar$") -eq 0 ]]; then
+#     verbose "matched rar with ${filename} from ${dir}"
+#     unrar x "${filename}" -op "${extract_path}"
+#   elif [[ $(echo "${filename}" |grep "zip$") -eq 0 ]]; then
+#     verbose "matched zip with ${filename} from ${dir}"
+#     unzip "${filename}" -d "${extract_path}"
+#   elif [[ $(echo "${filename}" |grep "tar.gz$") -eq 0 ]]; then
+#     verbose "matched tar.gz with ${filename} from ${dir}"
+#     tar -xf "${filename}" -C  "${extract_path}"
+#   elif [[ $(echo "${filename}" |grep "tar.xz$") -eq 0 ]]; then 
+#     verbose "matched tar.xz with ${filename} from ${dir}"
+#     tar -xf "${filename}" -C  "${extract_path}"
+#   elif [[ $(echo "${filename}" |grep "tgz$") -eq 0 ]]; then
+#     verbose "matched tgz with ${filename} from ${dir}"
+#     tar -xf "${filename}" -C  "${extract_path}"
+#   else
+#     ui "${filename} not an archive we can unpack. Skipping."
+#   fi
+# }
+
+# Args: filepath: absolute path of the file
+function archive_processor() {
+  local filepath="${1:-}"
+  local filename=$(basename "${filepath}")
+  local ext="${filename##*.}"
+  local extract_path="${2:-}"
+  case "${ext}" in
+    "7z")
+      if ${CONTENTS}; then
+        options="l -slt -ba -r"
+        files=$(7zz "${options}" "${filename}"|grep "Path"|awk -F"=" '{print$2}')
+        # print_archive "${filepath}" "${files}"
+      fi
+      if ${UNARCHIVE}; then
+        options=$(printf "e -y -o%s" "${extract_path}")
+        7zz "${options}" "${filepath}"
+        echo "${filepath}" >> "${UNARCHIVED}"
+      fi
+      ;;
+    "zip")
+      if ${CONTENTS}; then
+        files=$(zipinfo -1 "${filepath}")
+      fi
+      if ${UNARCHIVE}; then
+        unzip -qfo "${filepath}" -d "${extract_path}"
+        echo "${filepath}" >> "${UNARCHIVED}"
+      fi
+      ;;
+    "rar")
+      if ${CONTENTS}; then
+        files=$(unrar 1tb "${filepath}"|grep "Name"|awk -f":" '{print$2}')
+      fi
+      if ${UNARCHIVE}; then
+        unrar e -inul "${filepath}" -op "${extract_path}"
+        echo "${filepath}" >> "${UNARCHIVED}"
+      fi
+      ;;
+    *)
+      err "not implemented"
+      ;;
+  esac
+  if [ -n "${files}" ]; then 
+    print_archive "${filepath}" "${files}"
+  fi
+}
+
+function print_archive() {
+  local filename="${1:-}"
+  local contents="${2:-}"
+  IFS=$'\n'
+  for line in ${contents}; do
+    list_contents "${line}" "${filename}" 2
+  done
+}
+
+# function list_contents(){
+#   local filename="${1:-}"
+#   local dir=$(pwd)
+#   if echo "${filename}" |grep "7z$"; then
+#     verbose "matched 7z with ${filename} from ${dir}"
+#     files=$(7zz l -slt -ba -r "${filename}"|grep "Path"|awk -F"=" '{print$2}')
+#     verbose "files: ${files}"
+#   elif [[ $(echo "${filename}" |grep "rar$") -eq 0 ]]; then
+#     verbose "matched rar with ${filename} from ${dir}"
+#     unrar l "${filename}"
+#   elif [[ $(echo "${filename}" |grep "zip$") -eq 0 ]]; then
+#     verbose "matched zip with ${filename} from ${dir}"
+#     unzip -l "${filename}"
+#   elif [[ $(echo "${filename}" |grep "tar.gz$") -eq 0 ]]; then
+#     verbose "matched tar.gz with ${filename} from ${dir}"
+#     tar -ztf "${filename}"
+#   elif [[ $(echo "${filename}" |grep "tar.xz$") -eq 0 ]]; then 
+#     verbose "matched tar.xz with ${filename} from ${dir}"
+#     tar -ztf "${filename}"
+#   elif [[ $(echo "${filename}" |grep "tgz$") -eq 0 ]]; then
+#     verbose "matched tgz with ${filename} from ${dir}"
+#     tar -ztf "${filename}"
+#   else
+#     info "${filename} not an archive we can unpack. Skipping."
+#   fi
+#   ui $(print_archive "${filename}" "${files}")
+# }
+
+# function process_filepath() {
+#   local filepathname="${1:-}"
+#   filepathname=$(echo "${filepathname}" |tr '\n' ' ')
+#   dir=$(dirname "${filepathname}")
+#   verbose "full path: ${filepathname} dir: ${dir}"
+#   echo "${filepathname}" >> "${tmpdir}/archives/${ext}/files"
+#   echo "${dir}" >> "${tmpdir}/archives/${ext}/dirs"
+# }
+
+function unarchive_caller() {
+  #confirm_yes "Search for and expand any archives found?"
+  unarchive
+}
+
+function unarchive_lister() {
+  #echo "List archives found under the current working directory?"
+  #confirm_yes "$(pwd)"
+  unarchive
+}
+
+function unarchive_contents() {
+ # echo "List archives (and display their contents) found under the current working directory?"
+  #confirm_yes "$(pwd)"
+  unarchive
+}
+
+function  userchoice_cache() {
+  ui "1. Continue, but only operate on the new files."
+  ui "2. Continue, potentially overwriting or reinstalling over files in the cache."
+  ui "3. Clear the cahe and operate on everything as if its new."
+  ui "4. See the diff"
+  ui "5. Exit"
+  response=$(get_keypress "Your Choice?")
+  case "${response}" in
+    1)
+
+      
+}
+
+function unarchive {
+
+  archive_counts=$(counts_with_completed "${archive_extensions}")
+  for count in ${archived_counts}; do
+    if grep "completed" < "${count}"; then 
+      completed_count=$(awk -F":" '{print$2}')
+    else
+      archive_count=$(awk -F":" '{print$2}')
+    fi
+  done
+  if [[  $completed_count -gt 0 ]]; then 
+    ui "${completed_count} of the archives found are in bellicose's cache"
+    ui "meaning you've unarchived the same file recently. Do you want to..."
+    userchoice_cache
+    IFS=$' '
+    for ext in ${archive_extensions}; do 
+      ecounts=$(counts "${ext}")
+      if [[ ${ecounts} -gt 0 ]]; then 
+        # mkdir -p "${tmpdir}/archives/${ext}"
+        # name=$(printf '"*.%s"' "${ext}")
+        # verbose "find looks like find ~+ -type f -name ${name} -print0"
+        # while IFS= read -d '\n' filename; do
+        #   run=$(echo "${filename}") 
+        # done < <(find ~+ -type f -name ${name} -print0) 
+        # for filepathname in "$(find ~+ -type f -name ${name})"; do
+        #   dir=$(dirname "${filepathname}")
+        #   verbose "full path: ${filepathname} dir: ${dir}"
+        #   echo "${filepathname}" >> "${tmpdir}/archives/${ext}/files"
+        #   echo "${dir}" >> "${tmpdir}/archives/${ext}/dirs"
+        # done
+        # cat "${tmpdir}/archives/${ext}/files" | sort -u > "${tmpdir}/archives/${ext}/filesu"
+        # cat "${tmpdir}/archives/${ext}/dirs" | sort -u > "${tmpdir}/archives/${ext}/dirsu"
+        gobblefind_by_ext "${ext}"
+        # if ${LIST}; then
+          #ui "Archive files found:"
+          # for dir in $(cat "${tmpdir}/archives/${ext}/dirsu"); do 
+          #   for filepath in $(cat "${tmpdir}/archives/${ext}/filesu"|grep "${dir}"); do
+          #     # relativepath=$(diff <echo "${filepath}" <echo "${dir}")
+              # echo "full path: ${filepath} file: ${relativepath} dir: ${dir}"
+        local extracted_name="bellicose_extracted"
+        for filenamepath in "${gobbled[@]}"; do 
+          if ${LIST}; then
+            list_tl "${filenamepath}"
+          fi
+          if [[ ${CONTENTS} || ${UNEXTRACT} ]]; then
+            local filename=$(basename "${filenamepath}")
+            local extractpath="$(pwd)/${extracted_name}/${filename}"
+            status=$(mkdir -p "${extractpath}")
+            if [ $? -gt 0 ]; then
+              extractpath="${downloads}/${extracted_name}/${filename}"
+              ui "Error running mkdir in $(pwd), extracting in ${extractpath} instead"
+              status=$(mkdir -p "${extractpath}")
+            fi
+            if ! grep "${filename_path}" "${UNARCHIVED}"; then
+              archive_processor "${filenamepath}" "${extractpath}"
+            fi
+          fi
+        done
+
+        # fi
+        # if ${EXTRACT}; then
+        #   l
+        
+        #   # for dir in $(cat "${tmpdir}/archives/${ext}/dirsu"); do 
+        #   #   for filepath in $(cat "${tmpdir}/archives/${ext}/filesu"|grep "${dir}"); do
+        #   #     relativepath=$(diff <echo "${filepath}" <echo "${dir}")
+          
+        #   for filenamepath in "${gobbled[@]}"; do 
+        #     confirm_yes "extract ${filenamepath} to $(pwd)/${extracted_name} ?"
+        #     local filename=$(basename "${filenamepath}")
+        #     local extractpath="$(pwd)/${extracted_name}/${filename}"
+        #     extract "${filenamepath}" "${extractpath}"
+        #   done
+        #fi
+      fi
+    done
+  else
+    info "No archive files found with exts: ${archive_extensions}"
+  fi
+}
+
+function unarchive_loop() {
+  acounts=$(counts "${archive_extensions}")
+  ui "There are ${acounts} archive (${archive_extensions}) files under ${wd}"
+  if [ ${acounts} -gt 0 ]; then
+    new_acounts=${acounts}
+    acounts=0
+    export EXTRACTED=()
+    while [ ${new_acounts} -gt ${acounts} ]; do
+      unarchive_caller
+      acounts=${new_acounts}
+      new_acounts=$(counts "${archive_extensions}")
+      diff=$(( $new_acounts - $acounts))
+      if [ ${diff} -gt 0 ]; then
+        confirm_yes "After unarchiving there are ${diff} new archives, continue extracting?"
+        unarchive 
+      fi
+    done
+  fi
+}
+
+
+function counts_with_completed {
+  local extensions="${1:-}"
+  count=0 # return value, total count of files for provided extentions
+  completed_count=0
+
+  IFS=$' '
+  for ext in ${extensions}; do
+    gobblefind_by_ext "${ext}"
+    for filename in "${gobbled[@]}"; do 
+      if completed "${filename}"; then
+        ((completed+=1))
+      else
+        local fext="${filename##*.}"
+        if stringContains "${fext}" "${archive_extensions}"; then
+          NEW_ARCHIVES+=( "${filename}" )
+        elif stringContains "${fext}" "${img_extensions}"; then
+          NEW_DMGS+=( "${filename}" )
+        elif stringContains "${fext}" "${pkg_extensions}"; then
+          NEW_PKGS+=( "${filename}" )
+        elif stringContains "${fext}" "${plugin_extensions}"; then
+          NEW_PLUGS+=( "${filename}" )
+        fi
+      ((count+=1))
+    done
+  done
+  echo "count:$count}"
+  echo "completed_count:${completed_count}"
+}
+
+function counts {
+  local extensions="${1:-}"
+  count=0 # return value, total count of files for provided extentions
+  completed_count=0
+  local ext # iterator over ${extensions}
+  IFS=$' '
+  for ext in ${extensions}; do
+    local_count=$(find ~+ -type f -name "*.${ext}" |wc -l|xargs)
+    verbose "$ext $local_count $count"
+    ((count += $local_count))
+  done
+
+  echo "${count}"
+  return ${count}
+}
+
+# Args: filename
+# Returns: 0 if this file is in the cache as already processed, 1 otherwise
+function completed {
+  local filepath="${1:-}"
+  local filename=$(basename "${filepath}")
+  local ext="${filename##*.}"
+  if stringContains "${ext}" "${archived_extensions}"; then
+    return $(grep "${filepath}" "${UNARCHIVED}")
+  elif [[ stringContains "${ext}" "${img_extensions}" 
+  || stiringContains "${ext}" "${pkg_extensions}" ]]; then
+    return $(grep "${filepath}" "${INSTALLED}")
+  elif stringContains "${ext}" "${plugin_extensions}"; then
+    return $(grep "${filepath}" "${PLUGGED}")
+  else
+    return 1
+  fi
+}
+
+function dmg_caller() {
+  # confirm_yes "Mount any image (${img_extentions}) files in $(pwd) and install their contents?"
+  process_dmgs
+}
+
+function dmg_lister() {
+  # confirm_yes "Mount any image (${img_extentions}) files in $(pwd) and list their contents?"
+  process_dmgs
+}
+
+function dmg_contents() {
+  # echo "Mount any image (${img_extentions}) files in $(pwd) and list out the contents of"
+  # echo "Any archives (${archive_extensions}) and packages (${pkg_extensions})?"
+  # confirm_yes ""
+  process_dmgs
+}
+
+function process_dmgs {
+  local contents # string to print the contents of the img to stdout (-contents) and to logs
+  local count # count of files for each ext type so we know whether to try to process
+  local mounted # to hold the directory where hdiutil mounted the image file
+  local ext # iterator over ${IMG_EXTENSIONS}
+  local dmg # iterator over "*.${ext}"
+  local line # iterator over $(find .)
+  local found # container for $(find .)
+  local count # number of image files for each ext
+  local counts # number of all files for $img_extensions
+  verbose "process_dmgs: $(pwd)"
+  IFS=$' '
+  dmg_counts=$(counts "${img_extensions}")
+  if [ $dmg_counts -gt 0 ]; then 
+    # if ${LIST}; then
+    #   echo "Found the following disk image files:"
+    # fi
+    sd=$(pwd)
+    IFS=$' '
+    for ext in ${img_extensions}; do
+      count=$(counts "${ext}")
+      verbose "count ${ext}: ${count}"
+      if [[ ${count} -gt 0 ]]; then
+        gobblefind_by_ext "${ext}"
+        verbose "gobbled: ${gobbled[@]}"
+        for dmg in "${gobbled[@]}"; do 
+          verbose "LIST: ${LIST} TMPDIR: ${TMPDIR}"
+          if ${LIST}; then
+            list_tl "${dmg}"
+          fi
+          if [[ ${CONTENTS} || ${INSTALL} ]]; then
+            if ! stringContains "${dmg}" "${MOUNTED[@]}"; then 
+              mountdir="${TMPDIR}/mounts/${dmg}"
+              verbose "mounting ${dmg} under ${mountdir}"
+              mkdir -p "${mountdir}"
+              mounted="$(hdiutil attach -nobrowse -mountroot "${mountdir}" "${dmg}" |grep private|awk -F'\t' '{print$3}')"
+              MOUNTED+=( "${dmg}" )
+              if ${CONTENTS}; then
+                # gobblefind populates a global array called haggussed, which we will copy
+                # to our own array with a more sensible name for readability, but also because
+                # we'll need to reuse haggussed from inside the loop
+                gobblefind "${mounted}"
+                local files_on_dmg=("${haggussed[@]}")
+                verbose "files_on_dmg: ${files_on_dmg[@]} haggussed: ${#haggussed[@]} ${haggussed[@]}"
+                if [ ${#files_on_dmg[@]} -gt 0 ]; then
+                  # ui "${internal_list}"
+                  IFS=$' '
+                  for filepath in "${files_on_dmg[@]}"; do
+                    # mapfile -d '' paths < <(printf "${filepaths}")
+                    # abspath="${paths[0]}"
+                    # relativepath="${paths[1]}"
+                    # verbose "filepath: ${abspath} relativepath ${relativepath}"
+                    verbose "filepath: ${filepath} dmg: ${dmg}"
+                    list_contents "${filepath}" "${dmg}"
+                    local filename=$(basename "${filepath}")
+                    if is_in_types "${filename}" "${pkg_extensions}"; then
+                      list_package_contents "${filepath}" 2 "${dmg}"
+                    elif is_in_types "${filename}" "${archive_extensions}"; then
+                      unarchive 
+                    fi
+                  done
+                fi
+              fi
+              if [[ ${CONTENTS} || ${INSTALL} ]]; then
+                verbose "changing from $(pwd) to ${mounted}"
+                cd "${mounted}"
+                if [ $(counts "${img_extensions}") -gt 0 ]; then 
+                  process_dmgs
+                fi
+              fi
+              if ${INSTALL}; then
+                process_pkgs "${dmg}"
+              fi
+              if [[ ${CONTENTS}|| ${INSTALL} ]]; then
+                cd "${sd}"
+                diskutil unmount "${mounted}"
+              fi
+            fi
+          fi
+        done
+      fi
+    done
+  else
+    info "No image files found with exts: ${img_extensions}"
+  fi
+}
+
+# function install_dmgs_in_dir {
+
+#   local starting_dir="$(pwd)"
+#   local dir="${1:-}"
+#   echo "installing packages in image files in $dir"
+#   cd "$dir"
+#   install_dmgs 
+#   cd $starting_dir
+# }
+
+function installable() {
+  export LIST=false
+  export CONTENTS=false
+  export SYSTEM_PLUGIN_DIRS=false
+  export INSTALL=false
+  export UNARCHIVE=false
+  export LOGFILE="/dev/stderr"
+  export DEBUG=false
+  export VERBOSE=false
+  export DMG=false
+  export PKG=false
+  export AUDIOPLUGIN=false
+  flag_U=false
+  flag_D=false
+  flag_P=false
+  flag_A=false
+  args=$(getopt -o sdvIfeUDPAV --long system_plugin_dirs,debug,verbose,logfile,dmg_img_iso,pkgs,audip_plugins,version -- "$@")
+  local POSITIONAL_ARGS=()
+  while [[ $# -gt 0 ]]; do
+    case ${1:-} in
+      -l|--list)
+        LIST=true
+        shift 
+        ;;
+      -c|--contents)
+        CONTENTS=true
+        shift 
+        ;;
+      -s|--system_plugin_dirs)
+        SYSTEM_PLUGIN_DIRS=true
+        shift
+        ;;
+      -d|--debug)
+        DEBUG=true
+        shift
+        ;;
+      -v|--verbose)
+        VERBOSE=true
+        DEBUG=true
+        INFO=true
+        shift
+        ;;
+      -f|--logfile)
+        LOGFILE="{$2:/dev/stderr}"
+        shift
+        ;;
+      -D|--dmg_img_iso)
+        flag_D=true
+        shift
+        ;;
+      -P|--pkgs)
+        flag_P=true
+        shift
+        ;;
+      -A|--audio_plugins)
+        flag_A=true
+        shift
+        ;;
+      -V|--version)
+        echo "0.1"
+        shift
+        ;;
+      *)
+        POSITIONAL_ARGS+=("${1-}") 
+        shift 
+        ;;
+    esac
+  done
+  # https://stackoverflow.com/questions/7577052/bash-empty-array-expansion-with-set-u
+  # prevent unbound variable on POSITIONAL_ARGS
+  set -- ${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}
+  acounts=$(counts "${archive_extensions}")
+  dcounts=$(counts "${img_extensions}")
+  pcounts=$(counts "${pkg_extensions}")
+  apcounts=$(counts "${plugin_extensions}")
+  # The existence and locations of files we want to keep track of 
+  # while running (so that we can extract and install them)
+  # we will track in a temp folder... this will also be the parent
+  # directory where we mount image files during the install. 
+  # we declare it here and trap is so that it is cleaned up on 
+  # abnormal exit
+  TMPDIR=$(mktemp -d)
+  if $DEBUG; then echo "storing temp files in ${TMPDIR}"; fi
+  function finish() {
+    if ! ${DEBUG}; then
+      >&2 printf "removing TMPDIR"
+      rm -rf "${TMPDIR}"
+    fi
+  }
+  trap finish EXIT
+  wd=$(pwd)
+
+  # in session tracking, so we can unmount
+  export MOUNTED=()
+
+  # cross session tracking, so we can not unarchive, reinstall, etc, unless that was intended
+  export MEDIUMDIR="/tmp/bellicose"
+  mkdir -p "${MEDIUMDIR}"
+  export UNARCHIVED="${MEDIUMDIR}/unarchived"
+  export NEW_ARCHIVES=()
+  # installed will contain both dmg files and pkg files
+  export INSTALLED="${MEDIUMDIR}/installed"
+  export NEW_DMGS=()
+  export NEW_PKGS=()
+  export PLUGGED="${MEDIUMDIR}/plugged"
+  export NEW_PLUGS=()
+
+  for arg in "${POSITIONAL_ARGS[@]}"; do
+    case ${arg} in
+      "list")
+        shift
+        LIST=true
+        #ui "${acounts} archive (${archive_extensions}) file(s) under ${wd}"
+        if [ ${acounts} -gt 0 ]; then  
+          unarchive_lister
+        fi
+        #ui "${dcounts} image (${img_extensions}) file(s) under ${wd}"
+        if [ ${dcounts} -gt 0 ]; then  
+          dmg_lister
+        fi
+        #ui "${pcounts} pkg (${pkg_extensions}) file(s) under ${wd}"
+        if [ ${pcounts} -gt 0 ]; then  
+          pkg_lister
+        fi
+        return 0
+        ;;
+      "contents")
+        shift
+        LIST=true
+        CONTENTS=true
+        #ui "${acounts} archive (${archive_extensions}) file(s) under ${wd}"
+        if [ ${acounts} -gt 0 ]; then 
+          unarchive_contents
+        fi
+        #ui "${dcounts} image (${img_extensions}) file(s) under ${wd}"
+        if [ ${dcounts} -gt 0 ]; then  
+          dmg_contents
+        fi
+        #ui "${pcounts} pkg (${pkg_extensions}) file(s) under ${wd}"
+        if [ ${pcounts} -gt 0 ]; then         
+          pkg_contents
+        fi
+        return 0
+        ;;
+      "unarchive")
+        shift
+        UNARCHIVE=true
+        unarchive_loop
+        return 0
+        ;;
+      "install")
+        shift
+        UNARCHIVE=true
+        INSTALL=true
+        unarchive_loop
+        dmg_caller
+        pkg_caller
+        return 0
+        ;;
+      *)
+        err "not found"
+        shift
+        return 0
+        ;;
+    esac
+  done
+  # declare -A FLAGS
+  # FLAGS['LIST']="{$LIST}"
+  # FLAGS['CONTENTS']="${CONTENTS}"
+  # FLAGS['SYSTEM_PLUGIN_DIRS']="${SYSTEM_PLUGIN_DIRS}"
+  # FLAGS['INSTALL']="${INSTALL}"
+  # FLAGS['DEBUG']="${DEBUG}"
+  # FLAGS['VERBOSE']="${VERBOSE}"
+  # FLAGS['INFO']="${INFO}"
+  # FLAGS['LOGFILE']="${LOGFILE}"
+  # FLAGS['UNARCHIVE']="${UNARCHIVE}"
+  # FLAGS['DMG']="${DMG}"
+  # FLAGS['PKG']="${PKG}"
+  # FLAGS['AUDIOPLUGIN']="${AUDIOPLUGIN}"
+  
+  # # if [[ flag_A || flag_D || flag_P || flag_U ]]; then
+  # #   UNARCHIVE=${flag_U}
+  # #   DMG=${flag_D}
+  # #   PKG=${flag_P}
+  # #   AUDIOPLUGIN=${flag_A}
+  # # fi
+
+  # printflags
+  # setupdirs
+  # keys=("dmg" "pkg" "plugin")
+  # IFS=$' '
+  # if ${EXTRACT}; then
+  #   unarchive
+  # fi
+  # for ext_type in "${keys[@]}"; do 
+  #   verbose "running find_and_process_installables for ${ext_type}: ${ext_types[${ext_type}]}"
+  #   find_and_process_installables "${ext_types[${ext_type}]}"
+  # done
+}
+
+function printflags() {
+  if $DEBUG; then
+    debug "printflags"
+    for flagname in ${!FLAGS[@]}; do 
+      debug "${flagname}: ${FLAGS[${flagname}]}" 
+    done
+  fi
+}
+
+function add_if_not_in() {
+  local filename="${1:-}"
+  verbose "in add_if_not_in filename: ${filename}"
+  local dir_to_check=$(dirname "${filename}")
+  if ! stringContains "${dir_to_check}" "${dirs[@]}"; then
+    verbose "adding ${dir_to_check} to our list of dirs to process"
+    dirs+=("${dir_to_check}")
+  fi
+}
+
+# 1 arg extensions is one of {archive,img,pkg,plugin}_extensions
+function find_and_process_installables {
+  local extensions="${1:-}"
+  verbose "in find_and_process_installables extensions: ${extensions}"
+  setupdirs
+  info "Attempting to find and install all package installers"
+  info "in subdirs of: $(pwd)"
+  info "on disk images with filenames that end in:"
+  info "$extensions"
+  dirs=()
+  IFS=$' '
+  for ext in $extensions; do
+    local extdir="${ioddir}/${ext}"
+    verbose "saving state data in $extdir"
+    mkdir -p "${extdir}"
+    while IFS= read -d '' filename; do
+      add_if_not_in "${filename}"  </dev/null
+    done < <(find ~+ -type f -iname "*.$ext" -print0)
+  done
+  local start_dir="$(pwd)"
+  IFS=$' '
+  for dir in "${dirs[@]}"; do
+    cd "${dir}"
+    verbose "cd to ${dir} and running process_dirs_for_exts for ${extensions}"
+    process_dirs_for_exts "${extensions}"
+  done
+  cd "${start_dir}"
+}
+
+function process_dirs_for_exts {
+  local extensions="${1:-}"
+  verbose "process_dirs_for_exts ${extensions} in $(pwd)"
+  for key in ${!ext_types[@]}; do
+    for ext in ${ext_types["${key}"]}; do
+      verbose "stringContains ${ext} ${extensions} key $key ext_types ${ext_types[\"${key}\"]}"
+      if stringContains "${ext}" "${extensions}"; then
+        ext_type_for_dir="${key}"
+        verbose "processing ext_type ${ext_type_for_dir} with extensions ${extensions} in dir $(pwd)"
+      fi
+    done
+  done
+  verbose "${ext_type_for_dir}"
+  if [[ "${ext_type_for_dir}" == "dmg" ]]; then 
+    if ${DMG}; then
+      verbose "running process_dmgs"
+      verbose "implies process_dmgs -> process_pkgs -> $(which installer)"
+      process_dmgs
+    fi
+  elif [[ "${ext_type_for_dir}" == "pkg" ]]; then
+    if ${PKG}; then
+      verbose "running pkginstall"
+      verbose "implies pkginstall -> $(which installer)"
+      process_pkgs
+    fi
+  elif [[ "${ext_type_for_dir}" == "plugin" ]]; then
+    if ${AUDIOPLUGIN}; then
+      verbose "running process_plugins" 
+      process_plugins
+    fi
+  else
+    err "Could not detect an ext_type for ${extensions}"
+  fi
+  printflags
+}
+
+# function track_files {
+#   local filepathname="${1:-}"
+#   local bn="$(basename ${filepathname})"
+#   local ext="${bn##*.}"
+#   local dn="$(dirname ${filepathname})"
+#   echo "${filepathname}" >> "${ioddir}/${ext}/files"
+#   echo "${dn}" >> "${ioddir}/${ext}/dirs"
+# }
+
+# function process_dirs_by_ext {
+#   local ext="${1:-}"
+#   if [ -f "${ioddir}/${ext}/dirs" ]; then
+#     IFS=$'\n'
+#     for dir in $(cat ${ioddir}/${ext}/dirs|sort -u); do
+#       install_dmgs_in_dir "${dir}"
+#     done
+#   fi
+# }
+
+function setupdirs() {
+  datestr=$(date "+%Y%m%d%H%M")
+  export tmpdir="/tmp/$datestr"
+  export mountdir="$tmpdir/mounts"
+  export ioddir="$tmpdir/iod"
+  mkdir -p $tmpdir
+  mkdir -p $mountdir
+  mkdir -p $ioddir
+}
+
+# function testdirs () {
+#   if [ -d $tmpdir ]; then
+#     echo "$tmpdir ok."
+#   else
+#     echo "$tmpdir failed."
+#   fi
+#   if [ -d $mountdir ]; then
+#     echo "$mountdir ok."
+#   else
+#     echo "$mountdir failed."
+#   fi
+#   if [ -d $ioddir ]; then
+#     echo "$ioddir ok."
+#   else
+#     echo "$ioddir failed."
+#   fi
+# }
+
+function cleandirs() {
+  rm -ri "$tmpdir/*"
+  rm -ri "$mountdir/*"
+  rm -ri "$iodir/*"
+}
+
+# function install_vst3s {
+#   # pickup any vst3 in a child of $(pwd)
+#   # and install in the current users' library
+#   # or the system library
+#   vst3="/Library/Audio/Plug-Ins/VST3/"
+#   if $SYSTEM_PLUGIN_DIRS; then
+#     echo "installing vst3s to $vst3"
+#     sudo find . -type f -iname '*.vst3' -exec cp -r {} $vst3 \;
+#   else
+#     echo "installing vst3s to $HOME$vst3"
+#     find . -type f -iname '*.vst3' -exec cp -r {} $HOME$vst3 \;
+#   fi
+# }
+# export -f install_vst3s
+
+# function install_vsts {
+#   # pickup any vst in a child of $(pwd)
+#   # and install in the current users' library
+#   # or the system library
+#   vst="/Library/Audio/Plug-Ins/VST/"
+#   if $SYSTEM_PLUGIN_DIRS; then
+#     echo "installing vsts to $vst"
+#     sudo find . -type f -iname '*.vst' -exec cp -r {} $vst \;
+#   else
+#     echo "installing vsts to $HOME$vst"
+#     find . -type f -iname '*.vst' -exec cp -r {} $HOME$vst \;
+#   fi
+# }
+# export -f install_vsts
+
+# function install_AUs {
+#   # pickup any component in a child of $(pwd)
+#   # and install in the current users' library
+#   # or the system library
+#   component="/Library/Audio/Plug-Ins/Components"
+#   if $SYSTEM_PLUGIN_DIRS; then
+#     echo "installing AUs to $component"
+#     sudo find . -type f -iname '*.component' -exec cp -r {} $component \;
+#   else
+#     echo "installing AUs to $HOME$component"
+#     find . -type f -iname '*.component' -exec cp -r {} $HOME$component \;
+#   fi
+# }
+# export -f install_AUs
+
+export  VERBOSE=true
+export  INSTALL=true
+export  LIST=false
+export SYSTEM_PLUGIN_DIRS=true
+
+
+function look_and_prompt_for_docs() {
+  local path="${1-}"
+}
+
+function get_dest_from_ext_and_base() {
+  local ext="${1:-}"
+  local destbase="${2:-}"
+    case  "${ext}" in
+    "vst")
+      dest="${destbase}/VST/"
+      ;;
+    "vst3")
+      dest="${destbase}/VST3/"
+      ;;
+    "component")
+      dest="${destbase}/Components/"
+      ;;
+    *)
+      err "Unable to parse ${path} as a plugin.  Apologies."
+      rreturn 2
+      ;;
+  esac
+  echo "${dest}"
+}
+
+# args: the absolute of the plugin to install
+function install_plugin() {
+  local path="${1-}"
+  local ext=$(echo "${path}"|awk -F'.' '{print$NF}'|sed 's:/::g')
+  local rsync_opts='-rltv'
+  # echo "installing ${path} to ${dest}"
+  # command=$(printf "${commandstrf}" "${path}" "${dest}")
+  # verbose "running ${command}"
+  if $SYSTEM_PLUGIN_DIRS; then
+    local destbase="${PLUGIN_HOME}"
+    local dest=$(get_dest_from_ext_and_base "${ext}" "${destbase}")
+    success=$(sudo rsync "${rsync_opts}" "${path}" "${dest}")
+    if [ $? -gt 0 ]; then 
+      err "The following command failed:"
+      err "${command}"
+      return 1
+    fi
+  else
+    local destbase="${HOME}${PLUGIN_HOME}"
+    local dest=$(get_dest_from_ext_and_base "${ext}" "${destbase}")
+    success=$(${lrsync} "${rsync_opts}" "${path}" "${dest}")
+    if [ $? -gt 0 ]; then 
+      err "The following command failed:"
+      err "${command}"
+      return 1
+    fi
+  fi
+}
+
+function valid_layer() {
+  local layer="${1:-}"
+  if [[ ${layer} == 1 || ${layer} == 2 ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# Args: dir to search from/under
+#       1 if both relative+absolute, \0 separated, defaults to absolute only
+# Globals: haggussed - array cleared and populated.  Haggus, what's haggus?
+#   Sheep's stomach filled with meat and barley.  That sounds revolting.
+function gobblefind() {
+  export haggussed=() 
+  local sd=$(pwd)
+  local dir="${1:-${sd}}"
+  local bothpaths="${2:-0}"
+  if [[ "${dir}" != "$(pwd)" ]]; then
+    cd "${dir}"
+  fi
+  local version="$(bash_version)"
+  verbose 'running is_first_floating_number_bigger "${version}" "4.4";'
+  # if is_first_floating_number_bigger "${version}" "4.4"; then
+  #   verbose "found bash ${version}, using globstar"
+  #   shopt -s globstar nullglob dotglob
+  #   tmp_array=( **/*.* )
+  # else 
+    verbose "found bash ${version}, find with process substitution"
+
+    while IFS= read -r -d $'\0'; do
+      haggussed+=("$REPLY") # REPLY is the default
+    done < <(find "${dir}" -print0 2> /dev/null)
+
+  # fi
+  local wd="$(pwd)"
+  verbose "sd: ${sd} wd: ${wd} haggussed: ${#haggussed[@]} ${haggussed[@]}"
+  # local tmp2=("${tmp_array[@]}")
+  # t2count="${#tmp2[@]}"
+  # tmp_array=()
+  # for item in "${tmp2[@]}"; do
+  #   if [ ${bothpaths} -eq 1 ]; then
+  #     tmp_array+=( "${wd}/${item}\0${item}" )
+  #   else
+  #     tmp_array+=( "${wd}/${item}" )
+  #   fi
+  # done
+
+  cd "${sd}"
+}
+
+# Args: ext, only one at a time
+# Globals: gobbled - array, cleared and populated
+function gobblefind_by_ext() {
+  export gobbled=()
+  local ext="${1:-}"
+  local version="$(bash_version)"
+  verbose 'running is_first_floating_number_bigger "${version}" "4.4";'
+  if is_first_floating_number_bigger "${version}" "4.4"; then
+    verbose "found bash ${version}, using globstar"
+    shopt -s globstar nullglob dotglob
+    gobbled=( **/*".${ext}" )
+  else 
+    verbose "found bash ${version}, find with process substitution"
+    err "process substitution currently broken. Get fancy new bash (only a decade old)"
+    err "on mac via homebrew."
+    rreturn 2
+    regex=$(printf '.*.%s$' "${ext}")
+    verbose "installing ${ext} with regex ${regex}"
+    # ourfindargs=$(printf ". -regex '%s' -print0" "${regex}")
+    # verbose "ourfindargs ${ourfindargs}"
+    while IFS= read -r -d $'\0'; do
+      gobbled+=("$REPLY") # REPLY is the default
+    done < <(find ~+ -regex "${regex}" -print0 2> /dev/null)
+  fi
+  # local wd="$(pwd)"
+  # local tmp2=("${tmp_array[@]}")
+  # t2count="${#tmp2[@]}"
+  # tmp_array=()
+  # for item in "${tmp2[@]}"; do
+  #   tmp_array+=( "${wd}/${item}" )
+  # done
+  # tcount="${#tmp_array[@]}"
+  # verbose "tmp_array ${tcount} like ${t2count}"
+  # if [[ ${tcount} != ${t2count} ]]; then
+  #   rreturn 4
+  # fi
+  # export gobbled=()
+  # gobbled=()"${tmp_array[@]}")
+}
+
+function rreturn() {
+  local return_code="${1:-}"
+  while ${return_code=} -gt 0; do
+    stacktrace
+    confirm_yes "return code ${return_code} -- have yourself a cluckity-cluck ctl-c filled day!"
+  done
+}
+LIST=true
+CONTENTS=true
+INSTALL=false
+function process_plugins {
+  verbose "plugin_extensions ${plugin_extensions}"
+  local skip_install_only=false
+  IFS=$' '
+  for ext in ${plugin_extensions}; do
+    verbose "ext ${ext}"
+
+  #     verbose "running process_plugins_by_ext_to_dir ${ext} ${install_dir}"
+  #     process_plugins_by_ext_to_dir ${ext} ${install_dir} 
+  #   done
+  # }
+  # Args: extention - one of ("vst", "vst3", "component"), though really any file ext
+  #       dir - directory to install to
+  # function process_plugins_by_ext_to_dir {
+    # local ext="${1:-}"
+    # local dir="${2:-}"
+      gobblefind_by_ext "${ext}"
+      verbose "count ${#gobbled[@]} like ${gobbled[0]}"
+      for plug in "$(gobbled[@])"; do 
+        verbose "operating on ${plug}"
+        if ${LIST}; then
+          list_tl "${plug}"
+        fi 
+        if ${CONTENTS}; then
+          gobblefind "${plug}/"
+          for file in "${haggussed[@]}"; do
+            list_contents "${file}" "${plug}"
+            verbose $(printf "plugindir: %s contentfile: %s" "${plug}" "${file}")
+          done
+        fi
+        if ${INSTALL}; then
+          skip_install_only=true
+          confirm_yes "install ${plug}?"
+          install_plugin "${plug}"
+        fi
+      done
+ 
+    if ${INSTALL}; then
+      if ! ${skip_install_only}; then
+        gobblefind_by_ext "${ext}"
+        verbose "found ${#gobbled[@]} files"
+        IFS=$' '
+        for file in "${gobbled[@]}"; do 
+          install_plugin "${file}"
+        done
+      fi
+    fi
+  done
 }
 
 alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
@@ -130,7 +1676,7 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 
 
-function sudo-only-commands () {
+function sudo-only-commands  {
     # cache sudo password
     sudo ls
     # for a set of .command files, run only the 

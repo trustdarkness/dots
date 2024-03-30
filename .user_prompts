@@ -51,3 +51,32 @@ function confirm_yes {
   get_yes_keypress "$prompt" 0
 }
 export -f confirm_yes
+
+function get_timed_keypress {
+  local REPLY IFS=
+  >/dev/tty printf '%s' "$*"
+  [[ $ZSH_VERSION ]] && read -rk1  # Use -u0 to read from STDIN
+  # See https://unix.stackexchange.com/q/383197/143394 regarding '\n' -> ''
+  [[ $BASH_VERSION ]] && </dev/tty read -t7
+  printf '%s' "$REPLY"
+}
+
+function get_timed_yes {
+  local prompt="${1:-Are you sure}"
+  local enter_return=$2
+  local REPLY
+  # [[ ! $prompt ]] && prompt="[y/n]? "
+  while REPLY=$(get_timed_keypress "$prompt"); do
+    [[ $REPLY ]] && printf '\n' # $REPLY blank if user presses enter
+    case "$REPLY" in
+      Y|y)  return 0;;
+      N|n)  return 1;;
+      '')   [[ $enter_return ]] && return "$enter_return"
+    esac
+  done
+}
+
+function timed_confirm_yes {
+  local prompt="${*:-Are you sure} [Y/n]? "
+  get_timed_yes "$prompt" 0
+}
