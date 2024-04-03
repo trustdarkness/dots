@@ -152,14 +152,4 @@ if [ -n "$PNPM" ]; then
   # pnpm end
 fi
 
-function i() {
-  source $D/installutil.sh
-}
-
-function k() {
-  source $D/kutil.sh
-}
-
 source $D/util.sh
-
-export PATH=$HOME/bin:$HOME/Applications:$HOME/src/github/networkmanager-dmenu:$HOME/src/google/flutter/bin:$HOME/src/github/eww/target/release:/usr/sbin:/sbin:$PATH

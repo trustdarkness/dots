@@ -1,20 +1,12 @@
-function stringContains() {
-        $(echo "$2"|grep -Eqi $1);
-        return $?;
-}
-export -f stringContains
+if [[ $(uname) == "Linux" ]]; then
+  source linuxutil.sh
+fi
 
-function wwwify () {
-  sudo sed -i.bak '/www-data/ s#/usr/sbin/nologin#/bin/bash#' /etc/passwd;
-  sudo -i -u www-data $@;
-  sudo sed -i.bak '/www-data/ s#/bin/bash#/usr/sbin/nologin#' /etc/passwd;
+function string_contains() {
+  grep -Eqi "${1:-}" <(echo "${2:-}");
+  return $?;
 }
-
-function mastodonify () {
-  sudo sed -i.bak '/mastodon/ s#/usr/sbin/nologin#/bin/bash#' /etc/passwd;
-  sudo -i -u mastodon $@;
-  sudo sed -i.bak '/mastodon/ s#/bin/bash#/usr/sbin/nologin#' /etc/passwd;
-}
+alias stringContains="string_contains"
 
 function hn () {
   if [ $# -eq 0 ]; then 
@@ -40,14 +32,7 @@ function hn () {
   done
 }
 
-function guikiller() {
-  keywords="xfce kde plasma kwin"
-  for alive in $keywords; do 
-    pkill -i $alive
-  done
-}
-
-function symlink-child-dirs () {
+function symlink_child_dirs () {
   # Argument should be a directory who's immediate children
   # are themes such that you want to have each directory  
   # at the top level (under the parent) symlinked in a 
@@ -97,36 +82,3 @@ ssudo () # super sudo
     ARGS="$@" && sudo bash -c "$(declare -f $1); $ARGS"
 }
 alias ssudo="ssudo "
-
-function use27 {
-  export PYTHONPATH=/usr/local/lib/python2.7/dist-packages:/usr/deprecated/lib/python2.7/
-  export PATH=/usr/local/deprecated/bin:$PATH
-  alias python=/usr/deprecated/bin/python2.7
-}
-function use310 {
-  export PYTHONPATH=/usr/deprecated/lib/python3.10
-  export PATH=/usr/local/deprecated/bin:$PATH
-  alias python=/usr/deprecated/bin/python3.10
-  alias python3=/usr/deprecated/bin/python3.10
-}
-
-function sublist-xdg-data-dirs() {
-  IFS=":"; for dir in $XDG_DATA_DIRS; do ls $dir; done
-}
-
-FIREWALLD=$(which firewall-cmd)
-if [ -n "$FIREWALLD" ]; then
-  function sfwp () {
-    sudo firewall-cmd --add-port $1 --zone public --permanent
-    sudo firewall-cmd --reload
-    ssr firewalld
-  }
-
-
-  function sfwrm () {
-    sudo firewall-cmd --remove-port $1 --zone public --permanent
-    sudo firewall-cmd --reload 
-    ssr firewalld
-  }
-
-fi

@@ -1,10 +1,10 @@
-if [[ caller == "i" ]]; then 
+if [[ "${FUNCTIONNAME[0]}" == "i" ]]; then 
   sudo echo "Ready."
+else
+  echo "${FUNCTIONNAME}"
 fi
 
-vasl
-
-alias distro="lsb_release -a"
+distro="$(lsb_release -a)"
 
 if stringContains "arch" "$distro"; then
   alias sai="sudo pacman -Sy"
@@ -23,6 +23,7 @@ if stringContains "(fedora|nobara)" "$distro"; then
 fi
 
 if stringContains "(debian|ubuntu)" "$distro"; then
+  alias di="sudo dpkg -i"
   alias sai="sudo aptitude install"
   alias sau="sudo aptitude update"
   alias sauu="sudo aptitude update && sudo aptitude upgrade"
@@ -32,6 +33,8 @@ if stringContains "(debian|ubuntu)" "$distro"; then
   alias saar="sudo apt-add-repository"
   alias sAAR="sudo apt auto-remove"
   alias vasl="sudo vim /etc/apt/sources.list"
+  alias asl="vimcat /etc/apt/sources.list"
+  alias vasld="sudo vim /etc/apt/sources.list.d"
   function saig() {
     pattern=$1
     sudo apt install *$pattern*

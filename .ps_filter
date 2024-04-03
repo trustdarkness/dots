@@ -8,8 +8,22 @@
 # this file should not be sourced directly.
 
 # use px if available
-PS=$(which px)
-if ! [ -n "$PS" ]; then
-  PS="ps awux |grep"
-fi
-export PS
+
+
+function psearch() {
+  local px=$(which px)
+  local ps_search='ps awux 2>/dev/null |grep %s'
+  local px_search='px %s 2>devnull'
+
+  function pxsearch() {
+    s=$(printf "${px_search}" '$@')
+    ${s}
+  } 
+
+  if [ -n "$px" ]; then 
+    export PS=$(printf "${ps_search}")
+  else
+    export pxsearch
+    export PS=pxsearch
+  fi
+}  

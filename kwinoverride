@@ -1,6 +1,7 @@
 #!/bin/bash
 if [ -n "${KWIN_OVERRIDE}" ]; then
   k
+  xfwm4 --replace & disown
   kwin_x11 --replace &
   kglobalaccel5 # for keyboard shortcuts like alttab
 else
