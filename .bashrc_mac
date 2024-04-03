@@ -67,15 +67,6 @@ PROMPT_FOR_ACTIONS=true
 
 # Never look for known types in dirs that look like the following:
 EXCLUDE_DIR='.app'
-# regex=""
-# regex_or_builder "${EXCLUDE_DIRS_REGEXES}"
-# if [ -n "${regex}" ]; then
-#   verbose "only exclude regex: ${EXCLUDE_DIRS_REGEXES}"
-#   regex="${EXCLUDE_DIRS_REGEXES}"
-# else
-#   verbose "exclude OR regex: ${regex}"
-# fi
-# EXCLUDE_DIRS_REGEX="${regex}"
 
 # (not yet implemented)
 # User File Types: As a best effort, if enabled with adequate criteria, we 
@@ -122,7 +113,6 @@ DMG_EXTENSIONS="dmg img iso"
 PKG_TYPE_DESC="installer package"
 PKG_EXTENSIONS="pkg mpkg"
 
-# (not yet implemented)
 # App Files: When found in disk images, we will try to install *.app files to 
 #            /Applications
 APP_TYPE_DESC="application"
@@ -1039,40 +1029,16 @@ function handle_cache_by_type() {
 function gobblefind() {
   export haggussed=() 
   local dir=$(echo "${1:-$(pwd)}"| tr -s /)
-  # local changed=false
-  # if [[ "${dir}" != "$(pwd)" ]]; then
-  #   verbose "dir ${dir} pwd $(pwd)"
-  #   changed=true
-  #   local changed_from="$(pwd)"
-  #   cd "${dir}"
-  # fi
-  # local version="$(bash_version)"
-  # verbose 'running is_first_floating_number_bigger "${version}" "4.4";'
-  # if is_first_floating_number_bigger "${version}" "4.4"; then
-  #   verbose "found bash ${version}, using globstar"
-  #   shopt -s globstar nullglob dotglob
-  #   tmp_array=( **/*.* )
-  # else 
-    #verbose "found bash ${version}, find with process substitution"
-    if stringContains "${EXCLUDE_DIR}" "${dir}"; then
-      while IFS= read -r -d $'\0'; do
-        haggussed+=("$REPLY") # REPLY is the default
-      done < <(find "${dir}" -print0 2> /dev/null)
-    else
-      ex=$(printf '*%s*' "${EXCLUDE_DIR}")
-      while IFS= read -r -d $'\0'; do
-        haggussed+=("$REPLY") # REPLY is the default
-      done < <(find "${dir}" ! -path "${ex}" -print0 2> /dev/null)
-    fi
-#  fi
-  # excluded=()
-  # array_exclude "${haggussed[@]}" "${EXCLUDE_DIRS_REGEX}"
-  # haggussed=("${excluded[@]}")
-  # local wd="$(pwd)"
-  # verbose "sd: ${sd} wd: ${wd} haggussed: ${#haggussed[@]} ${haggussed[@]}"
-  # if $changed; then
-  #   cd "${changed_from}"
-  # fi
+  if stringContains "${EXCLUDE_DIR}" "${dir}"; then
+    while IFS= read -r -d $'\0'; do
+      haggussed+=("$REPLY") # REPLY is the default
+    done < <(find "${dir}" -print0 2> /dev/null)
+  else
+    ex=$(printf '*%s*' "${EXCLUDE_DIR}")
+    while IFS= read -r -d $'\0'; do
+      haggussed+=("$REPLY") # REPLY is the default
+    done < <(find "${dir}" ! -path "${ex}" -print0 2> /dev/null)
+  fi
 }
 
 # Args: ext, only one at a time
@@ -1080,36 +1046,18 @@ function gobblefind() {
 function gobblefind_by_ext() {
   export gobbled=()
   local ext="${1:-}"
-  # local version="$(bash_version)"
-  # verbose 'running is_first_floating_number_bigger "${version}" "4.4";'
-  # if is_first_floating_number_bigger "${version}" "4.4"; then
-  #   verbose "found bash ${version}, using globstar"
-  #   shopt -s globstar nullglob dotglob
-  #   gobbled=( **/*".${ext}" )
-  # else 
-  #   verbose "found bash ${version}, find with process substitution"
-  #   err "process substitution currently broken. Get fancy new bash (only a decade old)"
-  #   err "on mac via homebrew."
-  #   rreturn 2
-    regex=$(printf '.*.%s$' "${ext}")
-    ex=$(printf '*%s*' "${EXCLUDE_DIR}")
-    verbose "gobblefind ${ext} with regex ${regex}"
-    if [[ "${ext}" == "app" ]]; then 
-      while IFS= read -r -d $'\0'; do
-        gobbled+=("$REPLY") # REPLY is the default
-      done < <(find ~+ -regex "${regex}" -print0 2> /dev/null)
-    else
-      while IFS= read -r -d $'\0'; do
-        gobbled+=("$REPLY") # REPLY is the default
-      done < <(find ~+ ! -path "${ex}" -regex "${regex}" -print0 2> /dev/null)
-    fi
-  # fi
-  # if [ "${#gobbled[@]}" -gt 0 ]; then
-  #   excluded=()
-  #   verbose "calling ro exclude ${EXCLUDE_DIRS_REGEX} from ${gobbled[@]}"
-  #   array_exclude "${gobbled[@]}" "${EXCLUDE_DIRS_REGEX}"
-  #   gobbled=("${excluded[@]}")
-  # fi
+  regex=$(printf '.*.%s$' "${ext}")
+  ex=$(printf '*%s*' "${EXCLUDE_DIR}")
+  verbose "gobblefind ${ext} with regex ${regex}"
+  if [[ "${ext}" == "app" ]]; then 
+    while IFS= read -r -d $'\0'; do
+      gobbled+=("$REPLY") # REPLY is the default
+    done < <(find ~+ -regex "${regex}" -print0 2> /dev/null)
+  else
+    while IFS= read -r -d $'\0'; do
+      gobbled+=("$REPLY") # REPLY is the default
+    done < <(find ~+ ! -path "${ex}" -regex "${regex}" -print0 2> /dev/null)
+  fi
 }
 
 function array_exclude {
@@ -1127,51 +1075,6 @@ function array_exclude {
 
 
 #################################### Archives #################################
-# function contents(){
-#   local filepath="${1:-}"
-#   local filename="$(basename \"${filename}\")"
-#   local contents
-#   local file
-#   if ${CONTENTS}; then
-#     # we assume if not already extracted, the user didn't run with -e and use tmp
-#     if ! $(extracted "${filename}"); then 
-#       extract "${filename}" 
-#     fi
-#     contents=$(find "${tmpdir}/archives/${filename}"})
-#     for file in ${contents}; do
-#       echo " * ${file}"
-#       verbose "${filename} contents: ${file}"
-#     done 
-#   fi
-# }
-
-# function extract(){
-#   local filename="${1:-}"
-#   local extract_path="${2:-}"
-#   local dir=$(pwd)
-#   if echo "${filename}" |grep "7z$"; then
-#     options=$(printf "e -y -o%s" "${extract_path}")
-#     verbose "matched 7z with ${filename} from ${dir} with options ${options}"
-#     7zz ${options} "${filename}" 
-#   elif [[ $(echo "${filename}" |grep "rar$") -eq 0 ]]; then
-#     verbose "matched rar with ${filename} from ${dir}"
-#     unrar x "${filename}" -op "${extract_path}"
-#   elif [[ $(echo "${filename}" |grep "zip$") -eq 0 ]]; then
-#     verbose "matched zip with ${filename} from ${dir}"
-#     unzip "${filename}" -d "${extract_path}"
-#   elif [[ $(echo "${filename}" |grep "tar.gz$") -eq 0 ]]; then
-#     verbose "matched tar.gz with ${filename} from ${dir}"
-#     tar -xf "${filename}" -C  "${extract_path}"
-#   elif [[ $(echo "${filename}" |grep "tar.xz$") -eq 0 ]]; then 
-#     verbose "matched tar.xz with ${filename} from ${dir}"
-#     tar -xf "${filename}" -C  "${extract_path}"
-#   elif [[ $(echo "${filename}" |grep "tgz$") -eq 0 ]]; then
-#     verbose "matched tgz with ${filename} from ${dir}"
-#     tar -xf "${filename}" -C  "${extract_path}"
-#   else
-#     ui "${filename} not an archive we can unpack. Skipping."
-#   fi
-# }
 
 # Args: filepath: absolute path of the file
 function archive_ext_tools() {
@@ -1272,12 +1175,9 @@ process_archives() {
       done
     fi
   done
-}
-
 
 
 ################################ PROCESS DMGS #################################
-
 
 function attempt_unmount() {
   verbose "function_call $@"
@@ -1787,9 +1687,6 @@ function installable() {
     handle_cache_by_type ${i}
   done
 }
-
-
-
 
 alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
 alias brc="vimcat ~/.bashrc"
