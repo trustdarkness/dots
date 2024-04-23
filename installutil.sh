@@ -1,12 +1,12 @@
-if [[ "${FUNCTIONNAME[0]}" == "i" ]]; then 
+if [[ "${FUNCNAME[0]}" == "i" ]]; then 
   sudo echo "Ready."
 else
-  echo "${FUNCTIONNAME}"
+  echo "${FUNCNAME}"
 fi
 
 distro="$(lsb_release -a)"
 
-if stringContains "arch" "$distro"; then
+if string_contains "arch" "$distro"; then
   alias sai="sudo pacman -Sy"
   alias sau="sudo pacman -Syu"
   alias sauu="sudo pacman -Syu"
@@ -14,7 +14,7 @@ if stringContains "arch" "$distro"; then
   alias sar="sudo pacman -Rscn"
 fi
 
-if stringContains "(fedora|nobara)" "$distro"; then
+if string_contains "(fedora|nobara)" "$distro"; then
   alias sai="sudo dnf install -y"
   alias sau="sudo dnf upgrade -y"
   alias sauu="sudo dnf upgrade -y"
@@ -22,7 +22,7 @@ if stringContains "(fedora|nobara)" "$distro"; then
   alias sar="sudo dnf remove -y"
 fi
 
-if stringContains "(debian|ubuntu)" "$distro"; then
+if string_contains "(debian|ubuntu)" "$distro"; then
   alias di="sudo dpkg -i"
   alias sai="sudo aptitude install"
   alias sau="sudo aptitude update"
