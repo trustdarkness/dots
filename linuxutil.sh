@@ -1,3 +1,31 @@
+#!env bash
+alias du0="du -h --max-depth=0"
+alias du1="du -h --max-depth=1"
+alias ns="sudo systemctl status nginx"
+alias nr="sudo systemctl restart nginx"
+alias nt="wwwify nginx -t"
+alias nT="sudo nginx -T"
+alias sdw="sudo -i -u www-data"
+alias ss="sudo systemctl"
+alias ssen="sudo systemctl enable"
+alias ssup="sudo systemctl start"
+alias ssdn="sudo systemctl stop"
+alias ssr="sudo systemctl restart"
+alias ssst="sudo systemctl status"
+alias sglobals="source $HOME/.globals"
+alias globals="vimcat $HOME/.globals"
+alias grep="grep -E -v \"$BLK\"|grep -E"
+alias slhu="source $LH/util.sh"
+alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
+
+# .globals is a symlink to the copy in the repo
+# for some reason, I did it that way instead of sourcing from
+# the repo directly.  Perhaps someday I will either remember
+# and update this comment or fix it.
+source $HOME/.globals
+source $LH/util.sh
+source $MTEBENV/.conditional_starters
+
 function wwwify () {
   sudo sed -i.bak '/www-data/ s#/usr/sbin/nologin#/bin/bash#' /etc/passwd;
   sudo -i -u www-data $@;
@@ -30,24 +58,37 @@ function use310 {
 }
 
 function sublist-xdg-data-dirs() {
-  IFS=":"; for dir in $XDG_DATA_DIRS; do ls $dir; done
+  IFS=$':'; for dir in $XDG_DATA_DIRS; do ls $dir; done
 }
 
-FIREWALLD=$(which firewall-cmd)
+fwd=$(type -p firewall-cmd)
 if [ -n "$FIREWALLD" ]; then
   function sfwp () {
-    sudo firewall-cmd --add-port $1 --zone public --permanent
-    sudo firewall-cmd --reload
-    ssr firewalld
+    local input="${1:-}"
+    if [ -n "${input}" ]; then 
+      if [[ "${input}" =~ '^[0-9]*\/tcp|udp' ]]; then
+        sudo $fwd --add-port "${input}" --zone public --permanent
+        sudo $fwd --reload
+        ssr firewalld
+        return 0
+      fi
+    fi
+    >&2 printf "Please specify port/protocol like 22/tcp"
+    return 1
   }
-
 
   function sfwrm () {
-    sudo firewall-cmd --remove-port $1 --zone public --permanent
-    sudo firewall-cmd --reload 
-    ssr firewalld
+    local input="${1:-}"
+    if [ -n "${input}" ]; then 
+      if [[ "${input}" =~ '^[0-9]*\/tcp|udp' ]]; then
+        sudo firewall-cmd --remove-port $1 --zone public --permanent
+        sudo firewall-cmd --reload 
+        ssr firewalld
+      fi
+    fi
+    >&2 printf "Please specify port/protocol like 22/tcp"
+    return 1
   }
-
 fi
 
 function whodesktop() {
@@ -86,4 +127,29 @@ function k() {
   source $D/kutil.sh
 }
 
+CARGO=$(which cargo);
+if [ -n "$CARGO" ]; then
+  source "$HOME/.cargo/env"
+fi
+
+PNPM=$(which pnpm);
+if [ -n "$PNPM" ]; then
+  # pnpm
+  export PNPM_HOME="/home/mt/.local/share/pnpm"
+  case ":$PATH:" in
+    *":$PNPM_HOME:"*) ;;
+    *) export PATH="$PNPM_HOME:$PATH" ;;
+  esac
+  # pnpm end
+fi
+
+export OLDSYS="$HOME/$TARGET/$BACKUP/Software/Linux/"
+export OLDHOME="$HOME/$TARGET/$BACKUP/Devices/personal/$(hostname)/$(whoami)_latest/$(whoami)"
+function b() {
+  source $D/localback.sh
+}
+
+export NO_ATI_BUS=1
+export PYTHONPATH=/usr/lib/python3.11:/usr/lib/python3/dist-packages
+export BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
 export PATH=$HOME/bin:$HOME/Applications:$HOME/src/github/networkmanager-dmenu:$HOME/src/google/flutter/bin:$HOME/src/github/eww/target/release:/usr/sbin:/sbin:$PATH

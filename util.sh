@@ -1,5 +1,20 @@
+#!env bash
+alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
+alias brc="vimcat ~/.bashrc"
+alias sbrc="source $HOME/.bashrc"
+alias pau="ps auwx"
+alias paug="ps auwx|grep "
+alias paugi="ps awux|grep -i "
+alias rst="sudo shutdown -r now"
+alias gh="mkdir -p $HOME/src/github && cd $HOME/src/github"
+alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
+alias gc="git clone"
+export GH="$HOME/src/github"
+
 if [[ $(uname) == "Linux" ]]; then
   source linuxutil.sh
+elif [[ $(uname) == "Darwin" ]]; then
+  source macutil.sh
 fi
 
 function string_contains() {
@@ -82,3 +97,29 @@ ssudo () # super sudo
     ARGS="$@" && sudo bash -c "$(declare -f $1); $ARGS"
 }
 alias ssudo="ssudo "
+
+function bash_major_version() {
+  echo "${BASH_VERSINFO[0]}"
+}
+
+function bash_minor_version() {
+  echo "${BASH_VERSINFO[1]}"
+}
+
+function bash_version() {
+  major=$(bash_major_version)
+  minor=$(bash_minor_version)
+  echo "${major}.${minor}"
+}
+
+# stolen from https://stackoverflow.com/questions/8654051/how-can-i-compare-two-floating-point-numbers-in-bash
+is_first_floating_number_bigger () {
+    number1="$1"
+    number2="$2"
+
+    [ ${number1%.*} -eq ${number2%.*} ] && [ ${number1#*.} \> ${number2#*.} ] || [ ${number1%.*} -gt ${number2%.*} ];
+    result=$?
+    if [ "$result" -eq 0 ]; then result=1; else result=0; fi
+
+    __FUNCTION_RETURN="${result}"
+}

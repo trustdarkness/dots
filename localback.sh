@@ -8,6 +8,13 @@ function restore() (
     echo "A simple wrapper function to restore from a backup dir on a"
     echo "fresh install."
     echo " " 
+    echo "To work properly the following vars must be set to paths"
+    echo "containing data to be restored:"
+    echo " - OLDHOME, user files organized as they should be pulled into"
+    echo "            the new system."
+    echo " - OLDSYS, files and software from outside the users homedir,"
+    echo "           activated by using the -n (nonpersonalized) flag."
+    echo " "
     echo "-n is for non-personalized software from a local source"
     echo "   but still restored to \$HOME."
     echo "-g globs the restore target, will try to restore anything"
@@ -59,9 +66,9 @@ function restore() (
     exit 1
   fi
   if [ $global -eq 1 ]; then 
-    BK="$HOME/$TARGET/$BACKUP/Software/Linux/"
+    BK="${OLDSYS}"
   else
-    BK="$HOME/$TARGET/$BACKUP/Devices/personal/$(hostname)/$(whoami)_latest/$(whoami)"
+    BK="${OLDHOME}"
   fi
   mounted=$(mountpoint $HOME/$TARGET);
   if [ $? -ne 0 ]; then
