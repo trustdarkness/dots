@@ -14,8 +14,8 @@ export GH="$HOME/src/github"
 source $D/.user_prompts
 
 function string_contains() {
-  grep -Eqi "${1:-}" <(echo "${2:-}");
-  return $?;
+  printf "%b" "${2:-}"| grep -Eqi "${1:-}" 
+  return $?
 }
 alias stringContains="string_contains"
 
@@ -83,7 +83,7 @@ function ghc () {
   fi
   gh
   gc $url
-  f=$(echo "$url"|awk -F"/" '{print$NF}'|cut -d"." -f1)
+  f=$(echo "$url"|awk -F"/" '{print$NF}')
   cd $f
 }
 
