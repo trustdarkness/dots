@@ -53,14 +53,14 @@ function restore() (
         help
         return 1
         ;;
-      -*|--*)
-        echo "Unknown option $1"
-        return 1
+      *)
+        shift
+        break
         ;;
 
     esac
   done
-  LOC="$@"
+  LOC="${@: -1}"
   if stringContains "/" $LOC; then
     >&2 printf "nested directories not yet supported."
     exit 1
@@ -70,10 +70,10 @@ function restore() (
   else
     BK="${OLDHOME}"
   fi
-  mounted=$(mountpoint $HOME/$TARGET);
-  if [ $? -ne 0 ]; then
-    $LH/mounter-t.sh
-  fi
+  # mounted=$(mountpoint $HOME/$TARGET);
+  # if [ $? -ne 0 ]; then
+  #   $LH/mounter-t.sh
+  # fi
   if [ $merge -ne 0 ]; then
     if [ -d "$BK" ]; then
       new="$BK/$LOC"

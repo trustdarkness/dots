@@ -11,11 +11,7 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
-if [[ $(uname) == "Linux" ]]; then
-  source linuxutil.sh
-elif [[ $(uname) == "Darwin" ]]; then
-  source macutil.sh
-fi
+source $D/.user_prompts
 
 function string_contains() {
   grep -Eqi "${1:-}" <(echo "${2:-}");
@@ -111,6 +107,7 @@ function bash_version() {
   minor=$(bash_minor_version)
   echo "${major}.${minor}"
 }
+export -f bash_version
 
 # stolen from https://stackoverflow.com/questions/8654051/how-can-i-compare-two-floating-point-numbers-in-bash
 is_first_floating_number_bigger () {
@@ -123,3 +120,9 @@ is_first_floating_number_bigger () {
 
     __FUNCTION_RETURN="${result}"
 }
+
+if [[ $(uname) == "Linux" ]]; then
+  source $D/linuxutil.sh
+elif [[ $(uname) == "Darwin" ]]; then
+  source $D/macutil.sh
+fi

@@ -8,6 +8,8 @@ case $- in
       *) return;;
 esac
 
+export PATH="$HOME/bin:$HOME/.local/bin:$HOME/Applications:/usr/local/bin:/bin:/usr/bin:$PATH"
+
 # don't put duplicate lines or lines starting with space in the history.
 # See bash(1) for more options
 HISTCONTROL=ignoreboth
@@ -51,7 +53,7 @@ fi
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
 # some more ls aliases
-if type exa >/dev/null; then
+if type exa >/dev/null 2>&1; then
   alias ll='exa -alF'
 else 
   alias ll='ls -alF'
@@ -66,7 +68,7 @@ POWERLINE_BASH_CONTINUATION=1
 POWERLINE_BASH_SELECT=1
 # breadcrumbs... for tearfree cross platform setup: 
 function powerline_init() {
-  if type pipx >/dev/null; then 
+  if type pipx >/dev/null 2>&1; then 
     pipx install powerline-status
     mkdir -p .local/share/powerline  
     ln -is $(locate powerline.sh |grep bash) $HOME/.local/share/powerline/
@@ -75,6 +77,7 @@ function powerline_init() {
     >&2 printf "  on debian based systems, try sudo apt install pipx"
     >&2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
     >&2 printf "Or something, you know the deal."
+  fi
 }
 source .local/share/powerline/powerline.sh
 
@@ -95,7 +98,7 @@ if ! shopt -oq posix; then
   fi
 fi
 
-export PATH="$HOME/bin:$HOME/.local/bin:$HOME/Applications:$PATH"
+
 export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
-export D="$HOME/src/github/dots
+export D="$HOME/src/github/dots"
 source $D/util.sh
