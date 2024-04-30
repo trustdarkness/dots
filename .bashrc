@@ -79,7 +79,7 @@ function powerline_init() {
     >&2 printf "Or something, you know the deal."
   fi
 }
-source .local/share/powerline/powerline.sh
+source $HOME/.local/share/powerline/powerline.sh
 
 
 # Add an "alert" alias for long running commands.  Use like so:
