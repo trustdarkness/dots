@@ -3,8 +3,8 @@ if [[ $(uname) == "Linux" ]]; then
 fi
 
 function string_contains() {
-  printf "%b" "${2:-}"| grep -Eqi "${1:-}" 
-  return $?
+  $(echo "${2,,}"|egrep -qi "${1,,}");
+  return $?;
 }
 alias stringContains="string_contains"
 
@@ -72,7 +72,11 @@ function ghc () {
   fi
   gh
   gc $url
+  
   f=$(echo "$url"|awk -F"/" '{print$NF}')
+  if [[ $f == *".git" ]]; then 
+    f="${f%.*}"
+  fi
   cd $f
 }
 
