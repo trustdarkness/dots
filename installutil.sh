@@ -4,7 +4,7 @@ else
   echo "${FUNCNAME}"
 fi
 
-distro="$(lsb_release -a)"
+distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
 
 if string_contains "arch" "$distro"; then
   alias sai="sudo pacman -Sy"
