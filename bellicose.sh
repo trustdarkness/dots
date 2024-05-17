@@ -1,8 +1,9 @@
+#!/usr/local/bin/bash
 ############################## Configuration ##################################
 
 # Actions are explicit, so by default we don't prompt before taking them,
 # but if you change below to true, we will ask a lot of questions
-PROMPT_FOR_ACTIONS=true
+PROMPT_FOR_ACTIONS=false #true
 
 # Never look for known types in dirs that look like the following:
 EXCLUDE_DIR='.app'
@@ -97,7 +98,7 @@ DELETE=false
 
 # Backup is done with rsync, so can be a local directory or a remote
 # ssh location, specified as you would expect for rsync.
-BACKUP="$HOME/Downloads/Plugins/_installed_federation/"
+BACKUP="$HOME/Downloads/_installed_babylon/"
 
 RSYNC_OPTS="-rlutv"
 
@@ -111,6 +112,7 @@ BACKUP_EXCLUDED_DIRS="instruments Plugins DAWs drivers Samples Plug-Ins Windows"
 SECONDARY_BACKUP=true
 SECONDARY_BACKUP_GLOB="*.exe"
 SECONDARY_BACKUP_REGEX=""
+SECONDARY_BACKUP_DIR="$HOME/Downloads/_to_win"
 
 # bellicose uses a few types of "workworm material" space, which we try to do
 # in a user-courteous way consistent with MacOS norms, but you may change the 
@@ -169,6 +171,7 @@ trap finish EXIT
 # protect system resources.  Be warned.
 WD=$(pwd)
 
+TRACKMOUNTS="/tmp/bellicose/mounts"
 
 ############################# Logging #########################################
 # By default, we print strings to the console when there's information you 
@@ -208,25 +211,64 @@ EXTS+=( "${APP_EXTENSIONS}" )
 EXTS+=( "${PKG_EXTENSIONS}" )
 EXTS+=( "${PLUGIN_EXTENSIONS}" )
 
-ACTIONS=()
-ACTIONS+=( "${UNARCHIVE}" )
-ACTIONS+=( "${INSTALL}" )
-ACTIONS+=( "${INSTALL}" )
-ACTIONS+=( "${INSTALL}" )
-ACTIONS+=( "${INSTALL}" )
 
-UNCACHED=()
-UNCACHED+=( "${NEW_ARCHIVES[@]}" )
-UNCACHED+=( "${NEW_DMGS[@]}" )
-UNCACHED+=( "${NEW_APPS[@]}" )
-UNCACHED+=( "${NEW_PKGS[@]}" )
-UNCACHED+=( "${NEW_PLUGINS[@]}" )
+function rebuild_actions() {
+  ACTIONS=()
+  ACTIONS+=( "${UNARCHIVE}" )
+  ACTIONS+=( "${INSTALL}" )
+  ACTIONS+=( "${INSTALL}" )
+  ACTIONS+=( "${INSTALL}" )
+  ACTIONS+=( "${INSTALL}" )
+}
+
+function pack_list() {
+  name=$1[@]
+  list=("${!name}")
+  verbose "l ${list[@]}"
+  packed=""
+  if gt "${#list[@]}" 0; then 
+    packed=""
+    for i in "${list[@]}"; do 
+      term=$(echo "${i}"| sed 's/ /__/g')
+      if [ -n "${term}" ]; then
+        packed="${term} ${packed}"
+      fi 
+    done
+    verbose " p ${packed}"
+    echo "${packed}"
+    return 0
+  fi
+  return 1
+}
+
+
+function rebuild_uncached() {
+  declare -gA UNCACHED
+  if packed=$(pack_list NEW_ARCHIVES); then
+    verbose "${packed}"
+    UNCACHED[0]="${packed}"
+  fi
+  if packed=$(pack_list NEW_DMGS); then
+    UNCACHED[1]="${packed}"
+  fi
+  if packed=$(pack_list NEW_APPS); then 
+    UNCACHED[2]="${packed}" 
+  fi
+  if packed=$(pack_list NEW_PKGS); then
+    UNCACHED[3]="${packed}"
+  fi
+  if packed=$(pack_list NEW_PLUGINS); then
+    UNCACHED[4]="${packed}" 
+  fi
+  verbose "uncached: ${UNCACHED[@]}"
+  #export UNCACHED
+}
+
 
 CACHES=()
 CACHES+=( "${ARCHIVED}" )
 CACHES+=( "${DMGED}" )
-CACHES+=( "${APPED}" )
-CACHES+=( "${PKGED}" )
+CACHES+=( "${INSTALLED}" )
 CACHES+=( "${PLUGGED}" )
 
 ############################## Strings ########################################
@@ -328,14 +370,14 @@ function log() {
   local loglevel="${1:-}"
   local message="${@:2}"
   local ts="$(date '+%Y%m%d %H:%M:%S')"
-  printf "${LOG_TEMPLATE}" "(${loglevel})" "${ts}" "${BASH_LINENO[-3]}" \
-      "${FUNCNAME[-3]}" "${FUNCNAME[-2]}" "${message}" > "${LOGFILE}"
+  printf "${LOG_TEMPLATE}" "(${loglevel})" "${ts}" "${BASH_LINENO[((${BASH_SUBSHELL}+1))]}" \
+      "${FUNCNAME[-3]}" "${FUNCNAME[((${BASH_SUBSHELL}+1))]}" "${message}" > "${LOGFILE}"
 }
 
 # Args: String  - message, log message to be printed
 # Globals: LOGFILE
 function err() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local message="$@"
   if [[ "${LOGFILE}" == "/dev/stderr" ]]; then 
     printf "${message}\n" > ${LOGFILE}
@@ -388,7 +430,7 @@ function verbose() {
 #       command string of the failed command
 # prints instructions for the user to submit a detailed error report
 function non_fatal_error_request() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local rc="${1:-}"
   local command="${2-}"
   err "return code ${rc} on cmd: ${command}"
@@ -426,9 +468,9 @@ function stacktrace() {
 #          FUNCNAME
 #          CONTROL_C_LOOP
 function fatal_error() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local return_code="${1:-}"
-  while [ ${return_code} -gt 0 ]; do
+  while true; do
     stacktrace
     err $(printf "${FATAL_ERR}" "${return_code}" "${FUNCNAME[-1]}")
     echo
@@ -452,7 +494,7 @@ function fatal_error() {
 #          SEPARATOR (S)
 #          CONTENT_SEPARATOR (CS)
 function list_item() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local layer="${1:-1}"
   local line_header="${2:-}"
   local filepath="${3:-}"
@@ -502,7 +544,7 @@ function list_item() {
 # 	   PKG_TL, display string
 # 	   PLUGIN_TL, display string
 function list_tl() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local filepath="${1:-}"
   local filename=$(basename "${filepath}")
   if is_in_types "${filename}" "${ARCHIVE_EXTENSIONS}"; then
@@ -525,7 +567,7 @@ function list_tl() {
 #       int - layer, in case we're nested
 #       String - parent, when container is not sufficient
 function list_contents() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local filepath="${1:-}"
   local filename=$(basename "${filepath}")
   local ext="${filename##*.}"
@@ -546,7 +588,7 @@ function list_contents() {
 #       int - layer of the parent package
 #       String - parent package
 function list_special_package_file() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local type="${1:-}"
   local filepath="${2:-}"
   local filename=$(basename "${filepath}")
@@ -561,6 +603,34 @@ function list_special_package_file() {
 
 ############################ Shared Utility Functions #########################
 
+function is_int() {
+  local string="${1:-}"
+  case $string in
+    ''|*[!0-9]*) return 1 ;;
+    *) return  ;;
+esac
+}
+
+# Args: first term larger int than second term.  
+#     if first term is "". we treat it as 0
+function gt() {
+  term1="${1:-}"
+  term2="${2:-}"
+  if is_int ${term1}; then 
+    if is_int ${term2}; then
+      if [ ${term1} -gt ${term2} ]; then
+        return 0
+      else
+        return 1
+      fi
+    fi
+  elif [[ "${term1}" == "" ]]; then
+    return 1
+  fi
+  verbose "term1: $term1 term2: $term2"
+  fatal_error
+}
+
 function count_space_separated {
   local to_count="${1:-}"
   IFS=$' '
@@ -571,31 +641,31 @@ function count_space_separated {
   return $count  
 }
 
-regex_or_builder() {
-  verbose "function_call $@"
-  local space_separated_regexes="${1:-}"
-  regex=""
-  count_space_separated "${space_seuparated_regexes}"
-  if [ ${count} -gt 1 ]; then 
-    exclude_p_regex="(%s)"
-    buildee=""
-    i=0
-    for regex in "${EXCLUDE_DIRS_REGEXES}"; do
-      ((i+=1))
-      if [ i -eq 1 ]; then
-        buildee=$(printf '%s' "${regex}")
-      else
-        buildee+=$(printf '|%s' "${rregex}")
-      fi
-    done
-    regex=$(printf '(%s)' "${buildee}")
-    return 0
-  else 
-    regex="${space_separated_regexes}"
-    return 0
-  fi
-  return 1
-}
+# regex_or_builder() {
+#   verbose "func ${FUNCNAME[0]} $@"
+#   local space_separated_regexes="${1:-}"
+#   regex=""
+#   count_space_separated "${space_seuparated_regexes}"
+#   if [ ${count} -gt 1 ]; then 
+#     exclude_p_regex="(%s)"
+#     buildee=""
+#     i=0
+#     for regex in "${EXCLUDE_DIRS_REGEXES}"; do
+#       ((i+=1))
+#       if [ i -eq 1 ]; then
+#         buildee=$(printf '%s' "${regex}")
+#       else
+#         buildee+=$(printf '|%s' "${rregex}")
+#       fi
+#     done
+#     regex=$(printf '(%s)' "${buildee}")
+#     return 0
+#   else 
+#     regex="${space_separated_regexes}"
+#     return 0
+#   fi
+#   return 1
+# }
 
 # Read a single char from /dev/tty, prompting with "$*"
 # Note: pressing enter will return a null string. Perhaps a version terminated
@@ -679,8 +749,26 @@ function timed_confirm_yes {
 # usage stringContains needle haystack
 # returns true if needle in haystack
 function stringContains {
-  $(echo "$2"|grep -Eqi "$1");
+  echo "$2"|grep -Eqi "$1"
   return $?;
+}
+
+function boolean_or {
+  for b in "$@"; do
+    verbose "testing ${b}"
+    if [ -n "${b}" ]; then 
+      if is_int ${b}; then
+        if [ ${b} -eq 0 ]; then
+          return 0
+        fi
+      else
+        if ${b}; then
+          return 0
+        fi
+      fi
+    fi
+  done
+  return 1
 }
 
 function bash_major_version() {
@@ -698,31 +786,40 @@ function bash_version() {
 }
 
 # stolen from https://stackoverflow.com/questions/8654051/how-can-i-compare-two-floating-point-numbers-in-bash
-is_first_floating_number_bigger () {
-    number1="$1"
-    number2="$2"
+# is_first_floating_number_bigger () {
+#     number1="$1"
+#     number2="$2"
 
-    [ ${number1%.*} -eq ${number2%.*} ] && [ ${number1#*.} \> ${number2#*.} ] || [ ${number1%.*} -gt ${number2%.*} ];
-    result=$?
-    if [ "$result" -eq 0 ]; then result=1; else result=0; fi
+#     [ ${number1%.*} -eq ${number2%.*} ] && [ ${number1#*.} \> ${number2#*.} ] || [ ${number1%.*} -gt ${number2%.*} ];
+#     result=$?
+#     if [ "$result" -eq 0 ]; then result=1; else result=0; fi
 
-    __FUNCTION_RETURN="${result}"
-}
+#     __FUNCTION_RETURN="${result}"
+# }
 
 # Args: filename: a filename to check
 #       extension_list: a space delimited string of filename extensions
 # Returns 0 if filename does end in one of the extensions, 1 otherwise
 function is_in_types() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local f="${1:-}"
   local exts="${2:-}"
   local regex=""
   for ext in ${exts}; do
-    regex+=$(printf '.*.%s$||' "${ext}")
+    regex+=$(printf '.*.%s$|' "${ext}")
   done
-  # remove the last || from the term
-  regex="${regex%??}"
-  return grep "${regex}" <(echo "${f}")
+  # remove the last | from the term and surroung in parens for egrep
+  regex=$(printf '(%s)' "${regex%?}")
+  verbose "grepping for ${regex} in ${f}"
+  exists=$(grep -E "${regex}" <(echo "${f}"))
+  if [ -n "${exists}" ]; then
+    verbose "${f} is in ${exts}"
+    return 0
+  else 
+    verbose "${f} not in ${exts}"
+    return 1
+  fi
+
 }
 
 function counts_with_completed {
@@ -735,21 +832,34 @@ function counts_with_completed {
         ((cached_count+=1))
       else
         local fext="${filename##*.}"
+        verbose "slotting uncached files in NEW_ arrays for fext ${fext}"
         if stringContains "${fext}" "${ARCHIVE_EXTENSIONS}"; then
-          NEW_ARCHIVES+=( "${filename}" )
+          if ! [[ "${NEW_ARCHIVES[@]}" =~ "${filename}" ]]; then
+            NEW_ARCHIVES+=("${filename}")
+          fi
         elif stringContains "${fext}" "${DMG_EXTENSIONS}"; then
-          NEW_DMGS+=( "${filename}" )
+          if ! [[ "${NEW_DMGS[@]}" =~ "${filename}" ]]; then
+            NEW_DMGS+=("${filename}")
+          fi
         elif stringContains "${fext}" "${APP_EXTENSIONS}"; then
-          NEW_APPS+=( "${filename}" )
+          if ! [[ "${NEW_APPS[@]}" =~ "${filename}" ]]; then
+            NEW_APPS+=("${filename}")
+          fi
         elif stringContains "${fext}" "${PKG_EXTENSIONS}"; then
-          NEW_PKGS+=( "${filename}" )
+          if ! [[ "${NEW_PKGS[@]}" =~ "${filename}" ]]; then
+            NEW_PKGS+=("${filename}")
+          fi
         elif stringContains "${fext}" "${PLUGIN_EXTENSIONS}"; then
-          NEW_PLUGS+=( "${filename}" )
+          if ! [[ "${NEW_PLUGS[@]}" =~ "${filename}" ]]; then
+            NEW_PLUGS+=("${filename}")
+          fi
         fi
       fi
       ((total_count+=1))
     done
   done
+  rebuild_uncached
+  verbose "uncached: ${UNCACHED[@]} new archives: ${NEW_ARCHIVES[@]}"
   verbose "count:${total_count} cached_count:${cached_count}"
 }
 
@@ -779,38 +889,42 @@ function completed {
   local filepath="${1:-}"
   local filename=$(basename "${filepath}")
   local ext="${filename##*.}"
-  verbose "checking completed ${filepath}"
+  verbose "checking completed ${filename}"
   if stringContains "${ext}" "${ARCHIVE_EXTENSIONS}"; then
-    grep "${filepath}" <(echo "${UNARCHIVED}")
-    if [ $? -eq 0 ]; then
-      verbose "${filename} in cache"
-      return 0
+    if unarchived=$(cat "${UNARCHIVED}"); then
+      echo "${unarchived}" |grep "${filename}" 
+      if [ $? -eq 0 ]; then
+        verbose "${filename} in cache"
+        return 0
+      fi
     fi
   elif stringContains "${ext}" "${DMG_EXTENSIONS}"; then
-    grep "${filepath}" <(echo "${INSTALLED}")
-    if [ $? -eq 0 ]; then
-      verbose "${filename} in cache"
-      return 0
+    if dmged=$(cat "${DMGED}"); then 
+      echo "${dmged}"|grep "${filename}"
+      return $?
     fi
-  elif stringContains "${ext}" "${APP_EXTENSIONS}"; then
-    grep "${filepath}" <(echo "${APPED}")
-    if [ $? -eq 0 ]; then
-      verbose "${filename} in cache"
-      return 0
+  elif boolean_or stringContains "${ext}" "${APP_EXTENSIONS}" \
+    stringContains "${ext}" "${PKG_EXTENSIONS}"; then
+    if installed=$(cat "${INSTALLED}"); then 
+      echo "${installed}"| grep "${filename}" 
+      if [ $? -eq 0 ]; then
+        verbose "${filename} in cache"
+        return 0
+      fi
     fi
-  elif stringContains "${ext}" "${PKG_EXTENSIONS}"; then
-    grep "${filepath}" <(echo "${INSTALLED}")
-    return $?
   elif stringContains "${ext}" "${PLUGIN_EXTENSIONS}"; then
-    grep "${filepath}" <(echo "${PLUGGED}")
-    return $?
+    if plugged=$(cat "${PLUGGED}"); then
+      echo "${plugged}" |grep "${filename}"
+      return $?
+    fi
   else
     return 1
   fi
+  return 1
 }
 
 uncompleted_larger() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local extensions="${1:-}"
   cached_count=0
   total_count=0
@@ -822,42 +936,56 @@ uncompleted_larger() {
 } 
 
 process_file() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $1 $2"
   local type="${1:-}"
   local filenamepath="${2:-}"
+  if [ -n "${filenamepath}" ]; then
+    return 1
+  fi
+  filenamepath="$(echo ${filenamepath}|sed 's/__/ /g')"
+  verbose "process_file ${filenamepath} ${type}"
   case ${type} in
     0)
       process_archive_file "${filenamepath}"
+      return 0
       ;;
     1) 
       process_dmg "${filenamepath}"
+      return 0
       ;;
     2)
       process_app "${filenamepath}"
+      return 0
       ;;
     3)
       process_pkg "${filenamepath}"
+      return 0
       ;;
     4)
       process_plugin "${filenamepath}"
+      return 0
       ;;
-    *)
-     fatal_error
-     ;;
+
   esac
+  return 1
 }
 
 
 new_only() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local type="${1:-}"
-  for filenamepath in "${UNCACHED[${type}]}"; do
-    process_file "${type}" "${filenamepath}"
-  done
+  verbose "uncached: ${UNCACHED[@]} uncached0: ${UNCACHED[${type}]}"
+  if gt ${#UNCACHED[${type}]} 0; then
+    for filenamepath in "${UNCACHED[${type}]}"; do
+      process_file "${type}" "${filenamepath}"
+    done
+  else
+    return 1
+  fi;
 }
 
 overwrite() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local type="${1:-}"
   case ${type} in
     0)
@@ -875,14 +1003,12 @@ overwrite() {
     4)
       process_plugins
       ;;
-    *)
-     fatal_error
-     ;;
+
   esac
 }
 
 clear_cache() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local type="${1:-}"
   rm "${CACHES[${type}]}" && touch "${CACHES[${type}]}"
   overwrite ${type}
@@ -893,22 +1019,26 @@ show_diff() {
 }
 
 function  userchoice_cache() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local type="${1:-}"
   ui "${PROMPT_CACHE_CHOICE}"
   response=$(get_keypress "${GET_CHOICE_1_5}")
   case "${response}" in
     1)
       new_only ${type}
+      return 0
       ;;
     2)
       overwrite ${type}
+      return 0
       ;;
     3)
       clear_cache ${type}
+      return 0
       ;;
     4)
       show_diff ${type}
+      return 0
       ;;
     5)
       return 1
@@ -917,11 +1047,11 @@ function  userchoice_cache() {
       err "Please choose 1-5 or ctrl-c to exit." 
       ;;
   esac
-  ech
+  echo
 }
 
 function handle_cache_by_type() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local type="${1:-}"
   if ${PROMPT_FOR_ACTIONS}; then 
     local prompt=$(printf "${PROMPT_PROCESS_CALL_EXPECTS_TYPE_EXTS_AND_WD}" \
@@ -932,15 +1062,15 @@ function handle_cache_by_type() {
   total_count=0
   counts_with_completed "${EXTS[${type}]}"
   verbose "of ${total_count} there are ${cached_count} cached ${EXTS[${type}]}"
-  if  ${LIST} || ${CONTENTS} || ${ACTION[${type}]}; then
-    if ${ACTION[${type}]}; then 
-      if [ ${cached_count} -gt 0 ]; then
+  if  boolean_or ${LIST} ${CONTENTS} ${ACTIONS[${type}]}; then
+    if ${ACTIONS[${type}]}; then 
+      if gt ${cached_count} 0; then
         ui $(printf "${CACHED_EXPECTS_COUNT_TYPE_AND_EXTS}" "${cached_count}" \
          "${TYPE_DESCS[${type}]}" "${EXTS[${type}]}")
         userchoice_cache ${type}
-      elif [ ${total_count} -gt 0 ]; then
+      elif gt ${total_count} 0; then
         verbose "c:${total_count}"
-        overwrite
+        overwrite ${type}
       fi
       if uncompleted_larger "${EXTS[${type}]}"; then
         ui $(printf "${MORE_FILES_EXPECTS_2TYPE}" "${TYPE_DESCS[${type}]}" \
@@ -955,11 +1085,12 @@ function handle_cache_by_type() {
         fi
       fi
     else
-      overwrite
+      overwrite ${type}
     fi
   fi  
 
 }
+
 
 # Args: dir to search from/under
 #       1 if both relative+absolute, \0 separated, defaults to absolute only
@@ -968,6 +1099,7 @@ function handle_cache_by_type() {
 function gobblefind() {
   export haggussed=() 
   local dir=$(echo "${1:-$(pwd)}"| tr -s /)
+  verbose "gobblefind ${dir}"
   if stringContains "${EXCLUDE_DIR}" "${dir}"; then
     while IFS= read -r -d $'\0'; do
       haggussed+=("$REPLY") # REPLY is the default
@@ -987,7 +1119,7 @@ function gobblefind_by_ext() {
   local ext="${1:-}"
   regex=$(printf '.*.%s$' "${ext}")
   ex=$(printf '*%s*' "${EXCLUDE_DIR}")
-  verbose "gobblefind ${ext} with regex ${regex}"
+  verbose "gobblefind ${ext} with regex ${regex} and ! ${ex} in $(pwd)"
   if [[ "${ext}" == "app" ]]; then 
     while IFS= read -r -d $'\0'; do
       gobbled+=("$REPLY") # REPLY is the default
@@ -995,7 +1127,7 @@ function gobblefind_by_ext() {
   else
     while IFS= read -r -d $'\0'; do
       gobbled+=("$REPLY") # REPLY is the default
-    done < <(find ~+ ! -path "${ex}" -regex "${regex}" -print0 2> /dev/null)
+    done < <(find ~+ ! -path "${ex}" -regex "${regex}" -print0)
   fi
 }
 
@@ -1017,12 +1149,12 @@ function array_exclude {
 
 # Args: filepath: absolute path of the file
 function archive_ext_tools() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local filepath="${1:-}"
   local filename=$(basename "${filepath}")
   local ext="${filename##*.}"
   local extract_path="${2:-${EXTRACTED_DIRNAME}}"
-  verbose "archive_ext_tools ${ext} ${extractpath}"
+  verbose "archive_ext_tools ${ext} ${extract_path}"
   case "${ext}" in
     "7z")
       if ${CONTENTS}; then
@@ -1031,8 +1163,8 @@ function archive_ext_tools() {
         # print_archive "${filepath}" "${files}"
       fi
       if ${UNARCHIVE}; then
-        options=$(printf "e -y -o%s" "${extract_path}")
-        7zz "${options}" "${filepath}"
+        options=$(printf '\x2Dy')
+        7zz e -aoa "${options}"  "${filepath}" -o"${extract_path}"
         echo "${filepath}" >> "${UNARCHIVED}"
       fi
       ;;
@@ -1041,8 +1173,15 @@ function archive_ext_tools() {
         files=$(zipinfo -1 "${filepath}")
       fi
       if ${UNARCHIVE}; then
-        unzip -qfo "${filepath}" -d "${extract_path}"
-        echo "${filepath}" >> "${UNARCHIVED}"
+        ui "extracting ${filepath} to ${extract_path}"
+        verbose $(printf 'unzip -o -qo "%s" -d "%s"' "${filepath}" "${extract_path}")
+        ARGS=( -qo "${filepath}" -d "${extract_path}" )
+        ex unzip 
+        if [ ${exresult} -eq 0 ]; then
+          echo "${filepath}" >> "${UNARCHIVED}"
+        else
+          err "extract of ${filepath} failed with err ${exresult}"
+        fi
       fi
       ;;
     "rar")
@@ -1050,7 +1189,7 @@ function archive_ext_tools() {
         files=$(unrar ltb "${filepath}"|grep "Name"|awk -F":" '{print$2}')
       fi
       if ${UNARCHIVE}; then
-        unrar e -c- o+ "${filepath}" -op "${extract_path}"
+        unrar e -o+ -c- "${filepath}" -op "${extract_path}"
         echo "${filepath}" >> "${UNARCHIVED}"
       fi
       ;;
@@ -1064,7 +1203,7 @@ function archive_ext_tools() {
 }
 
 function print_archive() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local filename="${1:-}"
   local contents="${2:-}"
   IFS=$'\n'
@@ -1074,27 +1213,33 @@ function print_archive() {
 }
 
 function process_archive_file() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $1 $2"
+  # set +x
   local filenamepath="${1:-}"
   local overwrite="${2:-false}"
+  local wd="$(pwd)"
+  # if [ -n "${filenamepath}" ]; then
+  #   return 1
+  # fi
   if ${LIST}; then
     list_tl "${filenamepath}"
   fi
   verbose "CONTENTS: ${CONTENTS} UNARCHIVE: ${UNARCHIVE}"
-  if  ${CONTENTS} || ${UNARCHIVE} ; then
+  if boolean_or ${CONTENTS} ${UNARCHIVE}; then
+    verbose "processing ${filenamepath} for contents or unarchive"
     local filename=$(basename "${filenamepath}")
     local filebase="${filename%.*}"
-    local extractpath="${WD}/${EXTRACTED_DIRNAME}/${filebase}"
-    status=$(mkdir -p "${extractpath}")
-    if [ $? -gt 0 ]; then
+    local extractpath="${wd}/${EXTRACTED_DIRNAME}/${filebase}"
+    verbose "fn: ${filename} fb: ${filebase} ep: ${extractpath}"
+    if ! mkdir -p "${extractpath}"; then
       extractpath="${downloads}/${EXTRACTED_DIRNAME}/${filebase}"
-      ui "Error running mkdir in ${WD}, extracting in ${extractpath} instead"
+      ui "Error running mkdir in ${wd}, extracting in ${extractpath} instead"
       status=$(mkdir -p "${extractpath}")
     fi
     if ${overwrite}; then
       verbose "overwrite ${filenamepath} ${extractpath}"
       archive_ext_tools "${filenamepath}" "${extractpath}"
-    elif ! grep "${filename_path}" <(echo "${UNARCHIVED}"); then
+    elif ! grep "${filenamepath}" <(echo "${UNARCHIVED}"); then
       verbose "notyettouched ${filenamepath} ${extractpath}"
       archive_ext_tools "${filenamepath}" "${extractpath}"
     fi
@@ -1104,8 +1249,9 @@ function process_archive_file() {
 function process_archives() {
   IFS=$' '
   for ext in ${ARCHIVE_EXTENSIONS}; do 
+    count=0
     counts "${ext}"
-    if [[ ${count} -gt 0 ]]; then 
+  if gt ${count} 0; then
       gobblefind_by_ext "${ext}"
       for filenamepath in "${gobbled[@]}"; do 
         process_archive_file "${filenamepath}" true
@@ -1117,7 +1263,7 @@ function process_archives() {
 ################################ PROCESS DMGS #################################
 
 function attempt_unmount() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local mounted="${1:-}"
   diskutil unmount "${mounted}"
   if [ $? -eq 0 ]; then
@@ -1133,78 +1279,168 @@ function attempt_unmounts() {
   done
 }
 
+function safenamenoext() {
+  name="${1:-}"
+  if [ -n "${name}" ]; then 
+    echo "${name%.*}"|sed 's/ /__/g'
+    return 0
+  fi
+  return 1
+}
+
+function mount_dmg() {
+  dmg="${1:-}"
+  if [ -z "${dmg}" ]; then
+    return 1
+  fi
+  mounted=""
+  dmg_basename=$(basename "${dmg}")
+  mount_folder=$(safenamenoext "${dmg_basename}")
+  if ! stringContains "${dmg_basename}" "${MOUNTED[@]}"; then 
+    
+    mountdir="${TMPDIR}/mounts/${mount_folder}"
+    verbose "mounting ${dmg_basename} under ${mountdir}"
+    mkdir -p "${mountdir}"
+    ARGS=( "attach" "-nobrowse" "-mountroot" "${mountdir}" "${dmg}" )
+    exout=$(ex hdiutil) 
+    if stringContains "failed" "${exout}"; then
+      #in these cases the disk may already be mounted
+      stat "${mountdir}/${dmg_basename}"
+      if gt $? 0; then
+        return 1
+      else
+        mounted="${mountdir}/${dmg_basename}"
+        MOUNTED+=( "${dmg_basename}" )
+        return 0
+      fi
+    elif stringContains "Usage" "${exout}"; then
+      return 1
+    fi
+    mounted=$(echo "${exout}"|tr '\n' ' '|awk -F'\t' '{print$NF}'|xargs)
+    if [ $? -gt 0 ]; then 
+      err "failed to mount ${dmg}"
+      return 1
+    fi 
+    echo "${mounted}" > "${TRACKMOUNTS}"   
+    MOUNTED+=( "${dmg_basename}" )
+    return 0
+  fi
+  return 1
+}
+
 process_dmg() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local dmg="${1:-}"
   if ${LIST}; then
     list_tl "${dmg}"
   fi
-  attempt_unmounts
-  if [[ ${CONTENTS} || ${INSTALL} ]]; then
-    if ! stringContains "${dmg}" "${MOUNTED[@]}"; then 
-      mountdir="${TMPDIR}/mounts/${dmg}"
-      verbose "mounting ${dmg} under ${mountdir}"
-      mkdir -p "${mountdir}"
-      mounted="$(hdiutil attach -nobrowse -mountroot "${mountdir}" "${dmg}" |grep private|awk -F'\t' '{print$3}')"
-      MOUNTED+=( "${dmg}" )
-      if ${CONTENTS}; then
-        # gobblefind populates a global array called haggussed, which we will copy
-        # to our own array with a more sensible name for readability, but also because
-        # we'll need to reuse haggussed from inside the loop
-        gobblefind "${mounted}"
-        local files_on_dmg=("${haggussed[@]}")
-        verbose "files_on_dmg: ${files_on_dmg[@]} haggussed: ${#haggussed[@]} ${haggussed[@]}"
-        if [ ${#files_on_dmg[@]} -gt 0 ]; then
-          IFS=$' '
-          for filepath in "${files_on_dmg[@]}"; do
-            verbose "dmg: ${dmg} filepath: ${filepath}"
-            list_contents "${filepath}" "${dmg}"
-            local filename=$(basename "${filepath}")
-            if is_in_types "${filename}" "${PKG_EXTENSIONS}"; then
-              # this prints the line for the content item, functions below will print
-              # the contents or install if those flags are set
-              list_package_contents "${filepath}" 2 "${dmg}"
-            elif is_in_types "${filename}" "${APP_EXTENSIONS}"; then
-              app "${filepath}"
-            elif is_in_types "${filename}" "${ARCHIVE_EXTENSIONS}"; then
-              unarchive 
-            fi
-          done
-        fi
-      fi
-      if [[ ${CONTENTS} || ${INSTALL} ]]; then
-        verbose "changing from $(pwd) to ${mounted}"
-        cd "${mounted}"
-        if [ $(counts "${DMG_EXTENSIONS}") -gt 0 ]; then 
-          process_dmgs
-        fi
-      fi
-      if ${INSTALL}; then
-        process_pkgs "${dmg}"
-      fi
-      if ${CONTENTS} || ${INSTALL} ; then
-        cd "${sd}"
-        wait 5
-        dmg_basename=$(basename "${dmg}")
-        echo "${dmg_basename}" >> "${DMGED}"
-        attempt_unmounts
+  retval=255
+  # attempt_unmounts
+  if boolean_or ${CONTENTS} ${INSTALL} ]]; then
+    ARGS=( "${dmg}" )
+    set -x
+    ex mount_dmg
+    verbose "mount retval $?"
+    dmg_basename=$(basename "${dmg}")
+    mount_folder=$(safenamenoext "${dmg_basename}")
+    export mounted="$(cat ${TRACKMOUNTS}|grep ${mount_folder})"
+    if ${CONTENTS}; then
+      # gobblefind populates a global array called haggussed, which we will copy
+      # to our own array with a more sensible name for readability, but also because
+      # we'll need to reuse haggussed from inside the loop
+      ARGS=( "${mounted}" )
+      ex gobblefind 
+      local files_on_dmg=("${haggussed[@]}")
+      verbose "files_on_dmg: ${files_on_dmg[@]} haggussed: ${#haggussed[@]} ${haggussed[@]}"
+      if gt ${#files_on_dmg[@]} 0; then
+        IFS=$' '
+        for filepath in "${files_on_dmg[@]}"; do
+          verbose "dmg: ${dmg} filepath: ${filepath}"
+          list_contents "${filepath}" "${dmg}"
+          local filename=$(basename "${filepath}")
+          if is_in_types "${filename}" "${PKG_EXTENSIONS}"; then
+            # this prints the line for the content item, functions below will print
+            # the contents or install if those flags are set
+            list_package_contents "${filepath}" 2 "${dmg}"
+          elif is_in_types "${filename}" "${APP_EXTENSIONS}"; then
+            app "${filepath}"
+          elif is_in_types "${filename}" "${ARCHIVE_EXTENSIONS}"; then
+            unarchive 
+          fi
+        done
       fi
     fi
+    if boolean_or ${CONTENTS} ${INSTALL}; then
+      export sd="$(pwd)"
+      dmg_basename=$(basename "${dmg}")
+      mount_folder=$(safenamenoext "${dmg_basename}")
+      export mounted="$(cat ${TRACKMOUNTS}|grep ${mount_folder})"
+      verbose "changing from $(pwd) to ${mounted}"
+      cd "${mounted}"
+      # count=0
+      # counts "${DMG_EXTENSIONS}"
+      # if gt ${count} 0; then
+      #   process_dmgs
+      # fi
+    fi
+    if ${INSTALL}; then
+      set +x
+      process_pkgs "${mounted}"
+      retpkgs=$?
+      process_apps "${mounted}"
+      retapps=$?
+      process_plugins "${mounted}"
+      retplugins=$?
+
+      if boolean_or ${retpkgs} ${retapps} ${retplugins}; then
+        retvals=( ${retpkgs} ${retapps} ${retplugins} )
+        strleads=()
+        for i in "${retvals[@]}"; do 
+          case ${i} in
+            0)
+              strleads+=( "installed" )
+              ;;
+            1)
+              strleads+=( "did not install")
+              ;;
+          esac
+        done
+        ui "${strleads[0]} pkgs ${strleads[1]} apps ${strleads[2]} plugins"
+        ui "recording an install history at ${DMGED}"
+        local ts="$(date '+%Y%m%d %H:%M:%S')"
+        local hash=$(shasum -a 256 < "${dmg}")
+        printf "%s\t%s\t%s\n" "${hash}" "${ts}" "${path}" >> "${DMGED}"
+        retval=0
+      else
+        err "could not find anything to install on ${dmg_basename}"
+        retval=1
+      fi
+    fi
+    if boolean_or ${CONTENTS} ${INSTALL} ; then
+      cd "${sd}"
+      sleep 1
+      attempt_unmounts
+    fi
   fi
+  return ${retval}
 }
 
 function process_dmgs {
   verbose "process_dmgs: $(pwd)"
   IFS=$' '
   for ext in ${DMG_EXTENSIONS}; do 
+    count=0
     counts "${ext}"
-    if [[ ${count} -gt 0 ]]; then 
+  if gt ${count} 0; then
       gobblefind_by_ext "${ext}"
       for filenamepath in "${gobbled[@]}"; do 
-        process_dmg "${filenamepath}" true
+        if process_dmg "${filenamepath}" true; then 
+          return 0
+        fi
       done
     fi
   done
+  return 1
 }
 
 ############################  App Processiing #################################
@@ -1214,10 +1450,14 @@ function process_apps {
   verbose "process apps $@"
   count=0
   counts "${ext}"
-  if [ ${count} -gt 0 ]; then 
+  if gt ${count} 0; then
     gobblefind_by_ext "${ext}"
     for filenamepath in "${gobbled[@]}"; do 
-      process_app "${filenamepath}"
+      if process_app "${filenamepath}"; then 
+        return 0
+      else
+        return $?
+      fi
     done
   fi
 }
@@ -1236,7 +1476,7 @@ function process_app() {
     local files_in_contents=("${haggussed[@]}")
     verbose "files_in_contents: ${files_in_contents[@]} haggussed: "
     verbose "   ${#haggussed[@]} ${haggussed[@]}"
-    if [ ${#files_in_contents[@]} -gt 0 ]; then
+    if gt ${#files_in_contents[@]} 0; then
       IFS=$' '
       for filepath in "${files_in_contents[@]}"; do
         verbose "app: ${app} filepath: ${filepath}"
@@ -1245,10 +1485,16 @@ function process_app() {
     fi
   fi
   if ${INSTALL}; then
-    if ! sudo rsync $RSYNC_OPTS "${app}" "/Applications"; then    
-      err "something went wrong during app install; rsync returned $?"
-    else 
-      ui "Successfully installed ${appname} to /Applications"
+    if sudo rsync $RSYNC_OPTS "${app}" "/Applications"; then
+      ui "recording an install history at ${INSTALLED}"
+      local ts="$(date '+%Y%m%d %H:%M:%S')"
+      local hash=$(shasum -a 256 < "${app}")
+      printf "%s\t%s\t%s\n" "${hash}" "${ts}" "${app}" >> "${INSTALLED}"
+      return 0
+    else
+      ret=$?
+      err "install failed with error code ${ret}"
+      return ${ret}
     fi
   fi      
 }
@@ -1261,12 +1507,14 @@ function process_pkgs {
   local caller=caller
   local pkgtmp="${TMPDIR}/process_pkgs"
   mkdir -p "${pkgtmp}"
+  count=0
   counts "${PKG_EXTENSIONS}"
-  if [[ ${count} -gt 0 ]]; then 
+  if gt ${count} 0; then
     IFS=$' '
     for ext in $PKG_EXTENSIONS; do 
+      count=0
       counts "${ext}"
-      if [[ ${count} -gt 0 ]]; then
+      if gt ${count} 0; then
         gobblefind_by_ext "${ext}"
         for f in "${gobbled[@]}"; do
           if ${LIST}; then
@@ -1286,7 +1534,17 @@ function process_pkgs {
             if ${PROMPT_FOR_ACTIONS}; then 
               confirm_yes $(printf "${PROMPT_INSTALL_PKG_EXPECTS_PKG}" "${f}")
             fi
-            sudo installer -verbose -pkg "${f}" -target /
+            if sudo installer -verbose -pkg "${f}" -target /; then 
+              ui "recording an install history at ${CACHE}"
+              local ts="$(date '+%Y%m%d %H:%M:%S')"
+              local hash=$(shasum -a 256 < "${f}")
+              printf "%s\t%s\t%s\n" "${hash}" "${ts}" "${f}" >> "${INSTALLED}"
+              return 0
+            else
+              ret=$?
+              err "install failed with error code ${ret}"
+              return ${ret}
+            fi
           fi
         done
       fi
@@ -1295,24 +1553,31 @@ function process_pkgs {
     err $(printf "${NOT_FOUND_EXPECTS_TYPE_EXTS_AND_DIR}" \
       "${PKG_TYPE_DESC}" "${PKG_EXTENSIONS}" "$(pwd)")
   fi
+  return 1
 }
 
 # Args: filename to list contents of, must be pkg or mpkg
 #       layer deep we are in listing contents, for display purposes
 function list_package_contents() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local f="${1:-}"
   local layer="${2:-2}"
   local parent="${3:-}"
-  pkgdir="${TMPDIR}/list_package_contents/${f}"
+  pdir="/tmp/list_package_contents"
+  pkgdir="${pdir}/${f%.*}"
+  if stat "${pkgdir@Q}"; then 
+    verbose "creating timestampted tmp"
+    local ts="$(date '+%Y%m%d %H:%M:%S')"
+    pkgdir="${TMPDIR}/list_package_contents/${f%.*}/${ts}"
+    
+  fi
   mkdir -p "${pkgdir}"
-  local status=$(pkgutil --expand "${f}" "${pkgdir}")
-  local rc=$?
-  if [ ${rc} -gt 0 ]; then
-    non_fatal_error_request "$rc" "pkgutil --expand \"${f}\" \"${pkgdir}\""
+  if ! pkgutil --expand "${f}" "${pkgdir}/pkg"; then
+    non_fatal_error_request "$rc" "pkgutil --expand \"${f}\" \"${pkgdir}/pkg\""
   fi
   local paxfiles=()
-  gobblefind "${pkgdir}"
+  ARGS=( "${pkgdir}" )
+  ex gobblefind 
   for file in "${haggussed[@]}"; do 
     if stringContains "bom" "${file}"; then
       local bomfile="${file}"
@@ -1332,7 +1597,7 @@ function list_package_contents() {
       verbose "bomcontents: ${line}"
     done
   fi
-  if [ ${#paxfiles[@]} -gt 0 ]; then
+  if gt ${#paxfiles[@]} 0; then
     for paxfile in "${paxfiles[@]}"; do
       # ui "pax file: ${paxfile} with contents:"
       if [[ "${paxfile}" == *.gz ]]; then 
@@ -1358,7 +1623,7 @@ function list_package_contents() {
 ############################## Audio Plugins ##################################
 
 function get_plugin_dest_from_ext_and_base() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local ext="${1:-}"
   local destbase="${2:-}"
     case  "${ext}" in
@@ -1381,7 +1646,7 @@ function get_plugin_dest_from_ext_and_base() {
 
 # args: the absolute of the plugin to install
 function process_plugin() {
-  verbose "function_call $@"
+  verbose "func ${FUNCNAME[0]} $@"
   local path="${1-}"
   local filename=$(basename "${path}")
   local ext=$(echo "${path}"|awk -F'.' '{print$NF}'|sed 's:/::g')
@@ -1392,37 +1657,46 @@ function process_plugin() {
   if $SYSTEM_PLUGIN_DIRS; then
     local destbase="${SYSTEM_PLUGROOT}"
     local dest=$(get_plugin_dest_from_ext_and_base "${ext}" "${destbase}")
-    if ${PROMPT_FOR_ACTIONS}; then
-      confirm_yes $(printf "${INSTALLING_FILE_TO_DEST_EXPECTS_FILE_AND_DEST}" \
+    ui  $(printf "${INSTALLING_FILE_TO_DEST_EXPECTS_FILE_AND_DEST}" \
         "${filename}" "${dest}")
+    if ${PROMPT_FOR_ACTIONS}; then
+      confirm_yes "OK?"
     fi
-    success=$(sudo rsync "${rsync_opts}" "${path}" "${dest}")
-    if [ $? -gt 0 ]; then 
-      err "The following command failed:"
-      err "${command}"
-      return 1
+    if sudo rsync "${rsync_opts}" "${path}" "${dest}"; then
+      ui "recording an install history at ${PLUGGED}"
+      local ts="$(date '+%Y%m%d %H:%M:%S')"
+      local hash=$(shasum -a 256 < "${path}")
+      printf "%s\t%s\t%s\n" "${hash}" "${ts}" "${path}" >> "${PLUGGED}"
+    else
+      err "install failed with error code $?"
     fi
   else
-    local destbase="USER_PLUGDIR"
+    local destbase="${USER_PLUGROOT}"
     local dest=$(get_plugin_dest_from_ext_and_base "${ext}" "${destbase}")
-    if ${PROMPT_FOR_ACTIONS}; then
-      confirm_yes $(printf "${INSTALLING_FILE_TO_DEST_EXPECTS_FILE_AND_DEST}" \
+    ui $(printf "${INSTALLING_FILE_TO_DEST_EXPECTS_FILE_AND_DEST}" \
         "${filename}" "${dest}")
+    if ${PROMPT_FOR_ACTIONS}; then
+      confirm_yes "OK?"
     fi
-    success=$(rsync "${rsync_opts}" "${path}" "${dest}")
-    if [ $? -gt 0 ]; then 
-      err "The following command failed:"
-      err "${command}"
-      return 1
+    if rsync "${rsync_opts}" "${path}" "${dest}"; then
+      ui "recording an install history at ${PLUGGED}"
+      local ts="$(date '+%Y%m%d %H:%M:%S')"
+      local hash=$(shasum -a 256 < "${path}")
+      printf "%s\t%s\t%s\n" "${hash}" "${ts}" "${path}" >> "${PLUGGED}"
+      return 0
+    else
+      ret=$?
+      err "install failed with error code ${ret}"
+      return ${ret}
     fi
   fi
+  return 1
 }
 
 function process_plugins {
-  local localext="${1:-${PLUGIN_EXTENSIONS}}"
-  verbose "PLUGIN_EXTENSIONS ${localext}"
+  verbose "PLUGIN_EXTENSIONS ${PLUGIN_EXTENSIONS}"
   IFS=$' '
-  for ext in ${localext}; do
+  for ext in ${PLUGIN_EXTENSIONS}; do
     verbose "ext ${ext}"
     gobblefind_by_ext "${ext}"
     verbose "count ${#gobbled[@]} like ${gobbled[0]}"
@@ -1432,17 +1706,284 @@ function process_plugins {
         list_tl "${plug}"
       fi 
       if ${CONTENTS}; then
-        gobblefind "${plug}/"
+        ARGS=( "${plug}/" )
+        ex gobblefind 
         for file in "${haggussed[@]}"; do
           list_contents "${file}" "${plug}"
           verbose $(printf "plugindir: %s contentfile: %s" "${plug}" "${file}")
         done
       fi
       if ${INSTALL}; then
-        install_plugin "${plug}"
+        if process_plugin "${plug}"; then
+          return 0
+        else
+          return $?
+        fi
       fi
     done
   done
+  return 1
+}
+
+#... append at the end
+function trash () {
+  local path
+  for path in "$@"; do
+    # ignore any arguments
+    if [[ "$path" = -* ]]; then :
+    else
+      # remove trailing slash
+      local mindtrailingslash=${path%/}
+      # remove preceding directory path
+      local dst=${mindtrailingslash##*/}
+      # append the time if necessary
+      while [ -e ~/.Trash/"$dst" ]; do
+        dst="`expr "$dst" : '\(.*\)\.[^.]*'` `date +%H-%M-%S`.`expr "$dst" : '.*\.\([^.]*\)'`"
+      done
+      mv "$path" ~/.Trash/"$dst"
+    fi
+  done
+}
+
+function extension_natch() {
+  local file="${1:-}"
+  exts="${PLUGIN_EXTENSIONS}"
+  ord=$(echo "${exts}"|tr " " "|")
+  or_regex=$(printf '(%s)' "${ord}")
+  verbose "grep ${or_regex} file ${file}"
+  grep -E "${or_regex}" <(echo "${file}")
+  return $?
+}
+
+function sort_array() {
+  to_sort="${1:-}"
+  SORTED=()
+  if gt "${#to_sort[@]}" 0; then 
+    readarray -t SORTED < <(printf '%s\0' "${to_sort[@]}"| sort -z|xargs -0n1)
+  fi
+  echo "${SORTED[@]}"
+}
+
+# https://unix.stackexchange.com/questions/104837/intersection-of-two-arrays-in-bash#104848
+function array_intersection() {
+  A="${1:-}"
+  B="${2:-}"
+  if gt ${#A[@]} 0; then
+    return 1
+  fi
+  if gt ${#B[@]} 0; then
+    return 1
+  fi
+  INTERSECTION=($(comm -12 <(printf '%s\n' "${A[@]}" | LC_ALL=C sort) <(printf '%s\n' "${B[@]}" | LC_ALL=C sort)))
+  echo "${INTERSECTION[@]}"
+}
+
+# given a sorted array of files with absolute paths, return an array of just basenames.
+# note: function will behave with unsorted arrays, but the goal would be to match back up
+# with the paths later, in which case, sorting is ideal and not performed by this function
+function strip_paths() {
+  A="${1:-}"
+  if gt ${#A[@]} 0; then
+    return 1
+  fi
+  STRIPPED=()
+  for a in "${A[@]}"; do
+    bn=$(basename "${a}")
+    STRIPPED+=( "${bn}" )
+  done
+  echo "${STRIPPED[@]}"
+}
+
+# given sorted arrays A and B of plugins with absolute paths, return an array of plugins of 
+# the same type (vst, vst3 or au) and the same plugin name with the absolute paths
+# as originally present in array A
+function same_plugin_same_type_diff_location() {
+  A="${1:-}"
+  B="${2:-}"
+  if gt ${#A[@]} 0; then
+    return 1
+  fi
+  if gt ${#B[@]} 0; then
+    return 1
+  fi
+  stip_paths "${A[@]}"
+  baseA="${STRIPPED[@]}"
+  strip_paths "${B[@}]}"
+  baseB="${STRIPPED[@]}"
+  array_intersection "${baseA[@]}" "${baseB}"
+  SAMESAMEDIFF=()
+  for absplugin in "${A[@]}"; do
+    for plugin in "${INTERSECTION[@]}"; do
+      if [[ "${absplugin}" == "*${plugin}" ]]; then
+        SAMESAMEDIFF+=( "${absplugin}" )
+      fi
+    done
+  done
+  echo "${SAMESAMEDIFF[@]}"
+}
+
+# adds all installed plugins to a global array INSTALLED_PLUGINS, along the way populates
+# SYS_INSTALLED_VSTS, USER_INSTALLED_VSTS, SYS_INSTALLED_VST3S, USER_INSTALLED_VST3S,
+# SYS_INSTALLED_AUS, USER_INSTALLED_AUS,
+# INSTALLED_VSTS, INSTALLED_VST3S, INSTALLED_AUS
+# These arrays are sorted after being populated
+function get_all_installed_plugins() {
+  swd="$(pwd)"
+  cd "${SYSTEM_PLUGROOT}/VST"
+  ARGS=( "vst" )
+  ex gobblefind_by_ext 
+
+  SYS_INSTALLED_VSTS=( "${gobbled[@]}" )
+  echo "${SYS_INSTALLED_VSTS[@]}"
+  cd "${USER_PLUGROOT}/VST"  
+  ARGS=( "vst" )
+  ex gobblefind_by_ext
+
+  USER_INSTALLED_VSTS=( "${gobbled[@]}" )
+  INSTALLED_VSTS=( "${SYS_INSTALLED_VSTS[@]}" "${USER_INSTALLED_VSTS[@]}" )
+  cd "${SYSTEM_PLUGROOT}/VST3"
+  ARGS=( "vst3" )
+  ex gobblefind_by_ext 
+  
+  SYS_INSTALLED_VST3S=( "${gobbled[@]}" )
+  cd "${USER_PLUGROOT}/VST3"  
+  gobbled=() 
+  ARGS=( "vst3" )
+  ex gobblefind_by_ext 
+
+  USER_INSTALLED_VST3S=( "${gobbled[@]}" )
+  INSTALLED_VST3S=( "${SYS_INSTALLED_VST3S[@]}" "${USER_INSTALLED_VST3S[@]}" )
+  cd "${SYSTEM_PLUGROOT}/Components"
+  ARGS=( "component" )
+  ex gobblefind_by_ext 
+  sleep 5
+  SYS_INSTALLED_AUS=( "${gobbled[@]}" )
+  sleep 4
+  cd "${USER_PLUGROOT}/Components"  
+  echo "${SYS_INSTALLED_AUS[@]}"
+  ARGS=( "component" )
+  ex gobblefind_by_ext 
+
+  USER_INSTALLED_AUS=( "${gobbled[@]}" )
+  INSTALLED_AUS=( "${SYS_INSTALLED_AUS[@]}" "${USER_INSTALLED_AUS[@]}" )
+  INSTALLED_PLUGINS=( "${INSTALLED_VSTS[@]}" "${INSTALLED_VST3S[@]}" "${INSTALLED_AUS[@]}" )
+  cd "${swd}"
+}
+
+function ex() {
+  exout=""
+  exresult=666
+  d="$(date +%s)"
+  tempfile="${TMPDIR}/exfinished.${d}"
+  tracktmp="/tmp/bellicose/ex.$1.${d}"
+  mkdir -p ${tracktmp}
+  trackcmd="${tracktmp}/$1"
+  trackout="${tracktmp}/$1.exout" 
+  trackret="${tracktmp}/$1.ret"
+  printf '%s %s\n' "$@" "${ARGS[@]}" > "${trackcmd}"
+  (
+    exec 2>&1
+    exec > "${trackout}"
+    "$@" "${ARGS[@]}"  
+    ret=$?
+    echo "retval ${ret}" > "${trackret}"
+    touch "${tempfile}"
+    exit ${ret}
+  )
+  while ! test -f "${tempfile}"; do sleep 1; done
+  rm "${tempfile}"
+  cat "${trackout}"
+  return $(cat "${trackret}"|awk '{print$2}')
+}
+
+# populates a global DMG_PLUGINS with the plugins on the DMG given in arg 1
+function get_plugins_on_dmg() {
+  dmg="${1:-}"
+  if [ -z "${dmg}" ]; then
+    return 1
+  fi
+  ARGS=( "${dmg}" )
+  if ex mount_dmg; then
+    swd="$(pwd)"
+    cd "${mounted}"
+    ARGS=( "vst" )
+    ex gobblefind_by_ext 
+    DMG_VSTS=( "${gobbled[@]}" )
+    sort_array "${DMG_VSTS[@]}"
+    ARGS=( "vst3" )
+    ex gobblefind_by_ext 
+    DMG_VST3S=( "${gobbled[@]}" )
+    sort_array "${DMG_VST3S[@]}"
+    ARGS=( "component" )
+    ex gobblefind_by_ext
+    DMG_AUS=( "${gobbled[@]}" )
+    sort_array "${DMG_AUS[@]}"
+    DMG_PLUGINS=( "${DMG_VSTS[@]}" "${DMG_VST3S[@]}" "${DMG_AUS[@]}" ) 
+    cd "${swd}"
+    ARGS=( "unmount" "${mounted}" )
+    ex diskutil
+  else
+    err "failed to mount ${dmg}"
+    exit 1
+  fi
+}
+
+# based on plugins found in a given original install medium, update the modification
+# dates of the currently installed versions (for easier grouping / discovery later)
+function update_mod_times() {
+  dmg="${1:-}"
+  if [ -z "${dmg}" ]; then
+    return 1
+  fi
+  get_all_installed_plugins
+  get_plugins_on_dmg "${dmg}"
+  same_plugin_same_type_diff_location "${INSTALLED_PLUGINS}" "${DMG_PLUGINS}"
+  ui "requesting sudo for touch in system directories"
+  for plugin in "${SAMESAMEDIFF[@]}"; do 
+    sudo touch "${plugin}"
+  done
+}
+
+# based on plugins found in a given original install medium, remove any of
+# those plugins from installed directories
+function uninstall_plugins() {
+  #dmg="${1:-}"
+  #rm_to="${2:-}"
+  if [ -z "${dmg}" ]; then
+    return 1
+  fi
+  if ! stat "${dmg}"; then
+    return 1
+  fi
+  if [ -n "${rm_to}" ]; then
+    if ! mkdir -p "${rm_to}"; then
+      err "mkdir -p ${rm_to} failed with return code $?"
+      return 1
+    fi
+  fi
+  get_plugins_on_dmg "${dmg}"
+  get_all_installed_plugins
+  if gt "${#DMG_PLUGINS[@]}" 0; then 
+    for disk_file in "${DMG_PLUGINS[@]}"; do
+      if extensiom_natch "${disk_file}"; then
+        disk_filename=$(basename "${disk_file}") 
+        verbose "looking for ${disk_filename}"
+        for installed_file in "${INSTALLED_PLUGINS[@]}"; do
+          if stringContains "${disk_filename}" "${installed_file}"; then
+            ui "uninstalling ${installed_file}"
+            if [ -n "${rm_tp}" ]; then 
+              if ! sudo rsync "${RSYNC_OPTS}" "${installed_file}" "${rm_to}"; then
+                err "return code $? while trying to rm ${installed_file} ro ${rm_to}"
+              fi
+            else
+              ssudo trash "${installed_file}"
+            fi
+          fi
+        done
+      fi
+    done
+  fi
+  cd "${swd}"
 }
 
 ################################# Cleanup #####################################
@@ -1451,6 +1992,7 @@ function bellibackup {
   verbose "backup in $(pwd)"
   local working_dir=$(find ~+ -type d -maxdepth 0)
   local download_root=$(echo $working_dir|awk -F'/' '{print$5}')
+  local downloads="$HOME/Downloads"
   verbose "Running backup from ${working_dir} with download root ${download_root}"
   local dir_to_back="${working_dir}"
   if [ -n "${download_root}" ]; then
@@ -1467,10 +2009,12 @@ function bellibackup {
   secondaries=$(find ~+ -type f -iname "${SECONDARY_CRITERIA}")
   secondarycount=$(echo "${secondaries}"|wc -l)
   cd "${downloads}" # so we're not in a dir we're moving
-  if [ ${secondarycount} -gt 0 ]; then
+  if gt ${secondarycount} 0; then
     ui $(printf "${INSTALLING_FILE_TO_DEST_EXPECTS_FILE_AND_DEST}" 
-      "${secondarycount}" "${SECONDARY_CRITERIA}" "${SECONDARY_BACKUP}")
-    rsync "${RSYNC_OPTS}" "${dir_to_back}" "${SECONDARY_BACKUP}"
+      "${secondarycount}" "${SECONDARY_CRITERIA}" "${SECONDARY_BACKUP_DIR}")
+    if ! rsync "${RSYNC_OPTS}" "${dir_to_back}" "${SECONDARY_BACKUP_DIR}"; then
+      err "secondary backup failed."
+    fi
   fi
   ui $(printf "${BACKUP_STR_EXPECTS_SRC_DEST}" "${dir_to_back}" \
     "${BACKUP}")
@@ -1616,19 +2160,29 @@ function main() {
 
     esac
   done
+  rebuild_actions
+  verbose "Actions: ${ACTIONS[@]}"
   IFS=$'\n'
   for i in $(seq 0 4); do 
     handle_cache_by_type ${i}
   done
 }
 
+#  from https://stackoverflow.com/questions/2683279/how-to-detect-if-a-script-is-being-sourced
 # As $_ could be used only once, uncomment one of two following lines
 
 # printf '_="%s", 0="%s" and BASH_SOURCE="%s"\n' "$_" "$0" "$BASH_SOURCE" 
 [[ "$_" != "$0" ]] && DW_PURPOSE=sourced || DW_PURPOSE=subshell
 
-[ "$0" = "$BASH_SOURCE" ] && BASH_KIND_ENV=own || BASH_KIND_ENV=sourced; echo "proc: $$[ppid:$PPID] is $BASH_KIND_ENV (DW purpose: $DW_PURPOSE)"
+[ "$0" = "$BASH_SOURCE" ] && BASH_KIND_ENV=own || BASH_KIND_ENV=sourced; 
+verbose "proc: $$[ppid:$PPID] is $BASH_KIND_ENV (DW purpose: $DW_PURPOSE)"
 
 if [[ $BASH_KIND_ENV == "own" ]]; then 
-  err "bellicose is not ready for script usage just yet."
+  ui "bellicose can damage your system if you don't know what you're doing."
+  ui "please exercise caution.  The authors accept no liability for any"
+  ui "use of this software for any purpose."
+  ui ""
+  if confirm_yes "Proceed with attempting $@ using files in $(pwd)?"; then
+    main $@
+  fi
 fi
