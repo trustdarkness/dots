@@ -1,6 +1,6 @@
 alias sglobals="source $HOME/.globals"
 alias globals="vimcat $HOME/.globals"
-alias grep="grep -E -v \"$BLK\"|grep -E"
+alias mgrep="grep -E -v \"$BLK\"|grep -E"
 alias slhu="source $LH/util.sh"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 alias du0="du -h --max-depth=0"
