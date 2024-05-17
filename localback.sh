@@ -25,13 +25,69 @@ function restore() (
     echo "-c when used with -o, will clobber newer files in the"
     echo "   destination directory. Default is to only update."
   }
+
+    do_restore() {
+    LOC="${1:-}"
+    if [ $global -eq 1 ]; then 
+      BK="${OLDSYS}"
+    else
+      BK="${OLDHOME}"
+    fi
+    if ! [ -e "$BK/${loc}" ]; then
+      >&2 printf "could not find original at $BK/$loc"
+      return 1
+    fi
+    # mounted=$(mountpoint $HOME/$TARGET);
+    # if [ $? -ne 0 ]; then
+    #   $LH/mounter-t.sh
+    # fi
+    if [ $merge -ne 0 ]; then
+      if [ -d "$BK" ]; then
+        if stringContains "/" "$LOC"; then
+          dn=$(dirname "$LOC")
+          if ! [ -d "$HOME/$dn" ]; then
+            echo "to restore $LOC, i need to mkdir -p $HOME/$dn"
+            yn=$(confirm_yes "OK (Y/n?)")
+            if [ $? -eq 0 ]; then
+              mkdir -p "$HOME/$dn"
+            else
+              return 1
+            fi
+          fi
+        fi
+        new="$BK/$LOC"
+        old="$HOME/$LOC"
+        confirm_yes "restoring $new to $old... ok?"
+        mkdir -p $HOME/.bak
+        if [ -d "$old" ]; then 
+          echo "Backing up existing $old to .bak"
+          if ! cp -vr "$old" "$HOME/.bak"; then
+            return $?
+          fi
+        fi
+        cp -vr "$new" "$HOME/"
+        return $?
+      else
+        se "Didn't find a backup directory at $BK. exiting."
+        return 1
+      fi
+    elif [ $clobber -eq 1 ]; then
+      confirm_yes "merging $new to $old, clobbering newer files... ok?"
+      rsync -rltv "new" "$home"
+      return $?
+    else
+      confirm_yes "merging $new to $old if it exists... ok?"
+      rsync -rlutv "$new" "$home"
+      return $?
+    fi
+  }
+  
   args=$(getopt -o ngoch --long nonpersonalized,glob,overwrite,clobber,help -- "$@")
   if [[ $? -gt 0 ]]; then
     help
   fi
-  eval set -- ${args}
-  while :
-  do
+  local POSITIONAL_ARGS=()
+  while [[ $# -gt 0 ]]; do
     case $1 in
       -n|--nonpersonalized)
         global=1
@@ -54,45 +110,18 @@ function restore() (
         return 1
         ;;
       *)
+        POSITIONAL_ARGS+=("${1-}")
         shift
-        break
         ;;
 
     esac
   done
-  LOC="${@: -1}"
-  if stringContains "/" $LOC; then
-    >&2 printf "nested directories not yet supported."
-    exit 1
-  fi
-  if [ $global -eq 1 ]; then 
-    BK="${OLDSYS}"
-  else
-    BK="${OLDHOME}"
-  fi
-  # mounted=$(mountpoint $HOME/$TARGET);
-  # if [ $? -ne 0 ]; then
-  #   $LH/mounter-t.sh
-  # fi
-  if [ $merge -ne 0 ]; then
-    if [ -d "$BK" ]; then
-      new="$BK/$LOC"
-      old="$HOME/$LOC"
-      confirm_yes "restoring $new to $old... ok?"
-      mkdir -p $HOME/.bak
-      if [ -d "$old" ]; then 
-        echo "Backing up existing $old to .bak"
-        cp -vr "$old" "$HOME/.bak"
-      fi
-      cp -vr $new $HOME/
-    else
-      >&2 printf "Didn't find a backup directory at $BK. exiting."
+  set -- ${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}
+  failures=0
+  for loc in "${POSITIONAL_ARGS[@]}"; do
+    if ! do_restore "${loc}"; then 
+        ((failures++))
     fi
-  elif [ $clobber -eq 1 ]; then
-    confirm_yes "merging $new to $old, clobbering newer files... ok?"
-    rsync -rltv "new" "$home"
-  else
-    confirm_yes "merging $new to $old if it exists... ok?"
-    rsync -rlutv "$new" "$home"
-  fi
+  done
+  return ${failures}
 )
