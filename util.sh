@@ -15,17 +15,19 @@ source $D/.user_prompts
 
 DEBUG=true
 
-function debug() {
-  if ${DEBUG}; then
-    se $@
-  fi
-}
-
+# a convenient little wrapper to assist in printing to stderr
 function se() {
   if [ $# -eq 2 ]; then 
     >&2 printf "${1:-}\n" "${@:2:-}"
   else
     >&2 printf "${1:-}\n"
+  fi
+}
+
+# and for things you only want there when the above DEBUG flag is set
+function debug() {
+  if ${DEBUG}; then
+    se $@
   fi
 }
 
@@ -35,6 +37,9 @@ function string_contains() {
 }
 alias stringContains="string_contains"
 
+# most of the time, you don't want these, you just want to let printf
+# do its thing, but every now and then, even if its just to prove to 
+# yourself that it's still going to wordsplit
 function shellquote() {
   printf '"%s"\n' "$@"
 }
@@ -47,6 +52,7 @@ function shellescape() {
   printf "%q\n" "$@"
 }
 
+# this only kinda sorta works IIRC
 function hn () {
   if [ $# -eq 0 ]; then 
     >&2 printf "give me a list of hosts to get ips for"
@@ -99,6 +105,7 @@ function symlink_child_dirs () {
 # thats too long to type though.
 alias scd="symlink_child_dirs"
 
+
 function ghc () {
   if [ $# -eq 0 ]; then
     url="$(xclip -out)"
@@ -115,8 +122,8 @@ function ghc () {
   cd $f
 }
 
-ssudo () # super sudo
-{
+ # super sudo, enables sudo like behavior with bash functions
+function ssudo () {
   [[ "$(type -t $1)" == "function" ]] &&
     ARGS="$@" && sudo bash -c "$(declare -f $1); $ARGS"
 }
@@ -140,7 +147,7 @@ function bash_version() {
 export -f bash_version
 
 # stolen from https://stackoverflow.com/questions/8654051/how-can-i-compare-two-floating-point-numbers-in-bash
-is_first_floating_number_bigger () {
+function is_first_floating_number_bigger () {
     number1="$1"
     number2="$2"
 
