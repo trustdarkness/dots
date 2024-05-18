@@ -118,7 +118,11 @@ function ghc () {
   fi
   gh
   gc $url
+  
   f=$(echo "$url"|awk -F"/" '{print$NF}')
+  if [[ $f == *".git" ]]; then 
+    f="${f%.*}"
+  fi
   cd $f
 }
 
