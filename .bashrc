@@ -3,16 +3,77 @@
 # see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
 # for examples
 
-# If not running interactively, don't do anything
-case $- in
-    *i*) ;;
-      *) return;;
-esac
+# if set to true, some functions and sourced code will print additional
+# debugging output to stderr and may at times invoke set -x
+DEBUG=true
 
-# avoid prepending path if our changes are already there
-if [[ "${PATH}" != "*.local/bin*" ]]; then
-  export PATH="$HOME/bin:$HOME/.local/bin:$HOME/Applications:/usr/local/bin:/bin:/usr/bin:/usr/sbin:$PATH"
+if $DEBUG; then 
+  >&2 printf "sourced at ${BASH_SOURCE[0]}\n"
 fi
+REALBASHRC=$(readlink ${BASH_SOURCE[0]})
+D=$(dirname $REALBASHRC)
+source "$D/existence.sh"
+#source "$D/user_prompts.sh"
+
+# see requires_modern_bash below
+NO_BASH_VERSION_WARNING=false
+
+# avoid prepending path if our changes are already there,
+# but be sure that brew installed bash in /usr/local/bin
+# is caught before the system bash in /bin
+if [[ "${PATH}" != "*.local/sourced*" ]]; then
+  export PATH="$HOME/bin:$HOME/.local/bin:$HOME/Applications:/usr/local/bin:/bin:/usr/bin:/usr/sbin:$PATH:$HOME/.local/sourced"
+fi
+# Detects the bash version and if < 4.2, prints a warning for the user
+# this warning can be supressed by setting the environment variable 
+# NO_BASH_VERSION_WARNING=true
+function requires_modern_bash() {
+  # Some things in this bashrc are only valid for bash 4.2ish and up
+  if [[ bash_version < 4.3 ]]; then # 4.3 because pass by reference
+                                      # https://stackoverflow.com/questions/540298/passing-arguments-by-reference
+    if [ -n "${NO_BASH_VERSION_WARNING}" ] && ! "${NO_BASH_VERSION_WARNING}"; then
+      echo "Many of the utility functions associated with the code you're running"
+      echo "depend on features in modern(ish) bash (>= 4.2). Use at your own risk"
+      echo "(suppress by setting NO_BASH_VERSION_WARNING=true)"
+      if [[ $(uname -a) == "Darwin" ]]; then 
+        echo " "
+        echo "On MacOS, installing modern bash is quite simple with homebrew"
+        if [ -f "$D/macbootstraps.sh" ]; then 
+          source "$D/macbootstraps.sh"
+          choices_legacy "$MACBASHUPS" "$MACBASHUPA"
+          cleanup_macbootstraps
+          if [[ bash_version < 4.3 ]]; then
+            echo " " 
+            echo "execution will continue but somethings will not work or may break"
+            echo "or function improperly."
+            >/dev/tty printf '%s' "Continue? (Y/n)"
+            [[ $BASH_VERSION ]] && </dev/tty read -rn1
+            if ! [[ "${REPLY,,}" == "y"* ]]; then 
+              return 1
+            fi
+          fi # end chosen 0
+        fi
+      fi
+    fi
+  fi
+}
+# The goal is to use this almost like a decorator in python so as to 
+# demarcate things that won't work by default on MacOS (or other ancient bash)
+alias rmb="requires_modern_bash"
+
+function setup_syminks() {
+  ln -sf $HOME/.local/bin $HOME/.local/sourced
+}
+setup_syminks
+
+# If not running interactively, do something something something
+case $- in
+    *i*)
+      ;;
+    *) 
+      return
+      ;;
+esac
 
 # don't put duplicate lines or lines starting with space in the history.
 # See bash(1) for more options
@@ -53,6 +114,9 @@ fi
 # colored GCC warnings and errors
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
+# for pre, post, and non-powerline setup
+export PS1="\[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[$(tput sgr0)\]$ "
+
 # some more ls aliases
 if type exa >/dev/null 2>&1; then
   alias ll='exa -alF'
@@ -62,12 +126,31 @@ fi
 alias la='ls -A'
 alias l='ls -CF'
 
-# breadcrumbs... for tearfree cross platform setup: 
+# theres not really an easy way to use this in a substitution to solve the
+# problem it's intended to solve, so it's mostly here as a reminder
+if ! exists "PRINTFDASH"; then
+  readonly PRINTFDASH '\x2D'
+fi
+
+# breadcrumbs... for (relatively?) tearfree cross platform setup: 
 function powerline_bootstrap() {
-  if type pipx >/dev/null 2>&1; then 
+  if ! type pipx >/dev/null 2>&1; then 
+    if ! [ -n "${p3}" ]; then
+      if ! p3=$(type -p python3); then 
+        echo "python3 doesn't seem to be in \$PATH..."
+        # TODO: finish
+      fi
+    fi
     pipx install powerline-status
     mkdir -p .local/share/powerline  
-    ln -is $(locate powerline.sh |grep bash) $HOME/.local/share/powerline/
+		if [ -z "${psh}" ]; then
+      if ! psh=$(find $(pipx list |head -n1 |awk '{print$NF}') -name "powerline.sh" 2> /dev/null |grep "bash"); then
+			  se "can't find powerline.sh, assign psh= and run again"
+        return 1
+			fi
+		fi
+
+    ln -is "${psh}"	$HOME/.local/share/powerline/
   else
     >&2 printf "Would be less painful with pipx."
     >&2 printf "  on debian based systems, try sudo apt install pipx"
@@ -138,7 +221,7 @@ function setcompletion() {
   # this, if it's already enabled in /etc/bash.bashrc and /etc/profile
   # sources /etc/bash.bashrc).
   if ! shopt -oq posix; then
-    if ! type -p _init_completion; then 
+    if ! type -p _init_completion > /dev/null; then 
       if [ -f /etc/profile.d/bash_completion.sh ]; then 
         source /etc/profile.d/bash_completion.sh
       elif [[ -r "/usr/local/etc/profile.d/bash_completion.sh" ]]; then
@@ -172,7 +255,11 @@ fi
 # Add an "alert" alias for long running commands.  Use like so:
 #   sleep 10; alert
 alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
-
+alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
+alias brc="vimcat ~/.bashrc"
+alias sbrc="source $HOME/.bashrc"
+alias sutil="source $D/util.sh"
+alias vutil="vim $D/util.sh && sutil"
 export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 export D="$HOME/src/github/dots"
-source $D/util.sh
+#source $D/util.sh
