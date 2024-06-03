@@ -40,12 +40,12 @@ if ! is_declared "se"; then
     out=$(grep '\n' <<< "$@")
     outret=$?
     if [ $subret -eq 0 ]; then
-      >&2 printf "${1:-}" $:2
+      >2 printf "${1:-}" $:2
     else 
-      >&2 printf "$@"
+      >2 printf "$@"
     fi
     if [ $outret -eq 0 ]; then 
-      >&2 printf '\n'
+      >2 printf '\n'
     fi
   }
 fi
@@ -145,7 +145,7 @@ function shellescape() {
 # this only kinda sorta works IIRC
 function hn () {
   if [ $# -eq 0 ]; then 
-    >&2 printf "give me a list of hosts to get ips for"
+    >2 printf "give me a list of hosts to get ips for"
     return 1;
   fi
 
@@ -186,9 +186,9 @@ function symlink_child_dirs () {
     fi
   fi
   if [ $success -eq 257 ]; then
-    >&2 printf "Specify a target parent directory whose children\n"
-    >&2 printf "should be symlinked into the desitination directory:\n"
-    >&2 printf "\$ symlink_child_dirs [target] [destination]"
+    >2 printf "Specify a target parent directory whose children\n"
+    >2 printf "should be symlinked into the desitination directory:\n"
+    >2 printf "\$ symlink_child_dirs [target] [destination]"
   fi
 }
 
@@ -356,7 +356,7 @@ function finddir_array() {
       done < <(find "${findargs[@]}" -print0 2> /dev/null)
     fi
   else
-    >&2 printf "please provide an existing directory as an arg"
+    >2 printf "please provide an existing directory as an arg"
   fi
 }
 

@@ -128,8 +128,8 @@ fi
 function exists() {
   local nameerror
   printf -v nameerror "$N" 1
-  local -n name="${1?$nameerror}"
-  if is_declared $name; then return 0; fi
+  local name="${1?$nameerror}"
+  if is_declared $name 2> /dev/null; then return 0; fi
   if type -p $name; then return 0; fi
   # above should cover everything(ish), but just in case
   if [ -z "$name"]; then 

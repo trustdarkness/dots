@@ -8,7 +8,7 @@
 DEBUG=true
 
 if $DEBUG; then 
-  >&2 printf "sourced at ${BASH_SOURCE[0]}\n"
+  >2 printf "sourced at ${BASH_SOURCE[0]}\n"
 fi
 REALBASHRC=$(readlink ${BASH_SOURCE[0]})
 D=$(dirname $REALBASHRC)
@@ -128,8 +128,9 @@ alias l='ls -CF'
 
 # theres not really an easy way to use this in a substitution to solve the
 # problem it's intended to solve, so it's mostly here as a reminder
-if ! exists "PRINTFDASH"; then
-  readonly PRINTFDASH '\x2D'
+if ! exists PRINTFDASH; then
+  PRINTFDASH='\x2D'
+  readonly PRINTFDASH
 fi
 
 # breadcrumbs... for (relatively?) tearfree cross platform setup: 
@@ -152,10 +153,10 @@ function powerline_bootstrap() {
 
     ln -is "${psh}"	$HOME/.local/share/powerline/
   else
-    >&2 printf "Would be less painful with pipx."
-    >&2 printf "  on debian based systems, try sudo apt install pipx"
-    >&2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
-    >&2 printf "Or something, you know the deal."
+    >2 printf "Would be less painful with pipx."
+    >2 printf "  on debian based systems, try sudo apt install pipx"
+    >2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
+    >2 printf "Or something, you know the deal."
   fi
 }
 
@@ -211,10 +212,10 @@ function setcompletion() {
   if [[[ $(uname) == 'Darwin' ]]; then
     bc2=$(brew list bash-completion@2)
     if [ $? -gt 0 ]; then
-      >&2 printf "Modern bash and brew installed completion (@2) recommended\n"
-      >&2 printf "otherwise, ymmv\n\n"
-      >&2 printf "brew install bash\n"
-      >&2 printf "brew install bash-completion@2\n"
+      >2 printf "Modern bash and brew installed completion (@2) recommended\n"
+      >2 printf "otherwise, ymmv\n\n"
+      >2 printf "brew install bash\n"
+      >2 printf "brew install bash-completion@2\n"
     fi
   fi
   # enable programmable completion features (you don't need to enable
@@ -243,8 +244,8 @@ function setcompletion() {
   fi
   # double check and print an error if we didn't succeed
   if ! type -p _init_completion; then
-    >&2 printf "_init_completion not available, we may have failed to setup\n"
-    >&2 printf "bash completion."
+    >2 printf "_init_completion not available, we may have failed to setup\n"
+    >2 printf "bash completion."
   fi
 }
 
