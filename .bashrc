@@ -263,4 +263,4 @@ alias sutil="source $D/util.sh"
 alias vutil="vim $D/util.sh && sutil"
 export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 export D="$HOME/src/github/dots"
-#source $D/util.sh
+source $D/util.sh

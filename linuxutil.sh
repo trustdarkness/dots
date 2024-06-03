@@ -194,8 +194,11 @@ export OLDHOME="$HOME/$TARGET/$BACKUP/Devices/personal/$(hostname)/$(whoami)_lat
 export NO_ATI_BUS=1
 
 if [[ "${PYTHONPATH}" != "*.local/sourced*" ]]; then
-export PYTHONPATH="$PYTHONPATH:/usr/lib/python3.11:/usr/lib/python3/dist-packages:$HOME/.local/sourced"
+  export PYTHONPATH="$PYTHONPATH:/usr/lib/python3.11:/usr/lib/python3/dist-packages:$HOME/.local/sourced"
+fi
 export BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
-# if ! [[ "${PATH}" == *"$HOME/Applications"* ]]; then 
-#   export PATH=$HOME/bin:$HOME/Applications:$HOME/src/github/networkmanager-dmenu:$HOME/src/google/flutter/bin:$HOME/src/github/eww/target/release:/usr/sbin:/sbin:$PATH
-# fi
+if ! [[ "${PATH}" == *"$HOME/Applications"* ]]; then 
+  PATH="$HOME/bin:$HOME/Applications:$HOME/src/google/flutter/bin:"
+  PATH+="$HOME/src/github/eww/target/release:/usr/sbin:/sbin:$PATH"
+  export PATH
+fi
