@@ -42,26 +42,6 @@ function install_base_flags() {
   export INSTALL_BASE_FLAGS=("-verboseR" "-pkg" "${pkg}" "-target")
 }
 
-# we can try to specify an install location other than the default "/" which 
-# normally puts most things in /Applications.  This fails for many installers
-# and we fall back to "/" by default.
-ALT_INSTALL_LOC=""
-ALT_INSTALL_FALLBACK=false
-
-# some packages can be installed for the user rather than the system, when below
-# is true, we try a user install.  We can fallback to sys.
-USER_INSTALL=false
-USER_INSTALL_FALLBACK=false
-
-# If ALT_INSTALL_LOC and USER_INSTALL are set and both FALLBACK vars are true, 
-# following array will determine fallback precedence
-INSTALL_ATTEMPT_PRECEDENCE=( "user" "alt" "sys" )
-
-# for app files in the alt install route, we can also create mac style aliases
-# in /Applications from the alternate location.  This can be useful when you
-# have a small boot volume.  
-ALT_INSTALL_ALIAS=true
-
 # App Files: When found in disk images, we will try to install *.app files to 
 #            /Applications
 APP_TYPE_DESC="application"
@@ -85,46 +65,6 @@ SYSTEM_PLUGIN_DIRS=false
 SYSTEM_PLUGROOT="/Library/Audio/Plug-Ins"
 USER_PLUGROOT="${HOME}${SYSTEM_PLUGROOT}"
 
-# (not yet implemented)
-# When finished processing the above files we can deal with the sources for 
-# you (again, best effort) in a few ways.  By default, we do nothing with them.
-# we leave both the source files and our "workroom materials" where they were, 
-# assuming there may be other things you want to inspect in say, expanded 
-# archives.  Choices:
-# 1. (default) leave as-is
-# 2. delete files created by bellicose, leave source files as-is
-# 3. if successfully installed, delete (3a) or trash source files (3b)
-#    to include the filetypes listed above including ALL UNTOUCHED FILES...
-#    files in archives, on disk images, etc, that we know nothing about.
-# 4. Backup source files to a specified location (or multiple locations,
-#    given additional criteria).
-CLEANUP=false # same as CLEANUP_TYPE=1, to enable one of the other options,
-              # set this to true and provide the numbered type below
-              # for 3a and 3b, just CLEANUP_TYPE=3 and DELETE=false if you
-              # prefer the trash
-CLEANUP_TYPE=1
-CLEANUP_TYPE_DESCS=( "as-is" "delete_created" "delete_all" "backup" )
-
-DELETE=false
-
-# Backup is done with rsync, so can be a local directory or a remote
-# ssh location, specified as you would expect for rsync.
-BACKUP="$HOME/Downloads/_installed_foundation/"
-
-RSYNC_OPTS="-rlut"
-
-BACKUP_EXCLUDED_DIRS="instruments Plugins DAWs drivers Samples Plug-Ins Windows"
-
-# Secondary backup should be enabled by setting to true and populating
-# glob or regex (as supplied to the "find" command) fields below.  
-# We will look for both and more than one of each if provided as space 
-# separated single quoted strings within the double quotes below.
-# Secondary backup is ignored if we're not in cleanup mode 4.
-SECONDARY_BACKUP=true
-SECONDARY_BACKUP_GLOB="*.exe"
-SECONDARY_BACKUP_REGEX=""
-SECONDARY_BACKUP_DIR="$HOME/Downloads/_to_win"
-
 # bellicose uses a few types of "workworm material" space, which we try to do
 # in a user-courteous way consistent with MacOS norms, but you may change the 
 # defaults below.
@@ -142,18 +82,10 @@ SECONDARY_BACKUP_DIR="$HOME/Downloads/_to_win"
 #    named correspondingly with the archive they were generated from. If 
 #    one of the unarchive tools goes screwball, we try to fallback to 
 #    directories we created (at worst). 
-# 3. We use a temp directory as a root for mountpoints for disk image files.
-#    Optionally, you can configure so they're mounted under /Volumes as usual.
-#    the temp location means they're hidden in the finder.  Disk utility isn't
-#    always friendly about unmounting, and there's generally no harm to not 
-#    forcing it, but its annoying to see them hanging around in the finder.
 CACHE="$HOME/Library/Caches/bellicose"
 HISTORY="${CACHE}/history"
 HISTORY_TS_FMT="%Y%m%d_%H%M%S"
-
 EXTRACTED_DIRNAME="bellicose_extracted"
-
-
 
 # The existence and locations of files we want to keep track of 
 # while running (so that we can extract and install them)
@@ -176,14 +108,13 @@ function finish() {
     rm -rf "${TMPDIR}"
   fi
 }
-trap finish EXIT
+trap finish EXIT SIGINT
 
 # We grab the working directory at launch so we don't have to 
 # call pwd all over the place.  We don't go to great lengths to
-# protect system resources.  Be warned.
+# protect system resources.  Be warned. (and we still call pwd if 
+# theres any doubt)
 WD=$(pwd)
-
-TRACKMOUNTS="/tmp/bellicose/mounts"
 
 ############################# Logging #########################################
 # By default, we print strings to the console when there's information you 
@@ -223,6 +154,11 @@ EXTS+=( "${APP_EXTENSIONS}" )
 EXTS+=( "${PKG_EXTENSIONS}" )
 EXTS+=( "${PLUGIN_EXTENSIONS}" )
 
+# a uniform way of packing an array into a string so that we can 
+# simulate associative arrays of arrays
+# Args; the nameref (name of the array, not the array itself) of
+# the array to be packed, echos the packed string to the console
+# returns 0 on success, 1 otherwise
 function pack_list() {
   local name=$1[@]
   list=("${!name}")
@@ -243,6 +179,9 @@ function pack_list() {
   return 1
 }
 
+# UNCACHED is meant to be an array that points at other arrays, 
+# one for each type, so any time we've update the type arrays, we
+# rebuild uncached tp correspond accurately.
 declare -a UNCACHED
 function rebuild_uncached() {
   UNCACHED=()
@@ -264,16 +203,6 @@ function rebuild_uncached() {
   fi
   verbose "uncached: ${UNCACHED[@]}"
 }
-
-# declare -ga CACHES
-# function rebuild_caches() {
-#   CACHES=()
-#   CACHES+=( "${HISTORY}" )
-#   CACHES+=( "${HISTORY}" )
-#   CACHES+=( "${HISTORY}" )
-#   CACHES+=( "${HISTORY}" )
-# }
-# rebuild_caches
 
 ############################## Strings ########################################
 # Plenty of strings still in the code, but where we could reuse...
@@ -493,7 +422,14 @@ function fatal_error() {
 }
 
 ######################### List and Content Functions ##########################
-
+# these were originally inspired by the mac app Pacifist, but it does a much 
+# better job at this functionality than bellicose will ever do, and the other 
+# things it does, like allowing installation of single files or subsets of 
+# files from an installer, bellicose will never do.  Bellicose is the hammer
+# to Pacifist's scalpel.  I wanted to be able to install lots of things 
+# quickly on the command line and it looked like Pacifist would do this.  When 
+# I found out it wouldn't and basically nothing else did either, I wrote 
+# bellicose.  You're welcome, I'm sorry.
 
 # Args: int layer layer of logging we're at (for nested / recursive calls)
 #       String line_header - when we're working on nested files, an indicator
@@ -617,6 +553,7 @@ function list_special_package_file() {
 
 ############################ Shared Utility Functions #########################
 
+# Takes maybe an int as arg1, returns 0 if is an int, 1 otherwise
 function is_int() {
   local string="${1:-}"
   case $string in
@@ -645,6 +582,8 @@ function gt() {
   fatal_error
 }
 
+# Arg1 hopefully less than arg2, returns 0 if so, 1 otherwise.
+# if arg1 is "" returns 1 (as if it were 0)
 function lt() {
   term1="${1:-}"
   term2="${2:-}"
@@ -663,6 +602,9 @@ function lt() {
   fatal_error
 }
 
+# Takes 3 ints as args, returns 0 if 
+# Arg2 > Arg1 > Arg3 or Arg2 < Arg1 < Arg3
+# returns 1 otherwise
 function in_between() {
   between="${1:-}"
   t1="${2:-}"
@@ -675,6 +617,8 @@ function in_between() {
   return 1
 }
 
+# Takes a space separated string and tells you how many "word"
+# like groupings are there. Note: returns the count, not 0 on success.
 function count_space_separated {
   local to_count="${1:-}"
   IFS=$' '
@@ -684,32 +628,6 @@ function count_space_separated {
   done
   return $count  
 }
-
-# regex_or_builder() {
-#   verbose "func ${FUNCNAME[0]} $@"
-#   local space_separated_regexes="${1:-}"
-#   regex=""
-#   count_space_separated "${space_seuparated_regexes}"
-#   if [ ${count} -gt 1 ]; then 
-#     exclude_p_regex="(%s)"
-#     buildee=""
-#     i=0
-#     for regex in "${EXCLUDE_DIRS_REGEXES}"; do
-#       ((i+=1))
-#       if [ i -eq 1 ]; then
-#         buildee=$(printf '%s' "${regex}")
-#       else
-#         buildee+=$(printf '|%s' "${rregex}")
-#       fi
-#     done
-#     regex=$(printf '(%s)' "${buildee}")
-#     return 0
-#   else 
-#     regex="${space_separated_regexes}"
-#     return 0
-#   fi
-#   return 1
-# }
 
 # Read a single char from /dev/tty, prompting with "$*"
 # Note: pressing enter will return a null string. Perhaps a version terminated
@@ -745,7 +663,6 @@ function get_yes_keypress {
     esac
   done
 }
-
 
 # Prompt to confirm, defaulting to YES on <enter>
 # Args: String to prompt the user with - defaults to "Are you sure?"
@@ -825,31 +742,23 @@ function boolean_or {
   return 1
 }
 
+# Convenience function echos bash major version suitable for sripts
 function bash_major_version() {
   echo "${BASH_VERSINFO[0]}"
 }
 
+# Convenience function echos bash minor version suitable for scripts
 function bash_minor_version() {
   echo "${BASH_VERSINFO[1]}"
 }
 
+# Convenience function wraps the above to echo a nice point release 5.2
+# or something simlarly tidy for scripts.
 function bash_version() {
   major=$(bash_major_version)
   minor=$(bash_minor_version)
   echo "${major}.${minor}"
 }
-
-# stolen from https://stackoverflow.com/questions/8654051/how-can-i-compare-two-floating-point-numbers-in-bash
-# is_first_floating_number_bigger () {
-#     number1="$1"
-#     number2="$2"
-
-#     [ ${number1%.*} -eq ${number2%.*} ] && [ ${number1#*.} \> ${number2#*.} ] || [ ${number1%.*} -gt ${number2%.*} ];
-#     result=$?
-#     if [ "$result" -eq 0 ]; then result=1; else result=0; fi
-
-#     __FUNCTION_RETURN="${result}"
-# }
 
 # Args: filename: a filename to check
 #       extension_list: a space delimited string of filename extensions
@@ -873,9 +782,12 @@ function is_in_types() {
     verbose "${f} not in ${exts}"
     return 1
   fi
-
 }
 
+# For a given set of extensions, counts how many are on our todos, and
+# how many we've already successfully handled by checking the history file.
+# rebuilds UNCACHED with remaining new files by type to be processed.  Run
+# after every round.
 function counts_with_completed {
   verbose "func ${FUNCNAME[0]} $@"
   local extensions="${1:-}"
@@ -921,6 +833,8 @@ function counts_with_completed {
   verbose "count:${total_count} cached_count:${cached_count}"
 }
 
+# Given a set of extensions, returns the number of files in the cwd (recursively)
+# that have those extensions.  Note: returns the count, not zero on success.
 function counts {
   local extensions="${1:-}"
   count=0 # return value, total count of files for provided extentions
@@ -937,7 +851,6 @@ function counts {
     verbose "$ext $local_count $count"
     ((count += $local_count))
   done
-
   return ${count}
 }
 
@@ -958,6 +871,8 @@ function completed {
   return 1
 }
 
+# Takes a set of extensions as an argument, if we have more of those files
+# uncompleted than completed, this function returns 0, 1 otherwise
 uncompleted_larger() {
   verbose "func ${FUNCNAME[0]} $@"
   local extensions="${1:-}"
@@ -970,6 +885,11 @@ uncompleted_larger() {
   return 1
 } 
 
+# Kicks off things needed to process a single file of any type.
+# Args: absolute path to the file to be processed. Returns 0
+# after processing completed successfully, 1 if something breaks
+# in this function, depends on the callee to return and bubble up 
+# errors otherwisee.
 process_file() {
   verbose "func ${FUNCNAME[0]} $1 $2"
   local filenamepath="${1:-}"
@@ -1009,6 +929,14 @@ process_file() {
   return 1
 }
 
+# Echos the type number for the given absolute path to a file to be 
+# processed where type numbers are as follows;
+#  0 - archive
+#  1 - image
+#  2 - app
+#  3 - package
+#  4 - plugin
+# returns 0 on success
 function get_type_from_file() {
   verbose "get_type_from_file $1"
   local filenamepath="${1:-}"
@@ -1029,7 +957,8 @@ function get_type_from_file() {
   done
 }
 
-
+# After a user choice prompt, this kicks off only acting on new
+# never-before-seen files.
 new_only() {
   verbose "func ${FUNCNAME[0]} $@"
   local type="${1:-}"
@@ -1043,6 +972,8 @@ new_only() {
   fi;
 }
 
+# After a user choice prompt, this operates on all files, overwriting
+# any that may have been seen before.
 overwrite() {
   verbose "func ${FUNCNAME[0]} $@"
   local type="${1:-}"
@@ -1067,10 +998,11 @@ overwrite() {
   esac
 }
 
-clear_cache() {
+# this clears the full history of bellicose installs and then
+# proceeds with overwrite (above)
+clear_history {
   verbose "func ${FUNCNAME[0]} $@"
-  local type="${1:-}"
-  rm "${CACHES[${type}]}" && touch "${CACHES[${type}]}"
+  rm "${HISTORY}" && touch "${HISTORY}"
   overwrite ${type}
 }
 
@@ -1078,6 +1010,12 @@ show_diff() {
   err "Not yet implemnented."
 }
 
+# This prompts the user when there are files in the cwd that are also
+# present in the install history and asks if they'd like to 
+# 1. only operate on new files
+# 2. do everything, overwriting as necessary
+# 3. clear the history
+# 4. see the diff and then decide 1-3
 function  userchoice_cache() {
   verbose "func ${FUNCNAME[0]} $@"
   local type="${1:-}"
@@ -1110,6 +1048,11 @@ function  userchoice_cache() {
   echo
 }
 
+# bellicose officially supports two "actions": unarchive, or install.
+# list and contents are "modes" as is viewing the "installeed"
+# given a numeric type then, if the type is zero, actions echos
+# true/false whether UNARCHIVE is enabled for this session.  similarly
+# for install if type is non-zero
 function actions() {
   local type="${1:-}"
   if [[ ${type} == 0 ]]; then 
@@ -1122,6 +1065,16 @@ function actions() {
   return 1
 }
 
+# handle cache by type is the main dispatcher of work.  It takes a numerical type
+# 0 - archives
+# 1 - images
+# 2 - apps
+# 3 - packages
+# 4 - plugins
+# checks the history for any existing install records, prompts the user if 
+# necessary, counting how many of each type have and have not been processed in 
+# the work queue (normally the list of files covered by our extensions in the cwd
+# and all its children)
 function handle_cache_by_type() {
   verbose "func ${FUNCNAME[1]} $@"
   local type="${1:-}"
@@ -1243,6 +1196,7 @@ function no_nested_apps() {
   done
 }
 
+# records an unarchive or install to the history file
 function record_install_history() {
   local action="${1:?Provide an action, one of $ACTIONS}"
   local type="${2:?Provide a type, one of $TYPES}"
@@ -1262,6 +1216,10 @@ function record_install_history() {
   echo "${entry}" >> "$HISTORY"
 }
 
+# a wrapper function to try to handle errors properly 
+# depending on whether bellicose is running as a script
+# or was sourced and individual functions are being run 
+# separately.  Highly recommend not doing the latter.
 function endprog() {
   exitcode=${1:-}
   if [[ $BASH_KIND_ENV == "own" ]]; then 
@@ -1272,19 +1230,6 @@ function endprog() {
     return ${exitcode}
   fi
 }
-# function array_exclude {
-#   excluded=()
-#   local checkvar="${1:-}"
-#   local to_check=("${checkvar[@]}")
-#   local to_exclude="${2:-}"
-#   verbose "checking ${to_check[@]} for ${to_exclude}"
-#   for item in "${to_check[@]}"; do
-#     if grep -Ev "${to_exclude}" <(echo "${item}"); then 
-#       excluded+=( "${item}" )
-#     fi
-#   done
-# }
-
 
 #################################### Archives #################################
 
@@ -1459,14 +1404,6 @@ function attempt_unmounts() {
   done
 }
 
-# function safenamenoext() {
-#   name="${1:-}"
-#   if [ -n "${name}" ]; then 
-#     echo "${name%.*}"|sed 's/ /__/g'
-#     return 0
-#   fi
-#   return 1
-# }
 
 function mount_dmg() {
   dmg="${1:-}"
@@ -1475,58 +1412,39 @@ function mount_dmg() {
   fi
   mounted=""
   dmg_basename=$(basename "${dmg}")
-  #mount_folder=$(safenamenoext "${dmg_basename}")
-  #if ! stringContains "${dmg_basename}" "${MOUNTED[@]}"; then 
-    
-    # mountdir="${TMPDIR}/mounts/${mount_folder}"
-    # verbose "mounting ${dmg_basename} under ${mountdir}"
-    # mkdir -p "${mountdir}"
-    # ARGS=( "attach" "-nobrowse" "-mountroot" "${mountdir}" "${dmg}" )
+  finddir_array -s "/Volumes"
+  before_vols=( "${dirarray[@]}" )
+  exout=$(hdiutil attach "${dmg}") 
+  if stringContains "failed" "${exout}"; then
     finddir_array -s "/Volumes"
-    before_vols=( "${dirarray[@]}" )
-    # ARGS=( "attach" "${dmg}" )
-    # exout=$(ex hdiutil)
-    exout=$(hdiutil attach "${dmg}") 
-    if stringContains "failed" "${exout}"; then
-      finddir_array -s "/Volumes"
-      after_vols=( "${dirarray[@]}" )
-      diff_vols=$(diff <(echo $before_vols) <(echo $after_vols))
-      if ! [ $? -gt 0 ]; then 
-        err "Trying to mount the disk failed, sometimes that means its already"
-        err "mounted.  If any of these are the software youre trying to"
-        err "install, we can try to continue:"
-        chosen=$(choices -r -s '\0' -c "${after_vols}")
-        if [ $chosen -le ${#after_vols} ]; then 
-          mounted="${after_vols[$chosen]}"
-        else
-          return {$chosen}
-        fi
+    after_vols=( "${dirarray[@]}" )
+    diff_vols=$(diff <(echo $before_vols) <(echo $after_vols))
+    if ! [ $? -gt 0 ]; then 
+      err "Trying to mount the disk failed, sometimes that means its already"
+      err "mounted.  If any of these are the software youre trying to"
+      err "install, we can try to continue:"
+      chosen=$(choices -r -s '\0' -c "${after_vols}")
+      if [ $chosen -le ${#after_vols} ]; then 
+        mounted="${after_vols[$chosen]}"
       else
-        mounted=${diff_vols}
+        return {$chosen}
       fi
-      #in these cases the disk may already be mounted
-      # stat "${mountdir}/${dmg_basename}"
-      # if gt $? 0; then
-      #   return 1
-      # else
-      #   mounted="${mountdir}/${dmg_basename}"
-      #   MOUNTED+=( "${dmg_basename}" )
-      #   return 0
-
-    elif stringContains "Usage" "${exout}"; then
-      return 1
+    else
+      mounted=${diff_vols}
     fi
-    mounted=$(echo "${exout}"|tr '\n' ' '|awk -F'\t' '{print$NF}'|xargs)
-    if [ $? -gt 0 ]; then 
-      err "failed to mount ${dmg}"
-      return 1
-    fi 
-    echo "${mounted}"
-    echo "${mounted}" > "${TRACKMOUNTS}"   
-    MOUNTED+=( "${dmg_basename}" )
-    return 0
-  # fi
-  # return 1
+
+  elif stringContains "Usage" "${exout}"; then
+    return 1
+  fi
+  mounted=$(echo "${exout}"|tr '\n' ' '|awk -F'\t' '{print$NF}'|xargs)
+  if [ $? -gt 0 ]; then 
+    err "failed to mount ${dmg}"
+    return 1
+  fi 
+  echo "${mounted}"
+  echo "${mounted}" > "${TRACKMOUNTS}"   
+  MOUNTED+=( "${dmg_basename}" )
+  return 0
 }
 
 process_dmg() {
@@ -1538,17 +1456,9 @@ process_dmg() {
   retval=255
   # attempt_unmounts
   if boolean_or ${CONTENTS} ${INSTALL}; then
-    #ARGS=( "${dmg}" )
     mounted=$(mount_dmg "${dmg}")
     verbose "mount retval $?"
-    # if ! stringContains "/" "${dmg}"; then
-    #   dn=$(pwd)
-    #   bn=$(basename "${dmg}")
-    #   dmg="${dn}/${bn}"
-    # fi
     dmg_basename=$(basename "${dmg}")
-    # mount_folder=$(safenamenoext "${dmg_basename}")
-    # export mounted="$(cat ${TRACKMOUNTS}|grep ${mount_folder})"
     if ${CONTENTS}; then
       # gobblefind populates a global array called haggussed, which we will copy
       # to our own array with a more sensible name for readability, but also because
@@ -1580,15 +1490,7 @@ process_dmg() {
     if boolean_or ${CONTENTS} ${INSTALL}; then
       export sd="$(pwd)"
       dmg_basename=$(basename "${dmg}")
-      # mount_folder=$(safenamenoext "${dmg_basename}")
-      # export mounted="$(cat ${TRACKMOUNTS}|grep ${mount_folder})"
-      # verbose "changing from $(pwd) to ${mounted}"
       cd "${mounted}"
-      # count=0
-      # counts "${DMG_EXTENSIONS}"
-      # if gt ${count} 0; then
-      #   process_dmgs
-      # fi
     fi
     if ${INSTALL}; then
       process_pkgs "${mounted}"
@@ -1837,7 +1739,7 @@ function process_pkg() {
     elif "$USER_INSTALL"; then
       echo "user install not implemented"
     else 
-      install_pkg_sys
+      install_pkg
       return $?
     fi
   fi
@@ -1870,25 +1772,12 @@ function process_pkgs {
 }
 
 function install_pkg() {
-  local loc="${1:-}"
-  #lflags=("${!name}")
-  # if lt "${#lflags[@]}" 5; then
-  #   err "Something is wrong with install flags ${lflags[@]}"
-  #   exit 1
-  # fi
-  flags=( "${INSTALL_BASE_FLAGS[@]}" ${loc} )
+  flags=( "${INSTALL_BASE_FLAGS[@]}" "/" )
   if dump=$(sudo installer "${flags[@]}"); then 
     local pkg="${flags[2]}" # See INSTALL_BASE_FLAGS
     local bn=$(basename "${pkg}")
     ui "recording an install history"
     $(record_install_history "install" "package" "${pkg}")
-    # TODO: fix aliasing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         }" >> "${HISTORY}"
-    # if [[ "${flags[@]}" == "*${ALT_INSTALL_LOC}*" ]] && "${ALT_INSTALL_ALIAS}"; then
-    #   regex=$(printf '%s' "${ALT_INSTALL_LOC}.*.app$")
-    #   echo "${dump}" > /tmp/installerdump
-    #   # app_install_loc=$(grep "${ALT_INSTALL_LOC}.*.app$" "${dump}")
-    #   ui "aalias \"${app_install_loc}\""
-    # fi
     return 0
   else
     ret=$?
@@ -1897,49 +1786,6 @@ function install_pkg() {
   fi
 }
 
-function install_pkg_user {
-  flags=( "${INSTALL_BASE_FLAGS[@]}" "CurrentUserHomeDirectory" )
-  if install_pkg flags; then
-    return 0
-  fi
-  return 1
-}
-
-function install_pkg_alt {
-  flags=( "${INSTALL_BASE_FLAGS[@]}" "${ALT_INSTALL_LOC}" )
-  if install_pkg flags; then
-    return 0
-  fi
-  return 1
-}
-
-function install_pkg_sys {
-  flags=( "${INSTALL_BASE_FLAGS[@]}" "/" )
-  if install_pkg "/"; then 
-    return 0
-  fi
-  return 1
-}
-
-function install_w_fallback_precedence() {  
-    for pref in "${INSTALL_ATTEMPT_PRECEDENCE[@]}"; do
-      if [[ "${pref}" == "user" ]]; then
-        if install_pkg_user; then 
-          return 0
-        fi
-      elif [[ "${pref}" == "alt" ]]; then
-        if install_pkg_alt; then 
-          return 0
-        fi
-      elif [[ "${pref}" == "sys" ]]; then
-        if install_pkg_sys; then 
-          return 0
-        fi
-      fi
-    done
-  
-  return 1
-}
 
 # Args: filename to list contents of, must be pkg or mpkg
 #       layer deep we are in listing contents, for display purposes
@@ -2139,73 +1985,6 @@ function extension_match() {
   return $?
 }
 
-function sort_array() {
-  to_sort="${1:-}"
-  SORTED=()
-  if gt "${#to_sort[@]}" 0; then 
-    readarray -t SORTED < <(printf '%s\0' "${to_sort[@]}"| sort -z|xargs -0n1)
-  fi
-  echo "${SORTED[@]}"
-}
-
-# https://unix.stackexchange.com/questions/104837/intersection-of-two-arrays-in-bash#104848
-function array_intersection() {
-  A="${1:-}"
-  B="${2:-}"
-  if gt ${#A[@]} 0; then
-    return 1
-  fi
-  if gt ${#B[@]} 0; then
-    return 1
-  fi
-  INTERSECTION=($(comm -12 <(printf '%s\n' "${A[@]}" | LC_ALL=C sort) <(printf '%s\n' "${B[@]}" | LC_ALL=C sort)))
-  echo "${INTERSECTION[@]}"
-}
-
-# given a sorted array of files with absolute paths, return an array of just basenames.
-# note: function will behave with unsorted arrays, but the goal would be to match back up
-# with the paths later, in which case, sorting is ideal and not performed by this function
-function strip_paths() {
-  A="${1:-}"
-  if gt ${#A[@]} 0; then
-    return 1
-  fi
-  STRIPPED=()
-  for a in "${A[@]}"; do
-    bn=$(basename "${a}")
-    STRIPPED+=( "${bn}" )
-  done
-  echo "${STRIPPED[@]}"
-}
-
-# given sorted arrays A and B of plugins with absolute paths, return an array of plugins of 
-# the same type (vst, vst3 or au) and the same plugin name with the absolute paths
-# as originally present in array A
-function same_plugin_same_type_diff_location() {
-  A="${1:-}"
-  B="${2:-}"
-  if gt ${#A[@]} 0; then
-    return 1
-  fi
-  if gt ${#B[@]} 0; then
-    return 1
-  fi
-  stip_paths "${A[@]}"
-  baseA="${STRIPPED[@]}"
-  strip_paths "${B[@}]}"
-  baseB="${STRIPPED[@]}"
-  array_intersection "${baseA[@]}" "${baseB}"
-  SAMESAMEDIFF=()
-  for absplugin in "${A[@]}"; do
-    for plugin in "${INTERSECTION[@]}"; do
-      if [[ "${absplugin}" == "*${plugin}" ]]; then
-        SAMESAMEDIFF+=( "${absplugin}" )
-      fi
-    done
-  done
-  echo "${SAMESAMEDIFF[@]}"
-}
-
 # adds all installed plugins to a global array INSTALLED_PLUGINS, along the way populates
 # SYS_INSTALLED_VSTS, USER_INSTALLED_VSTS, SYS_INSTALLED_VST3S, USER_INSTALLED_VST3S,
 # SYS_INSTALLED_AUS, USER_INSTALLED_AUS,
@@ -2254,6 +2033,11 @@ function get_all_installed_plugins() {
   cd "${swd}"
 }
 
+# This is intended to be a blocking subshell execution call.  It was
+# implemented in rather a silly way attempting to reduce variables in 
+# solving problems i didn't understand, and it just, surprise surprise
+# created more problems.  Until i've audited the code to see that its 
+# not used, its staying, but yeah, probably, just, dont.
 function ex() {
   exout=""
   exresult=666
@@ -2371,6 +2155,12 @@ function uninstall_plugins() {
 }
 
 ################################# Cleanup #####################################
+# This isn't really used anymore, probably won't do what you want it to without
+# significant modification, and should probably be yanked, printed on a
+# dotmatrix printer, the kind with the guide strips you had to setup and then
+# tear off after printing, you should have to listen to that dotmatrix sound 
+# of two robots brains being smooshed together and then torn in half, and then
+# when you're done and have the printed code, you should burn it.
 
 function bellibackup {
   verbose "backup in $(pwd)"
@@ -2414,9 +2204,12 @@ function bellibackup {
 ############################# Main Program Code ###############################
 
 function help() {
-  ui "help not yet implemented"
+  ui "help not yet implemented" # HAHAHAHAHAHAHAHAHAHAHAHAHAHA
 }
 
+# This looks like a particularly silly wrapper function that does... basically
+# nothing except let me call a function "eat_the_world_starting_at" which 
+# looks much cooler than "handle_cache_by_type"
 function eat_the_world_starting_at() {
   local start="${1:-0}"
   if lt ${start} 5; then
@@ -2427,6 +2220,8 @@ function eat_the_world_starting_at() {
   fi
 }
 
+# Run bellicose in single file mode, after which if we think we succeeded, 
+# we thank you.  Because you're WORTHY of it.
 function process_single() {
   local file="${1:-}"
   if ! [ -f  "${file}" ]; then
@@ -2452,19 +2247,19 @@ function process_single() {
 }
 
 
-function create_cache() {
-  local path="${1:-}"
-  if [ -n  "${path}" ]; then 
-    bn=$(basename "${path}")
-    dn=$(dirname "${path}")
-    if ! [ -d "${dn}" ]; then 
-      mkdir -p "${dn}"
-    fi
-    if ! [ -f "${bn}" ]; then 
-      touch "${path}"
-    fi
-  fi
-}
+# function create_cache() {
+#   local path="${1:-}"
+#   if [ -n  "${path}" ]; then 
+#     bn=$(basename "${path}")
+#     dn=$(dirname "${path}")
+#     if ! [ -d "${dn}" ]; then 
+#       mkdir -p "${dn}"
+#     fi
+#     if ! [ -f "${bn}" ]; then 
+#       touch "${path}"
+#     fi
+#   fi
+# }
 
 # To be called after user args have been parsed
 function setup_env() {
@@ -2611,12 +2406,9 @@ function main() {
       ;;
   esac
 
-
-
   err "please give me an action, one of:"
   err "   unarchive"
   err "   install (unarchive implied unless -S U)"
-
 
 }
 
