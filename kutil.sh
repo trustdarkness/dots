@@ -6,6 +6,40 @@ function klogout() {
 
 }
 
+alias konsession="qdbus $KONSOLE_DBUS_SERVICE $KONSOLE_DBUS_SESSION"
+alias konwindow="qdbus $KONSOLE_DBUS_SERVICE $KONSOLE_DBUS_WINDOW"
+alias kontd="konsession setProfile td"
+
+function konsole_bootstrap() {
+  term_bootstrap
+  local profile="$HOME/.local/share/konsole/td.profile"
+  if ! [ -f "${profile}" ]; then 
+    cat <<EOF > "${profile}"
+[Appearance]
+ColorScheme=Afterglow
+Font=Hack,10,-1,5,50,0,0,0,0,0
+UseFontLineChararacters=true
+
+[General]
+Name=td
+Parent=FALLBACK/
+TerminalColumns=80
+TerminalRows=50
+
+[Interaction Options]
+CopyTextAsHTML=false
+TrimLeadingSpacesInSelectedText=true
+
+[Scrolling]
+HistoryMode=2
+EOF
+  fi
+  kontd
+}
+
+alias skprofile="konsession setProfile td"
+alias vkprofile="vim .local/share/konsole/td.profile && skprofile"
+
 function list_kwin_commands() {
   for service in $(qdbus "org.kde.*"); do 
     echo "* $service"
@@ -40,4 +74,20 @@ function killkactivity() {
   touch ~/.local/share/kactivitymanagerd && 
   sudo chmod -x /usr/lib/x86_64-linux-gnu/libexec/kactivitymanagerd && 
   sudo chmod -x /usr/lib/x86_64-linux-gnu/qt5/plugins/kactivitymanagerd
+}
+
+function get_toolbars_and_actions() {
+  if [[ "$TAG_NAME" == *"Toolbar" ]] ; then
+    eval local $ATTRIBUTES
+    echo "name $name"
+    if [[ $TAG_NAME = "Action" ]] ; then
+      eval local $ATTRIBUTES
+      echo "Action name: $name"
+    fi
+  fi
+}
+
+function kxmlgui_parse() {
+  file="${1:-}"
+  xmllike "${file}" get_toolbars_and_actions
 }

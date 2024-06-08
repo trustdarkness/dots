@@ -1,40 +1,77 @@
-if [[ "${FUNCNAME[0]}" == "i" ]]; then 
-  sudo echo "Ready."
-else
-  echo "${FUNCNAME}"
-fi
 
 distro="$(lsb_release -d 2>&1|grep Desc|awk -F':' '{print$2}'|xargs)"
 
 if string_contains "arch" "$distro"; then
-  alias sai="sudo pacman -Sy"
-  alias sau="sudo pacman -Syu"
-  alias sauu="sudo pacman -Syu"
-  alias sas="yay -Ss"
-  alias sar="sudo pacman -Rscn"
+  function sai() {
+    sudo pacman -Sy $@
+  }
+  function sau() {
+    sudo pacman -Syu $@
+  }
+  function sauu() {
+    pacman -Syu $@
+  }
+  function sas() {
+    yay -Ss $@
+  }
+  function sar() {
+    sudo pacman -Rscn $@
+  }
 fi
 
 if string_contains "(fedora|nobara)" "$distro"; then
-  alias sai="sudo dnf install -y"
-  alias sau="sudo dnf upgrade -y"
-  alias sauu="sudo dnf upgrade -y"
-  alias sas='sudo dnf search'
-  alias sar="sudo dnf remove -y"
+  function sai() {
+    sudo dnf install -y $@
+  }
+  function sau() {
+    sudo dnf upgrade -y $@
+  }
+  function sauu() {
+    sudo dnf upgrade -y $@
+  }
+  function sas() {
+    sudo dnf search $@
+  }
+  function sar() {
+    sudo dnf remove -y $@
+  }
 fi
 
 if string_contains "(Debian|Ubuntu)" "$distro"; then
   alias di="sudo dpkg -i"
-  alias sai="sudo aptitude install"
-  alias sau="sudo aptitude update"
-  alias sauu="sudo aptitude update && sudo aptitude upgrade"
-  alias sas="sudo aptitude search"
-  alias sar="sudo aptitude remove"
-  alias sap='sudo aptitude purge'
-  alias saar="sudo apt-add-repository"
-  alias sAAR="sudo apt auto-remove"
-  alias vasl="sudo vim /etc/apt/sources.list"
-  alias asl="vimcat /etc/apt/sources.list"
-  alias vasld="sudo vim /etc/apt/sources.list.d"
+  function sai() {
+    sudo aptitude install $@
+  }
+  function sau() {
+    aptitude update $@
+  }
+  function sauu() {
+    sudo aptitude update && sudo aptitude upgrade
+  }
+  function sas() {
+    sudo aptitude search $@
+  }
+  function sar() {
+    aptitude remove #@
+  }
+  function sap() {
+    aptitude purge $@
+  }
+  function saar() {
+    apt-add-repository $@
+  }
+  function sAAR() {
+    apt auto-remove $@
+  }
+  function vasl() {
+    vim /etc/apt/sources.list 
+  }
+  function asl() {
+    echo /etc/apt/sources.list
+  }
+  function vasld() {
+     vim /etc/apt/sources.list.d
+  }
   function saig() {
     pattern=$1
     sudo apt install *$pattern*

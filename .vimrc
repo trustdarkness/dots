@@ -18,7 +18,7 @@ set tabstop=2
 set softtabstop=2
 
 " Add numbers to each line on the left-hand side.
-set number
+" set number
 
 " Highlight cursor line underneath the cursor horizontally.
 set cursorline
@@ -56,7 +56,7 @@ set wildmode=list:longest
 " Wildmenu will ignore files with these extensions.
 set wildignore=*.docx,*.jpg,*.png,*.gif,*.pdf,*.pyc,*.exe,*.flv,*.img,*.xlsx
 
-set foldmethod=indent   
+"set foldmethod=indent   
 
 " PLUGINS ---------------------------------------------------------------- {{{
 
@@ -76,10 +76,10 @@ set foldmethod=indent
 
 " This will enable code folding.
 " Use the marker method of folding.
-augroup filetype_vim
-    autocmd!
-    autocmd FileType vim setlocal foldmethod=marker
-augroup END
+" augroup filetype_vim
+"    autocmd!
+"    autocmd FileType vim setlocal foldmethod=marker
+" augroup END
 
 " More Vimscripts code goes here.
 
