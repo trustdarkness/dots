@@ -15,24 +15,51 @@ source $D/.user_prompts
 
 DEBUG=true
 
+# preferred format strings for date for storing on the filesystem
+FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
+FSTSFMT="$FSDATEFMT_%H%M%S" # our preferred ts fmt for files/folders
+LAST_DATEFMT="%a %b %e %k:%M" # used by the "last" command
+
+function fsdate() {
+  date +"${FSDATEFMT}"
+}
+
+function fsts() {
+  date +"${FSTSFMT}"
+}
+
+# If for any sourced file, you'd like to be able to undo the 
+# changes to  your environment after it's sourced, track the
+# namerefs (variable, function, etc names) in an array named
+# sourcename_namerefs where the sourced filename is 
+# sourcename.sh, when you want to clean the namespace of that
+# file, call cleaup_namespace sourcename, and it will be done
+# see macboot.sh for example
+function cleanup_namespace() {
+  local namespace="${1}"
+  local -n to_clean="${namespace}_namerefs"
+  to_clean=${!to_clean}
+  for nameref in "${to_clean[@]}"; do 
+    unset ${nameref}
+  done
+}
+
 # a convenient little wrapper to assist in printing to stderr
 function se() {
-  if [ $# -eq 2 ]; then 
-    >&2 printf "${1:-}\n" "${@:2:-}"
-  else
-    >&2 printf "${1:-}\n"
+  if [ -n "${DEBUG}" ] && ${DEBUG}; then
+    if [ $# -eq 2 ]; then 
+      >&2 printf "${1}\n" "${@:2}"
+    else
+      >&2 printf "${1}\n"
+    fi
   fi
 }
+alias debug="se"
 
-# and for things you only want there when the above DEBUG flag is set
-function debug() {
-  if ${DEBUG}; then
-    se $@
-  fi
-}
-
+# Arg1 is needle, Arg2 is haystack
+# returns 0 if haystack contains needle, retval from grep otherwise
 function string_contains() {
-  echo "${2:-}"| grep -Eqi "${1:-}" 
+  echo "${@:2}"| grep -Eqi "${1:-}" 
   return $?
 }
 alias stringContains="string_contains"
@@ -41,18 +68,97 @@ alias stringContains="string_contains"
 # do its thing, but every now and then, even if its just to prove to 
 # yourself that it's still going to wordsplit
 function shellquote() {
+  if [[ "$1" =~ ".*" ]]; then 
+    echo $1
+  fi
   printf '"%s"\n' "$@"
+}
+
+function shellquotes() {
+  for line in ${1:-}; do 
+    shellquote "${line}"
+  done
 }
 
 function singlequote() {
   printf "'%s'\n" "$@"
 }
 
+function singlequotes() {
+  for line in ${1:-}; do 
+    singlequote "${line}"
+  done
+}
+
 function shellescape() {
   printf "%q\n" "$@"
 }
 
+function shellescapes() {
+  for line in ${1:-}; do 
+    shellescape "${line}"
+  done
+}
+
+# Returns the architecture of the running system
+function system_arch() {
+  uname -m
+}
+
+function path_append() {
+  to_add="${1:}"
+  if [ -f "${to_add}" ]; then 
+    if ! [[ "${PATH}" == *"${to_add}"* ]]; then
+      export PATH="${PATH}:${to_add}"
+    fi
+  fi
+}
+
+function path_prepend() {
+  to_add="${1:}"
+  if [ -f "${to_add}" ]; then 
+    if ! [[ "${PATH}" == *"${to_add}"* ]]; then
+      export PATH="${to_add}:${PATH}"
+    fi
+  fi
+}
+
+# I'm not trying to be lazy, I'm trying to make the code readable
+function split() {
+  to_split="${1:?'Provide a string to split and (optionally) a delimiter'}"
+  delimiter="${2:-' '}"
+  awk -F"${delimiter}" '{print $0}'
+}
+
+# Given a date (Arg1) and a fmt string (Arg2, strftime), 
+# returns 0 if that date was more than 7 days ago, 1 otherwise
+function is_older_than_1_wk() {
+  d="${1:-}"
+  fmt="${2:-}"
+  if ! [ -n "${fmt}" ]; then 
+    if [ "${#d}" -eq 8 ]; then
+      fmt=$FSDATEFMT
+    elif [ "${#d}" -eq 15 ]; then
+      fmt=$FSTSFMT
+    else
+      se "Please provide a date format specifier"
+      return 1
+    fi
+  fi
+  ts=$(date -f +"$fmt" -d "${d}" +"%s")
+  now=$(date +"%s")
+  time_difference=$((now - ts))
+  days=$((time_difference / 86400)) #86400 seconds per day
+  if [ $days -gt 7 ]; then 
+    return 0
+  fi
+  return 1
+}
+
 # this only kinda sorta works IIRC
+# Intended to grab ip or hostname values from the nearest source possible
+# starting with /etc/hosts, .ssh/config, then out to dig, other place
+# echo hostname or ip from host alias to the console no explicit return
 function hn () {
   if [ $# -eq 0 ]; then 
     >&2 printf "give me a list of hosts to get ips for"
@@ -105,7 +211,8 @@ function symlink_child_dirs () {
 # thats too long to type though.
 alias scd="symlink_child_dirs"
 
-
+# Convenience function for github clone, moves into ~/src/github, 
+# clones the given repo, and then cds into its directory
 function ghc () {
   if [ $# -eq 0 ]; then
     url="$(xclip -out)"
@@ -133,16 +240,20 @@ function ssudo () {
 }
 alias ssudo="ssudo "
 
+# Convenience function echos bash major version suitable for sripts
 function bash_major_version() {
   echo "${BASH_VERSINFO[0]}"
 }
 export -f bash_major_version
 
+# Convenience function echos bash minor version suitable for scripts
 function bash_minor_version() {
   echo "${BASH_VERSINFO[1]}"
 }
 export -f bash_minor_version
 
+# Convenience function wraps the above to echo a nice point release 5.2
+# or something simlarly tidy for scripts.
 function bash_version() {
   major=$(bash_major_version)
   minor=$(bash_minor_version)
@@ -163,7 +274,7 @@ function is_first_floating_number_bigger () {
 }
 
 # Assume all arguments (count unknown) are path fragments that may be a single
-# word or phrase (which we'll treat as atomic, as though its an actual spacew in
+# word or phrase (which we'll treat as atomic, as though its an actual space in
 # the file or folder name).  Separators are "/" and only "/".  Value is returned
 # as a single quoted path string.  
 # TODO: add options to specify separator
@@ -173,15 +284,12 @@ function assemble_bash_safe_path() {
   for arg in "$@"; do 
     IFS='/' read -r -a components <<< "${arg}"
   done
-  printf -v safesinglequotepath "'/%s'" "${components[@]%/}"
+  printf "'/%s'" "${components[@]%/}"
 }
 
-if [[ $(uname) == "Linux" ]]; then
-  source $D/linuxutil.sh
-elif [[ $(uname) == "Darwin" ]]; then
-  source $D/macutil.sh
-fi
-
+# To help common bash gotchas with [ -eq ], etc, this function simply
+# takes something we hope to be an int (arg1) and returns 0 if it is
+# 1 otherwise
 function is_int() {
   local string="${1:-}"
   case $string in
@@ -208,6 +316,8 @@ function gt() {
   fi
 }
 
+# Args: first term we hope is less than the second.
+# returns 0 if it is, 1 otherwise. if first term is "", return 1
 function lt() {
   term1="${1:-}"
   term2="${2:-}"
@@ -224,93 +334,12 @@ function lt() {
   fi
 }
 
-# you can't pass arrays around as args in bash, but if you do 
-# a global declare you can copy it out of the env
-declare -ga dirarray
-function finddir_array() {
-  set=false
-  depth=1
-  while [ $# -gt 0 ]; do
-    case "${1:-}" in
-      "-d"|"--maxdepth")
-        depth="${2:-}"
-        shift 
-        shift
-        ;;
-      "-s"|"--set")
-        set=true
-        shift
-        ;;
-      "-h"|"-?"|"--help")
-        help
-        return 0
-        ;;
-      *)
-        dir="${1:-}"
-        shift
-        ;;
-    esac
-  done
-  help() {
-    se "Creates a bash array named dirarray and populates it with"
-    se "subdirectories of the directory provided as an arg."
-    se ""
-    se "Options:"
-    se "  -d|--maxdepth directory maxdepth to pass to find "
-    se "                (default 1, for all, pass -1)"
-    se "  -s|--set      populate dirarray with only unique values"
-    se "                defaults to false, for some reason"
-    se "  -h|-?|--help  prints this text"
-  }
-  dirarray=()
-  findargs=( "${dir}" )
-  if [ -d "${dir}" ]; then
-    if ! [[ "${depth}" == "-1"  ]]; then 
-      findargs+=( "-maxdepth" "${depth}" )
-    fi
-    if "${set}"; then
-      while IFS= read -r -d $'\0'; do
-        dirarray+=("$REPLY") # REPLY is the default
-      done < <(find "${findargs[@]}" -print0 2> /dev/null |sort -uz) 
-    else
-      while IFS= read -r -d $'\0'; do
-        dirarray+=("$REPLY") # REPLY is the default
-      done < <(find "${findargs[@]}" -print0 2> /dev/null)
-    fi
-  else
-    >&2 printf "please provide an existing directory as an arg"
-  fi
-}
+# Load OS Specific utils
+if [[ $(uname) == "Linux" ]]; then
+  source $D/linuxutil.sh
+elif [[ $(uname) == "Darwin" ]]; then
+  source $D/macutil.sh
+fi
 
-# though you can't pass arrays around as arguments (See above)
-# you can pass a named reference and address it on the other side
-function components_to_path() {
-  name=$1[@]
-  path_components=("${!name}")
-  IFS='/' read -r -a path_components <<< "${path_to_plist}"
-  printf -v path "/%s" "${path_components[@]%/}"
-  printf "%s" "${path#/}"
-}
-
-fsdate_fmt='%Y%m%d_%H%M%S'
-function fsdate() {
-  date "+${fsdate_fmt}"
-}
-
-most_recent() {
-  # find gives you back \0 entries by default, which would be fine, and
-  # non-printable characters are probably better for a lot of reasons, but
-  # not for debugging.  We default to these, but you may set whatever you
-  # like with args 2 and 3
-  local default_filename_separator="|"
-  local default_space_replaver="+"
-  local char_replaced_separated_files="${1:-}"
-  local filename_separator="${2:-$default_filename_separator}"
-  local space_replacer="${3:-$default_space_replacer}"
-  readarray -d"$filename_separator" files < <(echo "${char_replaced_separated_files}")
-  # https://stackoverflow.com/questions/5885934/bash-function-to-find-newest-file-matching-pattern
-  for file in "${files}"; do 
-    file="$(echo ${file}|tr "$space_replacer" ' '|sed 's/|//g')"
-    stat -f "%m%t%N" "${file}"
-  done | sort -rn | head -1 | cut -f2-
-}
+# for other files to avoid re-sourcing
+utilsh_in_env=true
