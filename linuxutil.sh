@@ -14,7 +14,7 @@ alias ssr="sudo systemctl restart"
 alias ssst="sudo systemctl status"
 alias sglobals="source $HOME/.globals"
 alias globals="vimcat $HOME/.globals"
-alias grep="grep -E -v \"$BLK\"|grep -E"
+alias mgrep="grep -E -v \"$BLK\"|grep -E"
 alias slhu="source $LH/util.sh"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 
@@ -111,6 +111,36 @@ function i() {
   source $D/installutil.sh
 }
 
+function wine32in64 {
+  unset WINEARCH && wine64 $@
+}
+
+function p32wine() {
+  WINEARCH=win32 WINEPREFIX="/home/mt/.local/share/wineprefixes/p32" WINE=/bin/wine64 /bin/wine64 $@
+}
+
+function p32winetricks() {
+  WINEPREFIX="/home/mt/.local/share/wineprefixes/p32" WINEARCH=win32 WINE=/bin/wine64 winetricks $@
+}
+
+pola32wine() {
+  WINEARCH=win32 WINEPREFIX="/home/mt/.PlayOnLinux/wineprefix/Audio32/" wine $@
+}
+
+pola32winetricks() {
+  WINEARCH=win32 WINEPREFIX="/home/mt/.PlayOnLinux/wineprefix/Audio32/" winetricks $@
+}
+
+function p64wine() {
+  export WINEPREFIX="/home/mt/.local/share/wineprefixes/p64"
+  export Winearch=win64
+  wine64 $@
+}
+
+function p64winetricks() {
+  WINEPREFIX="/home/mt/.local/share/wineprefixes/p64" WINEARCH=win64 winetricks $@
+}
+
 function k() {
   case "${1}" in 
     "-q")
@@ -147,6 +177,32 @@ export OLDSYS="$HOME/$TARGET/$BACKUP/Software/Linux/"
 export OLDHOME="$HOME/$TARGET/$BACKUP/Devices/personal/$(hostname)/$(whoami)_latest/$(whoami)"
 function b() {
   source $D/localback.sh
+}
+
+function thunar_add_send_to_dest() {
+  local new_dest="${1:-}"
+  if ! [ -f "${new_dest}" ]; then 
+    echo "${new_dest} doesn't seem to exist, would you like to create it?"
+    if confirm_yes "Y/n:"; then 
+      if not mkdir -p "${new_dest}"; then 
+        se "mkdir -p ${new_dest} failed with $?"
+        return 1
+      fi
+    else
+      se "exiting."
+      return 0
+    fi
+  fi 
+  local bn=$(basename "${new_dest}")
+  cat << EOF > "$D/.local/share/Thunar/sendto/${bn}.desktop"
+[Desktop Entry]
+Type=Application
+Version=0.1
+Enoding=UTF-8
+Exec=cp %F "${new_dest}"
+Icon=folder-documents
+Name="${bn}"
+EOF
 }
 
 export NO_ATI_BUS=1
