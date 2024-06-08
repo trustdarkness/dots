@@ -4,7 +4,7 @@ else
   echo "${FUNCNAME}"
 fi
 
-distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
+distro="$(lsb_release -d 2>&1|grep Desc|awk -F':' '{print$2}'|xargs)"
 
 if string_contains "arch" "$distro"; then
   alias sai="sudo pacman -Sy"
@@ -22,7 +22,7 @@ if string_contains "(fedora|nobara)" "$distro"; then
   alias sar="sudo dnf remove -y"
 fi
 
-if string_contains "(debian|ubuntu)" "$distro"; then
+if string_contains "(Debian|Ubuntu)" "$distro"; then
   alias di="sudo dpkg -i"
   alias sai="sudo aptitude install"
   alias sau="sudo aptitude update"
