@@ -3,10 +3,18 @@
 # see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
 # for examples
 
-# If not running interactively, don't do anything
+# If not running interactively, minimal setup
+if [ -z "${D}" ]; then
+  export D="$HOME/src/github/dots"
+fi
+source $D/util.sh
 case $- in
-    *i*) ;;
-      *) return;;
+    *i*) 
+      SBRC=true
+      ;;
+  *)
+  return
+  ;;
 esac
 
 # avoid prepending path if our changes are already there
@@ -77,7 +85,6 @@ function powerline_bootstrap() {
 }
 
 # Powerline
-
 function powerline_init() {
   powerline-daemon -q
   declare -x POWERLINE_BASH_CONTINUATION=1
@@ -105,6 +112,8 @@ function powerline_disable() {
   unset PROMPT
 }
 
+# we'll want to disable powerline-status when running bash with 
+# set -x, as it creates a lot of noise
 function setxdebug() {
   export DEBUG=true
   powerline_disable
@@ -124,8 +133,14 @@ function unsetxdebug() {
   powerline_init
 }
 
+if [ -z "${DEBUG}" ]; then 
+  if $(type -p powerline_init); then 
+    powerline_init
+  fi
+fi
+
 function setcompletion() {
-  if [[[ $(uname) == 'Darwin' ]]; then
+  if [[ $(uname) == 'Darwin' ]]; then
     bc2=$(brew list bash-completion@2)
     if [ $? -gt 0 ]; then
       >&2 printf "Modern bash and brew installed completion (@2) recommended\n"
@@ -165,14 +180,11 @@ function setcompletion() {
   fi
 }
 
-if [ -z "${DEBUG}" ]; then 
-  powerline_init
-fi
-
 # Add an "alert" alias for long running commands.  Use like so:
 #   sleep 10; alert
 alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
 
+# convenient regex to use with -v when grepping across many files
 export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
-export D="$HOME/src/github/dots"
-source $D/util.sh
+
+
