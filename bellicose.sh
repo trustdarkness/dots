@@ -18,35 +18,6 @@ TYPES="archive image app package plugin"
 # Never look for known types in dirs that look like the following:
 EXCLUDE_DIR='.app'
 
-# (not yet implemented)
-# User File Types: As a best effort, if enabled with adequate criteria, we 
-#                  will try to copy any other filetype we find along the way
-#                  to a location of your choice, based on a file extension or 
-#                  a regex.
-USER_EXTENSIONS=false
-USER_EXT_TYPE_DESC="user specified (by ext)"
-# Extensions are matched as the final characters in a file or directory name 
-# following a dot.  See below for examples.  They should be space separated in 
-# the string below.
-USER_EXTENSIONS=""
-
-USER_REGEXS=false
-USER_REGEX_TYPE_DESC="user specified (by regex)"
-# Regexes should be greppable and should be specified individually within 
-# single quotes, placed space separated (for more than one) in the string 
-# below.  If you only have one, you should still enclose in single quotes
-# so it looks like USER_REGEX="'my.*complicated\ regex'"
-USER_REGEX=""
-
-# (not yet implemented)
-# Documentation: As a best effort, we will look for documentation included
-#                within or beside any of the below types, and if enabled, 
-#                copy it to ~/Documents or wherever specified below.  This
-#                is disabled by default.
-DOCUMENTATION=false
-DOC_TYPE_DESC="documentation"
-DOC_EXTENSIONS="doc rtf pdf nfo txt"
-
 # Archives: Any compressed file that may need to be uncompressed to reveal
 #           additional files of types supported below (or of their own type).
 ARCHIVE_TYPE_DESC="archive"
@@ -63,6 +34,9 @@ DMG_EXTENSIONS="dmg img iso"
 PKG_TYPE_DESC="installer package"
 PKG_EXTENSIONS="pkg mpkg"
 
+# These are the base flags sent with every invocation of the MacOS 
+# installer util.  We add others later and instantiate with the package
+# location.
 function install_base_flags() {
   local pkg="${1:-}"
   export INSTALL_BASE_FLAGS=("-verboseR" "-pkg" "${pkg}" "-target")
