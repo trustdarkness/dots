@@ -185,3 +185,76 @@ most_recent_char_replaced_separated() {
     stat -f "%m%t%N" "${file}"
   done | sort -rn | head -1 | cut -f2-
 }
+
+################################ Friendly note: 
+# the following functions were written assuming you can pass arrays around
+# to functions in bash, which, SURPRISE! you can't.  You can pass by reference
+# and when I have time or the need for one of these silly things arises, I will
+# rewrite them to do so (and, hopefully, work like they say they do)
+
+function sort_array() {
+  to_sort="${1:-}"
+  SORTED=()
+  if gt "${#to_sort[@]}" 0; then 
+    readarray -t SORTED < <(printf '%s\0' "${to_sort[@]}"| sort -z|xargs -0n1)
+  fi
+  echo "${SORTED[@]}"
+}
+
+# https://unix.stackexchange.com/questions/104837/intersection-of-two-arrays-in-bash#104848
+function array_intersection() {
+  A="${1:-}"
+  B="${2:-}"
+  if gt ${#A[@]} 0; then
+    return 1
+  fi
+  if gt ${#B[@]} 0; then
+    return 1
+  fi
+  INTERSECTION=($(comm -12 <(printf '%s\n' "${A[@]}" | LC_ALL=C sort) <(printf '%s\n' "${B[@]}" | LC_ALL=C sort)))
+  echo "${INTERSECTION[@]}"
+}
+
+# given a sorted array of files with absolute paths, return an array of just basenames.
+# note: function will behave with unsorted arrays, but the goal would be to match back up
+# with the paths later, in which case, sorting is ideal and not performed by this function
+function strip_paths() {
+  A="${1:-}"
+  if gt ${#A[@]} 0; then
+    return 1
+  fi
+  STRIPPED=()
+  for a in "${A[@]}"; do
+    bn=$(basename "${a}")
+    STRIPPED+=( "${bn}" )
+  done
+  echo "${STRIPPED[@]}"
+}
+
+# given sorted arrays A and B of plugins with absolute paths, return an array of plugins of 
+# the same type (vst, vst3 or au) and the same plugin name with the absolute paths
+# as originally present in array A
+function same_plugin_same_type_diff_location() {
+  A="${1:-}"
+  B="${2:-}"
+  if gt ${#A[@]} 0; then
+    return 1
+  fi
+  if gt ${#B[@]} 0; then
+    return 1
+  fi
+  stip_paths "${A[@]}"
+  baseA="${STRIPPED[@]}"
+  strip_paths "${B[@}]}"
+  baseB="${STRIPPED[@]}"
+  array_intersection "${baseA[@]}" "${baseB}"
+  SAMESAMEDIFF=()
+  for absplugin in "${A[@]}"; do
+    for plugin in "${INTERSECTION[@]}"; do
+      if [[ "${absplugin}" == "*${plugin}" ]]; then
+        SAMESAMEDIFF+=( "${absplugin}" )
+      fi
+    done
+  done
+  echo "${SAMESAMEDIFF[@]}"
+}
