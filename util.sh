@@ -1,7 +1,24 @@
 #!env bash
+# This file contains generally os-agnostic (POSIX-ish, though also WSL)
+# functions and utilities that shouldn't be too annoying to keep handy
+# in the env of an interactive sessionn, but also as a sort of personal 
+# stdlib for inclusion in scripts.  If a script is something I think 
+# others might want to check out and use it, I try to make it self 
+# contained, as things in this file do reference specific bits of my setup
+# that others won't have, however, I've tried to make it relatively 
+# safe for that use case as well YMMV and there shall be no expectations,
+# warranty, liability, etc, should you break something.
+# 
+# github.com/trustdarkness
+# GPLv2 if it should matter
+# Most things should work on old versions of bash, but really bash 4.2+ reqd
+# 
+# OS detection and loading of os-specific utils is toward the botton, 
+# line 170+ish at the time of writing. 
 alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
 alias brc="vimcat ~/.bashrc"
 alias sbrc="source $HOME/.bashrc"
+alias vsc="vim $HOME/.ssh/config"
 alias pau="ps auwx"
 alias paug="ps auwx|grep "
 alias paugi="ps awux|grep -i "
@@ -23,9 +40,9 @@ function debug() {
 
 function se() {
   if [ $# -eq 2 ]; then 
-    >&2 printf "${1:-}\n" "${@:2:-}"
+    >2 printf "${1:-}\n" "${@:2:-}"
   else
-    >&2 printf "${1:-}\n"
+    >2 printf "${1:-}\n"
   fi
 }
 
@@ -45,6 +62,19 @@ function singlequote() {
 
 function shellescape() {
   printf "%q\n" "$@"
+}
+
+function update_ssh_ip() {
+  host="${1:-}"
+  octet="${2:-}"
+  out=$(grep -A2 "$host" $HOME/.ssh/config)
+  local IFS=$'\n'
+  for line in out; do
+    line=$(echo $line |xargs)
+    ip=$(grep "hostname" <<< "$line" | awk '{print$2}')
+  done
+  printf -v sedexpr "s/%s/%s/g" "$ip" "10.1.1.$octet"
+  sed -i "$sedexpr" "$HOME/.ssh/config"
 }
 
 function hn () {
@@ -217,6 +247,24 @@ function lt() {
   fi
 }
 
+function boolean_or {
+  for b in "$@"; do
+    se "testing ${b}"
+    if [ -n "${b}" ]; then 
+      if is_int ${b}; then
+        if [ ${b} -eq 0 ]; then
+          return 0
+        fi
+      else
+        if ${b}; then
+          return 0
+        fi
+      fi
+    fi
+  done
+  return 1
+}
+
 # you can't pass arrays around as args in bash, but if you do 
 # a global declare you can copy it out of the env
 declare -ga dirarray
@@ -307,3 +355,4 @@ most_recent() {
     stat -f "%m%t%N" "${file}"
   done | sort -rn | head -1 | cut -f2-
 }
+ 
