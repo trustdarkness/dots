@@ -14,7 +14,7 @@ alias ssr="sudo systemctl restart"
 alias ssst="sudo systemctl status"
 alias sglobals="source $HOME/.globals"
 alias globals="vimcat $HOME/.globals"
-alias grep="grep -E -v \"$BLK\"|grep -E"
+alias mgrep="grep -E -v \"$BLK\"|grep -E"
 alias slhu="source $LH/util.sh"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 
@@ -24,20 +24,30 @@ alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 # and update this comment or fix it.
 source $HOME/.globals
 source $LH/util.sh
+# TODO: fix conditional starters to fit with the rest of the 
+# utilities naming conventions
 source $MTEBENV/.conditional_starters
 
+# Adds a real shell to www-data's account in /etc/password 
+# for the length of a sudo session, to assist in troubleshooting
+# when you ctrl-d sudo, www-data goes back to /usr/bin/nologin
 function wwwify () {
   sudo sed -i.bak '/www-data/ s#/usr/sbin/nologin#/bin/bash#' /etc/passwd;
   sudo -i -u www-data $@;
   sudo sed -i.bak '/www-data/ s#/bin/bash#/usr/sbin/nologin#' /etc/passwd;
 }
 
+# similar to wwwify, but for mastadon, a real shell lasting  
+# for the length of a sudo session, to assist in troubleshooting
+# when you ctrl-d sudo, mastadon goes back to /usr/bin/nologin
+# assuming i ever set it up
 function mastodonify () {
   sudo sed -i.bak '/mastodon/ s#/usr/sbin/nologin#/bin/bash#' /etc/passwd;
   sudo -i -u mastodon $@;
   sudo sed -i.bak '/mastodon/ s#/bin/bash#/usr/sbin/nologin#' /etc/passwd;
 }
 
+# tries to kill major gui processes to force X11 to restart
 function guikiller() {
   keywords="xfce kde plasma kwin"
   for alive in $keywords; do 
@@ -45,22 +55,39 @@ function guikiller() {
   done
 }
 
+# yes, i know, i know, 2.7?  but sometimes you need it
 function use27 {
-  export PYTHONPATH=/usr/local/lib/python2.7/dist-packages:/usr/deprecated/lib/python2.7/
-  export PATH=/usr/local/deprecated/bin:$PATH
+  export PYTHONPATH="/usr/local/lib/python2.7/dist-packages:/usr/deprecated/lib/python2.7/"
+  if ! [[ "${PATH}" == *"/usr/local/deprecated/bin"* ]]; then
+    export PATH="/usr/local/deprecated/bin:$PATH"
+  fi
   alias python=/usr/deprecated/bin/python2.7
 }
+
+# makes the local env use python 3.10
 function use310 {
-  export PYTHONPATH=/usr/deprecated/lib/python3.10
-  export PATH=/usr/local/deprecated/bin:$PATH
-  alias python=/usr/deprecated/bin/python3.10
-  alias python3=/usr/deprecated/bin/python3.10
+  if [ -d "/usr/deprecated/" ]; then 
+    if [ -f "/usr/deprecated/bin/python3.10" ]; then 
+      export PYTHONPATH=/usr/deprecated/lib/python3.10
+      export PATH=/usr/local/deprecated/bin:$PATH
+      alias python=/usr/deprecated/bin/python3.10
+      alias python3=/usr/deprecated/bin/python3.10
+    else
+      se "no python3.10 in deprecated"
+    fi
+  else
+    se "no /usr/deprecated"
+  fi
 }
 
-function sublist-xdg-data-dirs() {
+# Shows you the contents of all the xdg data-dirs
+function sublist_xdg_data_dirs() {
   IFS=$':'; for dir in $XDG_DATA_DIRS; do ls $dir; done
 }
 
+# if firewalld is installed, give us some helper funcs 
+# for it.  if this gets any longer, it should move to its
+# own, loaded on demand, helper library
 fwd=$(type -p firewall-cmd)
 if [ -n "$FIREWALLD" ]; then
   function sfwp () {
@@ -91,6 +118,7 @@ if [ -n "$FIREWALLD" ]; then
   }
 fi
 
+# returns the best guess for the running desktop session
 function whodesktop() {
   if [ -n "${DESKTOP_SESSION}" ]; then 
     echo "${DESKTOP_SESSION}"
@@ -111,6 +139,40 @@ function i() {
   source $D/installutil.sh
 }
 
+function wine32in64 {
+  unset WINEARCH && wine64 $@
+}
+
+function p32wine() {
+  WINEARCH=win32 WINEPREFIX="/home/mt/.local/share/wineprefixes/p32" WINE=/bin/wine64 /bin/wine64 $@
+}
+
+function p32winetricks() {
+  WINEPREFIX="/home/mt/.local/share/wineprefixes/p32" WINEARCH=win32 WINE=/bin/wine64 winetricks $@
+}
+
+pola32wine() {
+  WINEARCH=win32 WINEPREFIX="/home/mt/.PlayOnLinux/wineprefix/Audio32/" wine $@
+}
+
+pola32winetricks() {
+  WINEARCH=win32 WINEPREFIX="/home/mt/.PlayOnLinux/wineprefix/Audio32/" winetricks $@
+}
+
+function p64wine() {
+  export WINEPREFIX="/home/mt/.local/share/wineprefixes/p64"
+  export Winearch=win64
+  wine64 $@
+}
+
+function p64winetricks() {
+  WINEPREFIX="/home/mt/.local/share/wineprefixes/p64" WINEARCH=win64 winetricks $@
+}
+
+# some useful aliases for kde plasma
+alias skutil="source $D/kutil.sh"
+alias vkutil="vim $D/kutil.sh && skutil"
+
 function k() {
   case "${1}" in 
     "-q")
@@ -124,32 +186,80 @@ function k() {
       ;;
 
   esac
-  source $D/kutil.sh
+  skutil
 }
 
-CARGO=$(which cargo);
+# if we think this is plasma, load the kutil
+if [[ $(whodesktop) == "plasma" ]]; then 
+  k
+fi
+
+# load cargo
+CARGO=$(type -p cargo);
 if [ -n "$CARGO" ]; then
   source "$HOME/.cargo/env"
 fi
 
-PNPM=$(which pnpm);
+# load npm
+PNPM=$(type -p pnpm);
 if [ -n "$PNPM" ]; then
   # pnpm
   export PNPM_HOME="/home/mt/.local/share/pnpm"
   case ":$PATH:" in
     *":$PNPM_HOME:"*) ;;
-    *) export PATH="$PNPM_HOME:$PATH" ;;
+    *)
+      if ! [[ "${PATH}" == *"$PNPM_HOME"* ]]; then 
+        export PATH="$PNPM_HOME:$PATH" 
+      fi
+      ;;
   esac
   # pnpm end
 fi
 
-export OLDSYS="$HOME/$TARGET/$BACKUP/Software/Linux/"
-export OLDHOME="$HOME/$TARGET/$BACKUP/Devices/personal/$(hostname)/$(whoami)_latest/$(whoami)"
+# setup the env for it and load localback
 function b() {
+  export OLDSYS="$HOME/$TARGET/$BACKUP/Software/Linux/"
+  export OLDHOME="$HOME/$TARGET/$BACKUP/Devices/personal/$(hostname)/$(whoami)_latest/$(whoami)"
   source $D/localback.sh
 }
 
+function thunar_add_send_to_dest() {
+  local new_dest="${1:-}"
+  if ! [ -f "${new_dest}" ]; then 
+    echo "${new_dest} doesn't seem to exist, would you like to create it?"
+    if confirm_yes "Y/n:"; then 
+      if not mkdir -p "${new_dest}"; then 
+        se "mkdir -p ${new_dest} failed with $?"
+        return 1
+      fi
+    else
+      se "exiting."
+      return 0
+    fi
+  fi 
+  local bn=$(basename "${new_dest}")
+  cat << EOF > "$D/.local/share/Thunar/sendto/${bn}.desktop"
+[Desktop Entry]
+Type=Application
+Version=0.1
+Enoding=UTF-8
+Exec=cp %F "${new_dest}"
+Icon=folder-documents
+Name="${bn}"
+EOF
+}
+
+# disable the accessibility bus... there are some other weird
+# things i did to make this stick.  maybe ill remember to document
+# them the next time i reimage a box :(
 export NO_ATI_BUS=1
-export PYTHONPATH=/usr/lib/python3.11:/usr/lib/python3/dist-packages
+
+if [[ "${PYTHONPATH}" != "*.local/sourced*" ]]; then
+  export PYTHONPATH="$PYTHONPATH:/usr/lib/python3.11:/usr/lib/python3/dist-packages:$HOME/.local/sourced"
+fi
 export BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
-export PATH=$HOME/bin:$HOME/Applications:$HOME/src/github/networkmanager-dmenu:$HOME/src/google/flutter/bin:$HOME/src/github/eww/target/release:/usr/sbin:/sbin:$PATH
+if ! [[ "${PATH}" == *"$HOME/Applications"* ]]; then 
+  PATH="$HOME/bin:$HOME/Applications:$HOME/src/google/flutter/bin:"
+  PATH+="$HOME/src/github/eww/target/release:/usr/sbin:/sbin:$PATH"
+  export PATH
+fi

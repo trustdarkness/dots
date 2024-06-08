@@ -52,6 +52,12 @@ function confirm_yes {
 }
 export -f confirm_yes
 
+function confirm_no {
+  local prompt="${*:-Are you sure} [Y/n]? "
+  get_yes_keypress "$prompt" 1
+}
+export -f confirm_no
+
 function get_timed_keypress {
   local IFS=
   >/dev/tty printf '%s' "$*"
@@ -78,6 +84,11 @@ function get_timed_yes {
 function timed_confirm_yes {
   local prompt="${*:-Are you sure} [Y/n]? "
   get_timed_yes "$prompt" 0
+}
+
+function timed_confirm_no {
+  local prompt="${*:-Are you sure} [Y/n]? "
+  get_timed_yes "$prompt" 1
 }
 
 # See internal help

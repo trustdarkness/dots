@@ -3,9 +3,24 @@
 if [ -f "/usr/local/bin/bash" ]; then 
   /usr/local/bin/bash
 fi
-alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
-alias brc="vimcat ~/.bashrc"
-alias sbrc="source $HOME/.bashrc"
+
+# This file contains generally os-agnostic (POSIX-ish, though also WSL)
+# functions and utilities that shouldn't be too annoying to keep handy
+# in the env of an interactive sessionn, but also as a sort of personal 
+# stdlib for inclusion in scripts.  If a script is something I think 
+# others might want to check out and use it, I try to make it self 
+# contained, as things in this file do reference specific bits of my setup
+# that others won't have, however, I've tried to make it relatively 
+# safe for that use case as well YMMV and there shall be no expectations,
+# warranty, liability, etc, should you break something.
+# 
+# github.com/trustdarkness
+# GPLv2 if it should matter
+# Most things should work on old versions of bash, but really bash 4.2+ reqd
+# 
+# OS detection and loading of os-specific utils is toward the botton, 
+# line 170+ish at the time of writing. 
+alias vsc="vim $HOME/.ssh/config"
 alias pau="ps auwx"
 alias paug="ps auwx|grep "
 alias paugi="ps awux|grep -i "
@@ -15,7 +30,9 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
-source $D/.user_prompts
+if ! is_declared "confirm_yes"; then
+  source "$D/user_prompts.sh"
+fi
 
 DEBUG=true
 
@@ -48,15 +65,111 @@ function cleanup_namespace() {
   done
 }
 
-# a convenient little wrapper to assist in printing to stderr
-function se() {
-  if [ -n "${DEBUG}" ] && ${DEBUG}; then
+# for things you only want there when the above DEBUG flag is set
+function debug() {
+  if $DEBUG; then
     if [ $# -eq 2 ]; then 
-      >&2 printf "${1}\n" "${@:2}"
+      >2 printf "${1:-}\n" "${@:2:-}"
     else
-      >&2 printf "${1}\n"
+      >2 printf "${1:-}\n"
     fi
   fi
+}
+
+# A slightly more convenient and less tedious way to print
+# to stderr, normally declared in util.sh, sourced from .bashrc
+if ! is_declared "se"; then
+  # Args: 
+  #  Anything it recieves gets echoed back.  If theres
+  #  no newline in the input, it is added. if there are substitutions
+  #  for printf in $1, then $1 is treated as format string and 
+  #  $:2 are treated as substitutions
+  # No explicit return code 
+  function se() {
+    sub=$(grep '%' <<< "$@")
+    subret=$?
+    out=$(grep '\n' <<< "$@")
+    outret=$?
+    if [ $subret -eq 0 ]; then
+      >2 printf "${1:-}" $:2
+    else 
+      >2 printf "$@"
+    fi
+    if [ $outret -eq 0 ]; then 
+      >2 printf '\n'
+    fi
+  }
+fi
+
+function term_bootstrap() {
+  termschemes_bootstrap
+  termfonts_bootstrap
+}
+
+# the following two functions are the start of a currently only semi-usable
+# parser for some generic xml-like data based largely on
+# https://stackoverflow.com/questions/893585/how-to-parse-xml-in-bash
+# and ultimately intended to make adding UI elements to qml frontend
+# specs (impulse was to bootstrap my desired config for konsole on a fresh)
+# install... the config in question is found at 
+# $HOME/.local/share/kxmlgui5/konsole/konsoleui.rc
+function starml_read_dom () {
+  local IFS=\>
+  read -d \< ENTITY CONTENT
+  local RET=$?
+  TAG_NAME=${ENTITY%% *}
+  ATTRIBUTES=${ENTITY#* }
+  return $RET
+}
+
+function xmllike() {
+  set -x
+  file="${1:-}"
+  lfunction="${2:-get_tags}"
+
+  get_tags() {
+    local name="${1:-}"
+    if [ -n "${name}" ]; then
+      if [[ $TAG_NAME == "${name}" ]]; then
+        se "exposing ${ATTRIBUTES} of tag ${name}" 
+        eval local ${ATTRIBUTES}
+      fi
+    fi
+    if ${all}; then 
+      echo ${TAG_NAME}
+    fi
+  }
+  while starml_read_dom; do ${lfunction}; done < "${file}"
+ set +x
+}
+
+# my basic edits to import-schemes.sh below will detect and add color
+# schemes for xfce4-terminal and konsole.  At the bare minimum, I plan
+# to add terminator in addition to iTerm which is what the script
+# was originally written for, so this function remains generally OS 
+# agnostic.
+function termschemes_bootstrap() {
+  if ! [ -d "$GH/Terminal-Color-Schemes" ]; then 
+    ghc "git@github.com:trustdarkness/Terminal-Color-Schemes.git"
+  fi
+  cd "$GH/Terminal-Color-Schemes"
+  tools/import-schemes.sh
+  cd -
+}
+
+# in the spirit of consistency, we'll keep these together
+function termfonts_bootstrap() { 
+  if ! $(fc-list |grep Hack-Regular); then 
+    if ! $(i); then  
+      se "no installutils.sh" 
+      return 1 
+    fi 
+    if ! $(sai fonts-hack); then  
+      se "could not install fontshack with ${sai}"
+      return 1
+    fi
+  fi
+  return 0
 }
 alias debug="se"
 
@@ -68,9 +181,6 @@ function string_contains() {
 }
 alias stringContains="string_contains"
 
-# most of the time, you don't want these, you just want to let printf
-# do its thing, but every now and then, even if its just to prove to 
-# yourself that it's still going to wordsplit
 function shellquote() {
   if [[ "$1" =~ ".*" ]]; then 
     echo $1
@@ -167,6 +277,17 @@ function is_older_than_1_wk() {
     return 0
   fi
   return 1
+function update_ssh_ip() {
+  host="${1:-}"
+  octet="${2:-}"
+  out=$(grep -A2 "$host" $HOME/.ssh/config)
+  local IFS=$'\n'
+  for line in out; do
+    line=$(echo $line |xargs)
+    ip=$(grep "hostname" <<< "$line" | awk '{print$2}')
+  done
+  printf -v sedexpr "s/%s/%s/g" "$ip" "10.1.1.$octet"
+  sed -i "$sedexpr" "$HOME/.ssh/config"
 }
 
 # this only kinda sorta works IIRC
@@ -175,7 +296,7 @@ function is_older_than_1_wk() {
 # echo hostname or ip from host alias to the console no explicit return
 function hn () {
   if [ $# -eq 0 ]; then 
-    >&2 printf "give me a list of hosts to get ips for"
+    >2 printf "give me a list of hosts to get ips for"
     return 1;
   fi
 
@@ -216,9 +337,9 @@ function symlink_child_dirs () {
     fi
   fi
   if [ $success -eq 257 ]; then
-    >&2 printf "Specify a target parent directory whose children\n"
-    >&2 printf "should be symlinked into the desitination directory:\n"
-    >&2 printf "\$ symlink_child_dirs [target] [destination]"
+    >2 printf "Specify a target parent directory whose children\n"
+    >2 printf "should be symlinked into the desitination directory:\n"
+    >2 printf "\$ symlink_child_dirs [target] [destination]"
   fi
 }
 
@@ -354,6 +475,47 @@ if [[ $(uname) == "Linux" ]]; then
 elif [[ $(uname) == "Darwin" ]]; then
   source $D/macutil.sh
 fi
+
+function boolean_or {
+  for b in "$@"; do
+    se "testing ${b}"
+    if [ -n "${b}" ]; then 
+      if is_int ${b}; then
+        if [ ${b} -eq 0 ]; then
+          return 0
+        fi
+      else
+        if ${b}; then
+          return 0
+        fi
+      fi
+    fi
+  done
+  return 1
+}
+
+if [[ "$(uname)" == "Linux" ]]; then
+  source $D/linuxutil.sh
+  alias sosutil="source $D/linuxutil.sh"
+  alias vosutil="vim $D/linuxutil.sh && sosutil"
+elif [[ "$(uname)" == "Darwin" ]]; then
+  source $D/macutil.sh
+  alias sosutil="source $D/macutil.sh"
+  alias vosutil="vim $D/macutil.sh && vosutil"
+fi
+
+alias sall="sbrc; sglobals; sutil; sosutil"
+
+# initialized the helper library for the package installer
+# for whatever the detected os environment is
+function i() {
+  source $D/installutil.sh
+}
+
+# for the most common ones, since i got used to having them
+alias sai="i; sai"
+alias sas="i; sas"
+alias sauu="i; sauu"
 
 # for other files to avoid re-sourcing
 utilsh_in_env=true
