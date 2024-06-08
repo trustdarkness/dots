@@ -1,4 +1,8 @@
-#!env bash
+#!/bin.bash
+# for portability we need the above, for the mac os, we need the below
+if [ -f "/usr/local/bin/bash" ]; then 
+  /usr/local/bin/bash
+fi
 alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
 alias brc="vimcat ~/.bashrc"
 alias sbrc="source $HOME/.bashrc"
@@ -74,26 +78,34 @@ function shellquote() {
   printf '"%s"\n' "$@"
 }
 
+# for a multiline string, returns a string with doublequotes surrounding
+# each line of the given string as a part of the string
 function shellquotes() {
   for line in ${1:-}; do 
     shellquote "${line}"
   done
 }
 
+# returns given args as strings with single quotes surrounding
 function singlequote() {
   printf "'%s'\n" "$@"
 }
 
+# for a multiline string, returns a string with singlequotes surrounding
+# each line of the given string as a part of the new string
 function singlequotes() {
   for line in ${1:-}; do 
     singlequote "${line}"
   done
 }
 
+# shell escapes terms given as arguments (%q)
 function shellescape() {
   printf "%q\n" "$@"
 }
 
+# for a multiline string, returns a string with each line of the new string
+# being a shell quoted version of the original (%q)
 function shellescapes() {
   for line in ${1:-}; do 
     shellescape "${line}"
@@ -105,6 +117,7 @@ function system_arch() {
   uname -m
 }
 
+# Appends Arg1 to the shell's PATH and exports
 function path_append() {
   to_add="${1:}"
   if [ -f "${to_add}" ]; then 
@@ -114,6 +127,7 @@ function path_append() {
   fi
 }
 
+# Prepends Arg1 to the shell's PATH and exports
 function path_prepend() {
   to_add="${1:}"
   if [ -f "${to_add}" ]; then 
