@@ -105,12 +105,12 @@ if ! is_declared "se"; then
     out=$(grep '\n' <<< "$@")
     outret=$?
     if [ $subret -eq 0 ]; then
-      >2 printf "${1:-}" $:2
+      >&2 printf "${1:-}" $:2
     else 
-      >2 printf "$@"
+      >&2 printf "$@"
     fi
     if [ $outret -eq 0 ]; then 
-      >2 printf '\n'
+      >&2 printf '\n'
     fi
   }
 fi

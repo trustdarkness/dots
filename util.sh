@@ -34,7 +34,7 @@ if ! $(type -pf "confirm_yes" > /dev/null); then
   source "$D/user_prompts.sh"
 fi
 
-DEBUG=true
+#DEBUG=true
 
 # preferred format strings for date for storing on the filesystem
 FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
@@ -69,9 +69,9 @@ function cleanup_namespace() {
 function debug() {
   if $DEBUG; then
     if [ $# -eq 2 ]; then 
-      >2 printf "${1:-}\n" "${@:2:-}"
+      >&2 printf "${1:-}\n" "${@:2:-}"
     else
-      >2 printf "${1:-}\n"
+      >&2 printf "${1:-}\n"
     fi
   fi
 }
@@ -91,12 +91,12 @@ if ! $(type -pf "se" > /dev/null); then
     out=$(grep '\n' <<< "$@")
     outret=$?
     if [ $subret -eq 0 ]; then
-      >2 printf "${1:-}" $:2
+      >&2 printf "${1:-}" $:2
     else 
-      >2 printf "$@"
+      >&2 printf "$@"
     fi
     if [ $outret -eq 0 ]; then 
-      >2 printf '\n'
+      >&2 printf '\n'
     fi
   }
 fi
@@ -298,7 +298,7 @@ function update_ssh_ip() {
 # echo hostname or ip from host alias to the console no explicit return
 function hn () {
   if [ $# -eq 0 ]; then 
-    >2 printf "give me a list of hosts to get ips for"
+    >&2 printf "give me a list of hosts to get ips for"
     return 1;
   fi
 
@@ -339,9 +339,9 @@ function symlink_child_dirs () {
     fi
   fi
   if [ $success -eq 257 ]; then
-    >2 printf "Specify a target parent directory whose children\n"
-    >2 printf "should be symlinked into the desitination directory:\n"
-    >2 printf "\$ symlink_child_dirs [target] [destination]"
+    >&2 printf "Specify a target parent directory whose children\n"
+    >&2 printf "should be symlinked into the desitination directory:\n"
+    >&2 printf "\$ symlink_child_dirs [target] [destination]"
   fi
 }
 
