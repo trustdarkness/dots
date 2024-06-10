@@ -1,6 +1,6 @@
-#!/bin.bash
+#!/bin/bash
 # for portability we need the above, for the mac os, we need the below
-if [ -f "/usr/local/bin/bash" ]; then 
+if [ -f "/usr/local/bin/bash" ] && [[ $(uname) == "Darwin" ]] && [[ ${BASH_VERSINFO[0]} < 5 ]]; then 
   /usr/local/bin/bash
 fi
 
@@ -30,7 +30,7 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
-if ! is_declared "confirm_yes"; then
+if ! $(type -pf "confirm_yes" > /dev/null); then
   source "$D/user_prompts.sh"
 fi
 
@@ -78,7 +78,7 @@ function debug() {
 
 # A slightly more convenient and less tedious way to print
 # to stderr, normally declared in util.sh, sourced from .bashrc
-if ! is_declared "se"; then
+if ! $(type -pf "se" > /dev/null); then
   # Args: 
   #  Anything it recieves gets echoed back.  If theres
   #  no newline in the input, it is added. if there are substitutions
@@ -277,6 +277,8 @@ function is_older_than_1_wk() {
     return 0
   fi
   return 1
+}
+
 function update_ssh_ip() {
   host="${1:-}"
   octet="${2:-}"
@@ -352,7 +354,7 @@ function ghc () {
   if [ $# -eq 0 ]; then
     url="$(xclip -out)"
     if [ $? -eq 0 ]; then
-      "No url given in cmd or on clipboard."
+      se "No url given in cmd or on clipboard."
       return 1
     fi
   else
@@ -408,19 +410,6 @@ function is_first_floating_number_bigger () {
     __FUNCTION_RETURN="${result}"
 }
 
-# Assume all arguments (count unknown) are path fragments that may be a single
-# word or phrase (which we'll treat as atomic, as though its an actual space in
-# the file or folder name).  Separators are "/" and only "/".  Value is returned
-# as a single quoted path string.  
-# TODO: add options to specify separator
-#       add flag for escaped instead of quoted return
-function assemble_bash_safe_path() {
-  components=()
-  for arg in "$@"; do 
-    IFS='/' read -r -a components <<< "${arg}"
-  done
-  printf "'/%s'" "${components[@]%/}"
-}
 
 # To help common bash gotchas with [ -eq ], etc, this function simply
 # takes something we hope to be an int (arg1) and returns 0 if it is
@@ -468,13 +457,6 @@ function lt() {
     return 1
   fi
 }
-
-# Load OS Specific utils
-if [[ $(uname) == "Linux" ]]; then
-  source $D/linuxutil.sh
-elif [[ $(uname) == "Darwin" ]]; then
-  source $D/macutil.sh
-fi
 
 function boolean_or {
   for b in "$@"; do
