@@ -17,9 +17,6 @@ case $- in
   return
   ;;
 esac
-# if set to true, some functions and sourced code will print additional
-# debugging output to stderr and may at times invoke set -x
-DEBUG=true
 
 if $DEBUG; then 
   >&2 printf "sourced at ${BASH_SOURCE[0]}\n"

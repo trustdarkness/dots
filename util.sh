@@ -30,7 +30,7 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
-if ! $(type -pf "confirm_yes" > /dev/null); then
+if ! $(declare -pf "confirm_yes" > /dev/null); then
   source "$D/user_prompts.sh"
 fi
 
