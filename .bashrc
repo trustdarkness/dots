@@ -1,14 +1,14 @@
-#!/usr/local/bin/bash
-# ~/.bashrc: executed by bash(1) for non-login shells.
-# see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
-# for examples
+#!/bin/bash
+# for portability we need the above, for the mac os, we need the below
+if [ -f "/usr/local/bin/bash" ] && [[ $(uname) == "Darwin" ]] && [[ ${BASH_VERSINFO[0]} < 5 ]]; then 
+  /usr/local/bin/bash
+fi
 
-<<<<<<< HEAD
 # If not running interactively, minimal setup
 if [ -z "${D}" ]; then
   export D="$HOME/src/github/dots"
 fi
-source $D/util.sh
+#source $D/util.sh
 case $- in
     *i*) 
       SBRC=true
@@ -17,11 +17,9 @@ case $- in
   return
   ;;
 esac
-=======
 # if set to true, some functions and sourced code will print additional
 # debugging output to stderr and may at times invoke set -x
 DEBUG=true
->>>>>>> 765f6ab1059a02dc28c7cbdf93ba5847aaddc71c
 
 if $DEBUG; then 
   >2 printf "sourced at ${BASH_SOURCE[0]}\n"
@@ -275,16 +273,12 @@ function setcompletion() {
 # Add an "alert" alias for long running commands.  Use like so:
 #   sleep 10; alert
 alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
-<<<<<<< HEAD
 
-# convenient regex to use with -v when grepping across many files
-=======
 alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
 alias brc="vimcat ~/.bashrc"
 alias sbrc="source $HOME/.bashrc"
 alias sutil="source $D/util.sh"
 alias vutil="vim $D/util.sh && sutil"
->>>>>>> 765f6ab1059a02dc28c7cbdf93ba5847aaddc71c
+
+# convenient regex to use with -v when grepping across many files
 export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
-
-
