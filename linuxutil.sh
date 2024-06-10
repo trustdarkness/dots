@@ -135,10 +135,6 @@ function whodesktop() {
   fi
 }
 
-function i() {
-  source $D/installutil.sh
-}
-
 function wine32in64 {
   unset WINEARCH && wine64 $@
 }
