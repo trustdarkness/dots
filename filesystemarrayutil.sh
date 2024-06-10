@@ -1,6 +1,6 @@
-#!/bin.bash
+#!/bin/bash
 # for portability we need the above, for the mac os, we need the below
-if [ -f "/usr/local/bin/bash" ]; then 
+if [ -f "/usr/local/bin/bash" ] && [[ $(uname) == "Darwin" ]] && [[ ${BASH_VERSINFO[0]} < 5 ]]; then 
   /usr/local/bin/bash
 fi
 
@@ -119,6 +119,21 @@ function find_array() {
       findarray+=("$REPLY") # REPLY is the default
     done < <(find "${findargs[@]}" -print0 2> /dev/null)
   fi
+}
+
+
+# Assume all arguments (count unknown) are path fragments that may be a single
+# word or phrase (which we'll treat as atomic, as though its an actual space in
+# the file or folder name).  Separators are "/" and only "/".  Value is returned
+# as a single quoted path string.  
+# TODO: add options to specify separator
+#       add flag for escaped instead of quoted return
+function assemble_bash_safe_path() {
+  components=()
+  for arg in "$@"; do 
+    IFS='/' read -r -a components <<< "${arg}"
+  done
+  printf "'/%s'" "${components[@]%/}"
 }
 
 # though you can't pass arrays around as arguments (See above)
@@ -257,4 +272,13 @@ function same_plugin_same_type_diff_location() {
     done
   done
   echo "${SAMESAMEDIFF[@]}"
+}
+
+function fix_filenames() {
+  find . -type f -print0 | while IFS= read -rd '' f; do
+    mv "$f" "${f//$'\n'}"
+  done
+  find . -type f -print0 | while IFS= read -rd '' f; do
+    mv "$f" "${f//[^[:print:]]}"
+  done
 }
