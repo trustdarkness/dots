@@ -17,9 +17,6 @@ case $- in
   return
   ;;
 esac
-# if set to true, some functions and sourced code will print additional
-# debugging output to stderr and may at times invoke set -x
-DEBUG=true
 
 if $DEBUG; then 
   >&2 printf "sourced at ${BASH_SOURCE[0]}\n"
@@ -27,7 +24,6 @@ fi
 REALBASHRC=$(readlink ${BASH_SOURCE[0]})
 D=$(dirname $REALBASHRC)
 source "$D/existence.sh"
-#source "$D/user_prompts.sh"
 
 # see requires_modern_bash below
 NO_BASH_VERSION_WARNING=false
@@ -132,11 +128,8 @@ alias la='ls -A'
 alias l='ls -CF'
 
 # theres not really an easy way to use this in a substitution to solve the
-# problem it's intended to solve, so it's mostly here as a reminder
-if ! exists PRINTFDASH; then
-  PRINTFDASH='\x2D'
-  readonly PRINTFDASH
-fi
+# problem it's intended to solve, so it's mostly here as a reminder.
+PRINTFDASH='\x2D'
 
 # breadcrumbs... for (relatively?) tearfree cross platform setup: 
 function powerline_bootstrap() {
@@ -214,8 +207,8 @@ function unsetxdebug() {
   powerline_init
 }
 
-if [ -z "${DEBUG}" ]; then 
-  if $(type -p powerline_init); then 
+if [ -z "${DEBUG}" ] || ! $DEBUG; then 
+  if declare -pf powerline_init > /dev/null; then 
     powerline_init
   fi
 fi

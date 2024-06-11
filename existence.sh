@@ -1,4 +1,4 @@
-#!env bash
+#!/usr/bin/env bash
 
 # Comopsable, predictable bash version info, since we use >= bash 4.2
 # features quite often and certain prominent POSIX OSs :cough: MacOS
@@ -145,8 +145,22 @@ function exists() {
       return 1
     fi
   fi
-  se "Existence undefined.  Being is nothingness."
   return 1
+}
+
+# excessive use of negations makes code messy and readability 
+# more difficult. hence the convenience wrapper.
+# Args: name to check if exists in the namespace
+# returns 0 if name is undefined or not findable in the PATH, shell, or env
+# 1 otherwise
+function undefined() {
+  local nameerror
+  printf -v nameerror "$N" 1
+  local name="${1?$nameerror}"
+  if exists "${name}"; then 
+    return 1
+  fi
+  return 0
 }
 
 # Use grep to check how a name was declared using a provided regex

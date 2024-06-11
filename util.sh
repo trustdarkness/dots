@@ -30,11 +30,13 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
-if ! $(type -pf "confirm_yes" > /dev/null); then
-  source "$D/user_prompts.sh"
+if ! declare -pF "exists"; then
+  >&2 printf "env not as expected. exists does not exist."
 fi
 
-#DEBUG=true
+if undefined "confirm_yes"; then
+  source "$D/user_prompts.sh"
+fi
 
 # preferred format strings for date for storing on the filesystem
 FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
@@ -78,7 +80,7 @@ function debug() {
 
 # A slightly more convenient and less tedious way to print
 # to stderr, normally declared in util.sh, sourced from .bashrc
-if ! $(type -pf "se" > /dev/null); then
+if undefined "se"; then
   # Args: 
   #  Anything it recieves gets echoed back.  If theres
   #  no newline in the input, it is added. if there are substitutions
