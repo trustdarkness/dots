@@ -1,8 +1,4 @@
-#!/bin/bash
-# for portability we need the above, for the mac os, we need the below
-if [ -f "/usr/local/bin/bash" ] && [[ $(uname) == "Darwin" ]] && [[ ${BASH_VERSINFO[0]} -lt 5 ]]; then 
-  /usr/local/bin/bash
-fi
+#!/usr/bin/env bash
 
 # If not running interactively, minimal setup
 if [ -z "${D}" ]; then

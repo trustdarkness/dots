@@ -1,8 +1,4 @@
-#!/bin/bash
-# for portability we need the above, for the mac os, we need the below
-if [ -f "/usr/local/bin/bash" ] && [[ $(uname) == "Darwin" ]] && [[ ${BASH_VERSINFO[0]} -lt 5 ]]; then 
-  /usr/local/bin/bash
-fi
+#!/usr/bin/env bash
 
 # This file contains generally os-agnostic (POSIX-ish, though also WSL)
 # functions and utilities that shouldn't be too annoying to keep handy
@@ -30,13 +26,8 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
-<<<<<<< HEAD
-if ! declare -pF "exists"; then
+if ! declare -pF "exists" > /dev/null; then
   >&2 printf "env not as expected. exists does not exist."
-=======
-if ! $(declare -pf "confirm_yes" > /dev/null); then
-  source "$D/user_prompts.sh"
->>>>>>> 6b8f4870a183ad2f51e5f225956cde12c8b61bb6
 fi
 
 if undefined "confirm_yes"; then
