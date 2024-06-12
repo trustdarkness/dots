@@ -22,10 +22,12 @@ alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 # for some reason, I did it that way instead of sourcing from
 # the repo directly.  Perhaps someday I will either remember
 # and update this comment or fix it.
-source $HOME/.globals
-# TODO: fix conditional starters to fit with the rest of the 
-# utilities naming conventions
-source $MTEBENV/.conditional_starters
+if ! declare -p "GH" > /dev/null 2>&1; then
+  source "$HOME/.globals"
+fi
+if ! declare -pF "start_if_not_list" > /dev/null 2>&1; then
+  source "$D/.conditional_starters"
+fi
 
 # Adds a real shell to www-data's account in /etc/password 
 # for the length of a sudo session, to assist in troubleshooting
@@ -122,7 +124,7 @@ function whodesktop() {
   if [ -n "${DESKTOP_SESSION}" ]; then 
     echo "${DESKTOP_SESSION}"
   else
-    e=$($PS "e16")
+    e=$PS "e16"
     r=$?
     if $r; then
       # sometimes e16 isn't able to set this up on its own
@@ -185,7 +187,8 @@ function k() {
 }
 
 # if we think this is plasma, load the kutil
-if [[ $(whodesktop) == "plasma" ]]; then 
+desktop=whodesktop 2> /dev/null
+if [[ "$desktop" == "plasma" ]]; then 
   k
 fi
 
