@@ -202,3 +202,18 @@ if ! [[ "${PATH}" == *"$HOME/Applications"* ]]; then
   PATH+="$HOME/src/github/eww/target/release:/usr/sbin:/sbin:$PATH"
   export PATH
 fi
+
+function dbus_search() {
+  for service in $(qdbus "${1:-}"); do
+    echo "* $service"
+    for path in $(qdbus "$service"); do 
+      echo "** $path"
+      for item in $(qdbus "$service" "$path"); do 
+        echo "- $item"
+      done
+    done
+  done
+}
+ 
+
+	

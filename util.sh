@@ -395,6 +395,7 @@ most_recent() {
 
 # initialized the helper library for the package installer
 # for whatever the detected os environment is
+alias viu="vim $D/installutil.sh"
 function i() {
   source $D/installutil.sh
 }

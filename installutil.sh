@@ -48,6 +48,9 @@ if string_contains "(debian|ubuntu)" "$distro"; then
   function sauu() {
     sudo aptitude update && sudo aptitude upgrade
   }
+  function sadu() {
+    sudo aptitude dist-upgrade
+  }
   function sas() {
     sudo aptitude search $@
   }
