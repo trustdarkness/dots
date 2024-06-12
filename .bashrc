@@ -4,10 +4,10 @@
 if [ -z "${D}" ]; then
   export D="$HOME/src/github/dots"
 fi
-#source $D/util.sh
 case $- in
     *i*) 
       SBRC=true
+      source $D/util.sh
       ;;
   *)
   return
