@@ -1,19 +1,25 @@
-#!/usr/local/bin/bash
-# ~/.bashrc: executed by bash(1) for non-login shells.
-# see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
-# for examples
+#!/usr/bin/env bash
 
-# if set to true, some functions and sourced code will print additional
-# debugging output to stderr and may at times invoke set -x
-DEBUG=true
+# If not running interactively, minimal setup
+if [ -z "${D}" ]; then
+  export D="$HOME/src/github/dots"
+fi
+#source $D/util.sh
+case $- in
+    *i*) 
+      SBRC=true
+      ;;
+  *)
+  return
+  ;;
+esac
 
 if $DEBUG; then 
-  >2 printf "sourced at ${BASH_SOURCE[0]}\n"
+  >&2 printf "sourced at ${BASH_SOURCE[0]}\n"
 fi
 REALBASHRC=$(readlink ${BASH_SOURCE[0]})
 D=$(dirname $REALBASHRC)
 source "$D/existence.sh"
-#source "$D/user_prompts.sh"
 
 # see requires_modern_bash below
 NO_BASH_VERSION_WARNING=false
@@ -65,15 +71,6 @@ function setup_syminks() {
   ln -sf $HOME/.local/bin $HOME/.local/sourced
 }
 setup_syminks
-
-# If not running interactively, do something something something
-case $- in
-    *i*)
-      ;;
-    *) 
-      return
-      ;;
-esac
 
 # don't put duplicate lines or lines starting with space in the history.
 # See bash(1) for more options
@@ -127,11 +124,8 @@ alias la='ls -A'
 alias l='ls -CF'
 
 # theres not really an easy way to use this in a substitution to solve the
-# problem it's intended to solve, so it's mostly here as a reminder
-if ! exists PRINTFDASH; then
-  PRINTFDASH='\x2D'
-  readonly PRINTFDASH
-fi
+# problem it's intended to solve, so it's mostly here as a reminder.
+PRINTFDASH='\x2D'
 
 # breadcrumbs... for (relatively?) tearfree cross platform setup: 
 function powerline_bootstrap() {
@@ -153,15 +147,14 @@ function powerline_bootstrap() {
 
     ln -is "${psh}"	$HOME/.local/share/powerline/
   else
-    >2 printf "Would be less painful with pipx."
-    >2 printf "  on debian based systems, try sudo apt install pipx"
-    >2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
-    >2 printf "Or something, you know the deal."
+    >&2 printf "Would be less painful with pipx."
+    >&2 printf "  on debian based systems, try sudo apt install pipx"
+    >&2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
+    >&2 printf "Or something, you know the deal."
   fi
 }
 
 # Powerline
-
 function powerline_init() {
   powerline-daemon -q
   declare -x POWERLINE_BASH_CONTINUATION=1
@@ -189,6 +182,8 @@ function powerline_disable() {
   unset PROMPT
 }
 
+# we'll want to disable powerline-status when running bash with 
+# set -x, as it creates a lot of noise
 function setxdebug() {
   export DEBUG=true
   powerline_disable
@@ -208,14 +203,20 @@ function unsetxdebug() {
   powerline_init
 }
 
+if [ -z "${DEBUG}" ] || ! $DEBUG; then 
+  if declare -pf powerline_init > /dev/null; then 
+    powerline_init
+  fi
+fi
+
 function setcompletion() {
-  if [[[ $(uname) == 'Darwin' ]]; then
+  if [[ $(uname) == 'Darwin' ]]; then
     bc2=$(brew list bash-completion@2)
     if [ $? -gt 0 ]; then
-      >2 printf "Modern bash and brew installed completion (@2) recommended\n"
-      >2 printf "otherwise, ymmv\n\n"
-      >2 printf "brew install bash\n"
-      >2 printf "brew install bash-completion@2\n"
+      >&2 printf "Modern bash and brew installed completion (@2) recommended\n"
+      >&2 printf "otherwise, ymmv\n\n"
+      >&2 printf "brew install bash\n"
+      >&2 printf "brew install bash-completion@2\n"
     fi
   fi
   # enable programmable completion features (you don't need to enable
@@ -244,23 +245,20 @@ function setcompletion() {
   fi
   # double check and print an error if we didn't succeed
   if ! type -p _init_completion; then
-    >2 printf "_init_completion not available, we may have failed to setup\n"
-    >2 printf "bash completion."
+    >&2 printf "_init_completion not available, we may have failed to setup\n"
+    >&2 printf "bash completion."
   fi
 }
-
-if [ -z "${DEBUG}" ]; then 
-  powerline_init
-fi
 
 # Add an "alert" alias for long running commands.  Use like so:
 #   sleep 10; alert
 alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
+
 alias vbrc="vim $HOME/.bashrc && source $HOME/.bashrc"
 alias brc="vimcat ~/.bashrc"
 alias sbrc="source $HOME/.bashrc"
 alias sutil="source $D/util.sh"
 alias vutil="vim $D/util.sh && sutil"
+
+# convenient regex to use with -v when grepping across many files
 export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
-export D="$HOME/src/github/dots"
-source $D/util.sh

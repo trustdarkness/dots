@@ -23,7 +23,6 @@ alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 # the repo directly.  Perhaps someday I will either remember
 # and update this comment or fix it.
 source $HOME/.globals
-source $LH/util.sh
 # TODO: fix conditional starters to fit with the rest of the 
 # utilities naming conventions
 source $MTEBENV/.conditional_starters
@@ -135,9 +134,40 @@ function whodesktop() {
   fi
 }
 
+function wine32in64 {
+  unset WINEARCH && wine64 $@
+}
+
+function p32wine() {
+  WINEARCH=win32 WINEPREFIX="/home/mt/.local/share/wineprefixes/p32" WINE=/bin/wine64 /bin/wine64 $@
+}
+
+function p32winetricks() {
+  WINEPREFIX="/home/mt/.local/share/wineprefixes/p32" WINEARCH=win32 WINE=/bin/wine64 winetricks $@
+}
+
+pola32wine() {
+  WINEARCH=win32 WINEPREFIX="/home/mt/.PlayOnLinux/wineprefix/Audio32/" wine $@
+}
+
+pola32winetricks() {
+  WINEARCH=win32 WINEPREFIX="/home/mt/.PlayOnLinux/wineprefix/Audio32/" winetricks $@
+}
+
+function p64wine() {
+  export WINEPREFIX="/home/mt/.local/share/wineprefixes/p64"
+  export Winearch=win64
+  wine64 $@
+}
+
+function p64winetricks() {
+  WINEPREFIX="/home/mt/.local/share/wineprefixes/p64" WINEARCH=win64 winetricks $@
+}
+
 # some useful aliases for kde plasma
 alias skutil="source $D/kutil.sh"
 alias vkutil="vim $D/kutil.sh && skutil"
+
 function k() {
   case "${1}" in 
     "-q")
@@ -183,9 +213,35 @@ fi
 
 # setup the env for it and load localback
 function b() {
-export OLDSYS="$HOME/$TARGET/$BACKUP/Software/Linux/"
-export OLDHOME="$HOME/$TARGET/$BACKUP/Devices/personal/$(hostname)/$(whoami)_latest/$(whoami)"
+  export OLDSYS="$HOME/$TARGET/$BACKUP/Software/Linux/"
+  export OLDHOME="$HOME/$TARGET/$BACKUP/Devices/personal/$(hostname)/$(whoami)_latest/$(whoami)"
   source $D/localback.sh
+}
+
+function thunar_add_send_to_dest() {
+  local new_dest="${1:-}"
+  if ! [ -f "${new_dest}" ]; then 
+    echo "${new_dest} doesn't seem to exist, would you like to create it?"
+    if confirm_yes "Y/n:"; then 
+      if not mkdir -p "${new_dest}"; then 
+        se "mkdir -p ${new_dest} failed with $?"
+        return 1
+      fi
+    else
+      se "exiting."
+      return 0
+    fi
+  fi 
+  local bn=$(basename "${new_dest}")
+  cat << EOF > "$D/.local/share/Thunar/sendto/${bn}.desktop"
+[Desktop Entry]
+Type=Application
+Version=0.1
+Enoding=UTF-8
+Exec=cp %F "${new_dest}"
+Icon=folder-documents
+Name="${bn}"
+EOF
 }
 
 # disable the accessibility bus... there are some other weird

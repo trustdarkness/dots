@@ -1,12 +1,25 @@
+#!/usr/bin/env bash
 
-distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
+if [[ "${FUNCNAME[0]}" == "i" ]]; then 
+  sudo echo "Ready."
+else
+  echo "${FUNCNAME}"
+fi
+if [[ $(uname) == "Linux" ]]; then
+  distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
+elif [[ $(uname) == "Darwin" ]]; then
+  source $D/macutil.sh
+fi
+
+
+distro="$(lsb_release -d 2>&1|grep Desc|awk -F':' '{print$2}'|xargs)"
 
 if string_contains "arch" "$distro"; then
   function sai() {
     sudo pacman -Sy $@
   }
   function sau() {
-    sudo pacman -Syu $@
+    sudo pacman -Syu 
   }
   function sauu() {
     pacman -Syu $@
@@ -24,7 +37,7 @@ if string_contains "(fedora|nobara)" "$distro"; then
     sudo dnf install -y $@
   }
   function sau() {
-    sudo dnf upgrade -y $@
+    sudo dnf upgrade -y 
   }
   function sauu() {
     sudo dnf upgrade -y $@
@@ -37,13 +50,13 @@ if string_contains "(fedora|nobara)" "$distro"; then
   }
 fi
 
-if string_contains "(debian|ubuntu)" "$distro"; then
+if string_contains "(Debian|Ubuntu)" "$distro"; then
   alias di="sudo dpkg -i"
   function sai() {
     sudo aptitude install $@
   }
   function sau() {
-    aptitude update $@
+    aptitude update 
   }
   function sauu() {
     sudo aptitude update && sudo aptitude upgrade
@@ -150,10 +163,24 @@ if string_contains "(debian|ubuntu)" "$distro"; then
     sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ sid@#deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
     sau
   }
-
 fi
 
-function yainst() {
+if string_contains "Darwin" $distro; then 
+  function sai() {
+    brew install $@
+  }
+  function sas() {
+    brew search $@
+  }
+  function sau() {
+    brew update
+  }
+  function sauu() {
+    brew update && brew upgrade
+  }
+fi
+
+function yabridge_bootstrap() {
   if [ -d $HOME/Downloads/yabridge ]; then 
     cp -r $HOME/Downloads/yabridge $HOME/.local/share/
   elif [ -d $HOME/bin/yabridge ]; then 

@@ -163,8 +163,8 @@ EOF
     writeable=false
     reassign=true
 
-    >2 printf 'previous: readonly %s=%s' "$name" "${!name}"
-    >2 printf 'attempting:     ro %s=%s' "$name" "${val[@]}"
+    >&2 printf 'previous: readonly %s=%s' "$name" "${!name}"
+    >&2 printf 'attempting:     ro %s=%s' "$name" "${val[@]}"
 
     if force_attempt=true; then      
       if is_undeclareable $name; then 

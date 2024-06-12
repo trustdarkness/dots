@@ -52,6 +52,12 @@ function confirm_yes {
 }
 export -f confirm_yes
 
+function confirm_no {
+  local prompt="${*:-Are you sure} [Y/n]? "
+  get_yes_keypress "$prompt" 1
+}
+export -f confirm_no
+
 function get_timed_keypress {
   local IFS=
   >/dev/tty printf '%s' "$*"
@@ -78,4 +84,155 @@ function get_timed_yes {
 function timed_confirm_yes {
   local prompt="${*:-Are you sure} [Y/n]? "
   get_timed_yes "$prompt" 0
+}
+
+function timed_confirm_no {
+  local prompt="${*:-Are you sure} [Y/n]? "
+  get_timed_yes "$prompt" 1
+}
+
+# See internal help
+function choices() {
+  help() {
+    echo <<< EOF
+    Usage: choices -[as] prompts_nameref \(optional\) actions_nameref
+
+    Prompts the user with a list of choices and gets their response.
+
+    Args:
+      -a | --with-actions if specified, implies that the positional
+                          nameref arg refers to an associative 
+                          array where keys are prompts and vals
+                          are eval'able actions to execute.  This 
+                          function will execute the action on your
+                          behalf in such cases.
+      -s | --separator    nameref should generally be an array or 
+                          associative array, but if needs be, a 
+                          string is ok too, -s implies such and takes
+                          an argument indicating the field separator,
+                          defaults to \0, can be passed directly from
+                          find -print0
+      -c | --continue     add a continue option
+      -e | --exit         add an exit option
+      -r | --return       overrides exit and returns instead, text 
+                          is the same \(exit to the user, but 
+                          assuming were in a function not a script
+                          we return)
+
+      -h | -? | --help 		Prints this text.  
+
+      the script will detect if the array is associative or not, and
+      act accordingly.  If youre providing strings and theres a 
+      second nameref, well assume its actions, separated by the same
+      field separator.
+
+      echos back and \(if possible\), returns the 0 indexed val of the
+      user's choice \(even though the printed choices will be one
+      indexed\).
+
+      IMPORTANT: a return value of the length of your input +1 means
+      continue, +2 means return -- if you sent -e, we will exit 0
+      before you can catch the return \(suggest trapping\)
+EOF
+  }
+  actions=false
+  separator='\0'
+  ucontinue=false
+  ureturn=false
+  uexit=false
+  while [ $? -gt 0 ]; do 
+    case "${1:-}" in
+      'a'|'--with-actions')
+        actions=true
+        shift
+        ;;
+      's'|'--separator')
+        separator="${2:-}"
+        shift 
+        shift
+        ;;
+      "-c"|"--continue")
+        ucontinue=true
+        shift
+        ;;
+      "-r"|"--return")
+        ureturn=true
+        shift
+        ;;
+      "-e"|"--exit")
+        uexit=true
+        shift
+        ;;
+      "-h"|"-?"|"--help")
+        help
+        shift
+        ;;  
+        *)
+        help
+        ;;
+    esac
+  done    
+  local unknown="${1:-}"
+  if [ -n "${unknown}" ]; then 
+    declareopts=$(declare -p "${1:-}")
+    if false; then 
+      # todo, search for -aA
+      local -n nameref="${1:-}"
+      local -n actionsn="${2:-}"
+    elif [ ${#unknown[@]} -eq 1 ]; then 
+      # arg1 is a string
+      prompts="${unknown}"
+      local pctr=0
+      printf -v s '%s' "${separator}"
+      local IFS=$"$s"
+      for prompt in "$prompts"; do 
+          ((pctr++))
+          echo "$ctr. $prompt"
+      done
+      if $ucontinue; then 
+        ((pctr++))
+        echo "Continue, doing nothing."
+      fi
+      if boolean_or $uexit $ureturn; then
+        ((pctr++))
+        echo "Terminate execution and exit."
+      fi
+      chosen=$(get_keypress "Enter choice 1.. ${ctr}: ")
+      actions="${2:-}"
+      if [ -n "$actions" ]; then 
+        local IFS=$"$s"
+        actr=0
+        completed=false
+        for action in "$actions"; do 
+          ((actr++))
+          if [ $actr -eq $pctr ]; then
+            eval "$action"
+            completed=true
+          fi
+        done
+        if ! $completed; then
+          if $ucontinue; then 
+            ((actr++))
+            if [ $actr -eq $pctr ]; then 
+              echo "$((actr-1))"
+              return "$((actr-1))"
+            fi
+          fi
+          if boolean_or $ureturn $uexit; then 
+            ((actr++))
+            if [ $actr -eq $pctr ]; then 
+              if $uexit; then 
+                exit 0;
+              elif $ureturn; then 
+                echo "$((actr-1))"
+                return "$((actr-1))"
+              fi # endif uexit
+            fi # endif pctr = actr
+          fi #endif boolean or
+        fi # endif not completed
+      fi # endif -n actions
+    fi # endif false
+  fi #endif unknown
+  echo "$((pctr-1))"
+  return "$((pctr-1))"
 }

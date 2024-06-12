@@ -1,4 +1,4 @@
-#!env bash
+#!/usr/bin/env bash
 
 # Comopsable, predictable bash version info, since we use >= bash 4.2
 # features quite often and certain prominent POSIX OSs :cough: MacOS
@@ -105,12 +105,12 @@ if ! is_declared "se"; then
     out=$(grep '\n' <<< "$@")
     outret=$?
     if [ $subret -eq 0 ]; then
-      >2 printf "${1:-}" $:2
+      >&2 printf "${1:-}" $:2
     else 
-      >2 printf "$@"
+      >&2 printf "$@"
     fi
     if [ $outret -eq 0 ]; then 
-      >2 printf '\n'
+      >&2 printf '\n'
     fi
   }
 fi
@@ -132,7 +132,7 @@ function exists() {
   if is_declared $name 2> /dev/null; then return 0; fi
   if type -p $name; then return 0; fi
   # above should cover everything(ish), but just in case
-  if [ -z "$name"]; then 
+  if [ -z "$name" ]; then 
     return 1
   fi
   env_hits=$(env |grep "$name")
@@ -145,8 +145,22 @@ function exists() {
       return 1
     fi
   fi
-  se "Existence undefined.  Being is nothingness."
   return 1
+}
+
+# excessive use of negations makes code messy and readability 
+# more difficult. hence the convenience wrapper.
+# Args: name to check if exists in the namespace
+# returns 0 if name is undefined or not findable in the PATH, shell, or env
+# 1 otherwise
+function undefined() {
+  local nameerror
+  printf -v nameerror "$N" 1
+  local name="${1?$nameerror}"
+  if exists "${name}"; then 
+    return 1
+  fi
+  return 0
 }
 
 # Use grep to check how a name was declared using a provided regex
