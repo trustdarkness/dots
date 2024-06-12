@@ -28,6 +28,7 @@ export GH="$HOME/src/github"
 
 if ! declare -pF "exists" > /dev/null; then
   >&2 printf "env not as expected. exists does not exist."
+  source "$D/existence.sh"
 fi
 
 if undefined "confirm_yes"; then
