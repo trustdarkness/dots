@@ -30,8 +30,13 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
+<<<<<<< HEAD
 if ! declare -pF "exists"; then
   >&2 printf "env not as expected. exists does not exist."
+=======
+if ! $(declare -pf "confirm_yes" > /dev/null); then
+  source "$D/user_prompts.sh"
+>>>>>>> 6b8f4870a183ad2f51e5f225956cde12c8b61bb6
 fi
 
 if undefined "confirm_yes"; then

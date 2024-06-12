@@ -23,7 +23,6 @@ alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 # the repo directly.  Perhaps someday I will either remember
 # and update this comment or fix it.
 source $HOME/.globals
-source $LH/util.sh
 # TODO: fix conditional starters to fit with the rest of the 
 # utilities naming conventions
 source $MTEBENV/.conditional_starters
