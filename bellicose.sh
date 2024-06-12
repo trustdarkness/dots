@@ -4,10 +4,9 @@
 # Run again prompt gives you no easy / obvious way to continue
 ############################## Configuration ##################################
 
-
 D=$HOME/src/github/dots
-source $D/util.sh
-
+#source $D/existence.sh
+#Ssource $D/util.sh
 
 # Actions are explicit, so by default we don't prompt before taking them,
 # but if you change below to true, we will ask a lot of questions
@@ -664,22 +663,22 @@ function get_yes_keypress {
   done
 }
 
-# Prompt to confirm, defaulting to YES on <enter>
-# Args: String to prompt the user with - defaults to "Are you sure?"
-function confirm_yes {
-  local prompt="${*:-Are you sure} [Y/n]? "
-  if ! $(get_yes_keypress "$prompt" 0); then
-    ui "Since you said no, we're going to play it safe and bail now."
-    ui "if expected a different outcome, it could indicate a bug."
-    ui "" 
-    ui "If you'd like assistance or to help impprove the program,"
-    ui "open a github issue with as mmuch of the surreounding text"
-    ui "as you can cope, opr if its rerproducable, re run with -R"
-    ui "and include that output with any addionql information that"
-    ui "may be relevant." 
-    exit 1
-  fi
-}
+# # Prompt to confirm, defaulting to YES on <enter>
+# # Args: String to prompt the user with - defaults to "Are you sure?"
+# function confirm_yes {
+#   local prompt="${*:-Are you sure} [Y/n]? "
+#   if ! $(get_yes_keypress "$prompt" 0); then
+#     ui "Since you said no, we're going to play it safe and bail now."
+#     ui "if expected a different outcome, it could indicate a bug."
+#     ui "" 
+#     ui "If you'd like assistance or to help impprove the program,"
+#     ui "open a github issue with as mmuch of the surreounding text"
+#     ui "as you can cope, opr if its rerproducable, re run with -R"
+#     ui "and include that output with any addionql information that"
+#     ui "may be relevant." 
+#     exit 1
+#   fi
+# }
 
 # Read a single char from /dev/tty, prompting with "$*" 
 # times out after 7 seconds
@@ -801,7 +800,7 @@ function counts_with_completed {
         local fext="${filename##*.}"
         verbose "slotting uncached files in NEW_ arrays for fext ${fext}"
         if stringContains "${fext}" "${ARCHIVE_EXTENSIONS}"; then
-          if ! [[ "${NEW_ARCHIVES[@]}" == *"${filename}"* ]]; then
+          if ! [[ "${NEW_ARCHIVES[*]}" == *"${filename}"* ]]; then
             NEW_ARCHIVES+=("${filename}")
           fi
         elif stringContains "${fext}" "${DMG_EXTENSIONS}"; then
@@ -825,6 +824,9 @@ function counts_with_completed {
       ((total_count+=1))
     done
   done
+  readarray -t NEW_ARCHIVES < <(printf '%s\0' "${NEW_ARCHIVES[@]}"| sort -uz|xargs -0n1)
+  readarray -t NEW_DMGS < <(printf '%s\0' "${NEW_DMGS[@]}"| sort -uz|xargs -0n1)
+  readarray -t NEW_APPS < <(printf '%s\0' "${NEW_APPS[@]}"| sort -uz|xargs -0n1)
   readarray -t NEW_PKGS < <(printf '%s\0' "${NEW_PKGS[@]}"| sort -uz|xargs -0n1)
   readarray -t NEW_PLUGS < <(printf '%s\0' "${NEW_PLUGS[@]}"| sort -uz|xargs -0n1)
   verbose "new: ${NEW_PLUGS[@]}"
@@ -856,17 +858,22 @@ function counts {
 
 # Args: filename
 # Returns: 0 if this file is in the cache as already processed, 1 otherwise
-function completed {
+function completed() {
   local filepath="${1:-}"
   # if stringContains '\-\-' "${filepath}"; then
   #   filepath=$(echo "${filepath}" | sed 's/__/ /g')
   # fi
   local filename=$(basename "${filepath}")
   verbose "checking completed ${filename}"
-  grep "${filename}" "${HISTORY}"
+  line=$(grep "${filename}" "${HISTORY}"|head -n1)
   if [ $? -eq 0 ]; then
-    verbose "${filename} in cache"
-    return 0
+    oldhash=$(echo "$line"|awk '{print$5}')
+    newhash=$(shasum -a 256 < "${filepath}"|awk '{print$1}')
+    verbose "NH OH ($newhash) ($oldhash)"
+    if [[ "$oldhash" == "$newhash" ]]; then 
+      verbose "${filename} in cache"
+      return 0
+    fi
   fi
   return 1
 }
@@ -1000,7 +1007,7 @@ overwrite() {
 
 # this clears the full history of bellicose installs and then
 # proceeds with overwrite (above)
-clear_history {
+clear_history() {
   verbose "func ${FUNCNAME[0]} $@"
   rm "${HISTORY}" && touch "${HISTORY}"
   overwrite ${type}
@@ -1123,6 +1130,8 @@ function handle_cache_by_type() {
         done
         if confirm_yes "run again?"; then
           handle_cache_by_type ${type}
+        else
+          handle_cache_by_type $((type+1))
         fi
       fi
     else
@@ -1697,51 +1706,8 @@ function process_pkg() {
     if ${PROMPT_FOR_ACTIONS}; then 
       confirm_yes $(printf "${PROMPT_INSTALL_PKG_EXPECTS_PKG}" "${pkg}")
     fi
-    if precedence_needed; then
-      if install_w_fallback_precedence flags; then 
-        return 0
-      else
-        err "could not install with fallback precedence."
-        return 1
-      fi
-    elif [ -n "${ALT_INSTALL_LOC}" ]; then
-      if install_pkg_alt; then 
-        return 0
-      else
-        err "could not install to ${ALT_INSTALL_LOC}"
-        if "${ALT_INSTALL_FALLBACK}"; then
-          if install_pkg_sys; then
-            return 0
-          else
-            err "fallback install failed."
-            return 1
-          fi
-        else
-          return 1
-        fi
-      fi
-      elif "${USER_INSTALL}"; then
-      if install_pkg_user; then 
-        return 0
-      else
-        err "could not install to user home"
-        if "${USER_INSTALL_FALLBACK}"; then
-          if install_pkg_sys; then
-            return 0
-          else
-            err "fallback install failed."
-            return 1
-          fi
-        else 
-          return 1
-        fi
-      fi
-    elif "$USER_INSTALL"; then
-      echo "user install not implemented"
-    else 
-      install_pkg
-      return $?
-    fi
+    install_pkg
+    return $?
   fi
 }
 
@@ -2327,7 +2293,6 @@ function main() {
       # TODO add -p plugin install dir
       v)
         VERBOSE=true
-        DEBUG=true
         verbose "running in verbose mode"
         ;;
       f)
@@ -2339,8 +2304,7 @@ function main() {
       R)
         LIST=true
         CONTENTS=true
-        VERBOSE=true
-        DEBUG=true       
+        VERBOSE=true     
         ;;
       S)
         SKIPUNARCHIVE=true       
@@ -2397,7 +2361,7 @@ function main() {
         UNARCHIVE=true
       fi
       INSTALL=true
-      eat_the_world_starting_at 1
+      eat_the_world_starting_at 0
       return 0
       ;;
     "installed")
