@@ -109,7 +109,7 @@ if ! is_declared "se"; then
     else 
       >&2 printf "$@"
     fi
-    if [ $outret -eq 0 ]; then 
+    if [ $outret -ne 0 ]; then 
       >&2 printf '\n'
     fi
   }
@@ -161,6 +161,23 @@ function undefined() {
     return 1
   fi
   return 0
+}
+
+# To make operation on booleans slightly more readable and less error
+# prone.  Returns zero if the arg is a variable that exists and is 
+# set to "true" or the corresponding commannd, 1 otherwise
+function tru() {
+  is_it="${1:-}"
+  if [ -n "${is_it}" ] && "${is_it}"; then
+    return 0
+  fi
+  return 1
+}
+
+function untru() {
+  is_it="${1:-}"
+  it_isnt=! tru "${is_it}"
+  return ${it_isnt}
 }
 
 # Use grep to check how a name was declared using a provided regex

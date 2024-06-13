@@ -4,17 +4,18 @@
 if [ -z "${D}" ]; then
   export D="$HOME/src/github/dots"
 fi
-#source $D/util.sh
+
 case $- in
     *i*) 
       SBRC=true
+      source $D/util.sh
       ;;
   *)
   return
   ;;
 esac
 
-if $DEBUG; then 
+if tru $DEBUG; then 
   >&2 printf "sourced at ${BASH_SOURCE[0]}\n"
 fi
 REALBASHRC=$(readlink ${BASH_SOURCE[0]})
