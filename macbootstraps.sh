@@ -205,6 +205,14 @@ EOF
   fi
 }
 
+function bash_bootstrap() {
+  bootstrap_modern_bash -s -d -p
+}
+
+function mac_bootstrap() {
+  bash_bootstrap
+}
+
 function cleanup_macbootstraps() {
   local IFS=$'\a'
   for nameref in "$local_namerefs"; do
