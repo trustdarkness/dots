@@ -475,11 +475,11 @@ function boolean_or {
   return 1
 }
 
-if [[ "$(uname)" == "Linux" ]]; then
+if [[ $(uname) == "Linux" ]]; then
   source $D/linuxutil.sh
   alias sosutil="source $D/linuxutil.sh"
   alias vosutil="vim $D/linuxutil.sh && sosutil"
-elif [[ "$(uname)" == "Darwin" ]]; then
+elif [[ $(uname) == "Darwin" ]]; then
   source $D/macutil.sh
   alias sosutil="source $D/macutil.sh"
   alias vosutil="vim $D/macutil.sh && vosutil"
