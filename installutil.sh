@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
 
-if [[ "${FUNCNAME[0]}" == "i" ]]; then 
-  sudo echo "Ready."
-else
-  echo "${FUNCNAME}"
-fi
 if [[ $(uname) == "Linux" ]]; then
   distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
 elif [[ $(uname) == "Darwin" ]]; then
-  source $D/macutil.sh
+  function sai() {
+    brew install $@
+  }
+  function sas() {
+    brew search $@
+  }
+  function sau() {
+    brew update
+  }
+  function sauu() {
+    brew update && brew upgrade
+  }
 fi
-
-
-distro="$(lsb_release -d 2>&1|grep Desc|awk -F':' '{print$2}'|xargs)"
 
 if string_contains "arch" "$distro"; then
   function sai() {
@@ -159,21 +162,6 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
     sai $pattern
     sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ sid@#deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
     sau
-  }
-fi
-
-if string_contains "Darwin" $distro; then 
-  function sai() {
-    brew install $@
-  }
-  function sas() {
-    brew search $@
-  }
-  function sau() {
-    brew update
-  }
-  function sauu() {
-    brew update && brew upgrade
   }
 fi
 
