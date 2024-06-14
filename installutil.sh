@@ -176,14 +176,3 @@ if string_contains "Darwin" $distro; then
     brew update && brew upgrade
   }
 fi
-
-function yabridge_bootstrap() {
-  if [ -d $HOME/Downloads/yabridge ]; then 
-    cp -r $HOME/Downloads/yabridge $HOME/.local/share/
-  elif [ -d $HOME/bin/yabridge ]; then 
-    cp -r $HOME/bin/yabridge $HOME/.local/share/
-  else
-    >&2 printf "Can't find yabridge updates in"
-    >&2 printf "$HOME/Downloads or $HOME/bin"
-  fi
-}

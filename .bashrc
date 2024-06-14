@@ -80,7 +80,12 @@ function syminks_setup() {
       ln -sf "$D/.bash_profile" "$HOME/.bash_profile"
     fi
   fi
-
+  if ! [ -d "$HOME/.local/bin" ]; then 
+    mkdir -p "$HOME/.local/bin"
+  fi
+  if [[ uname == "Darwin" ]] && ! [ -L "$HOME/.local/bin/bellicose" ]; then 
+    ln -sf "$D/bellicose.sh" "$HOME/.local/bin/bellicose"
+  fi
   if ! [ -L "$HOME/.local/sourced" ]; then
     ln -sf $HOME/.local/bin $HOME/.local/sourced
   fi
@@ -144,33 +149,6 @@ alias l='ls -CF'
 # theres not really an easy way to use this in a substitution to solve the
 # problem it's intended to solve, so it's mostly here as a reminder.
 PRINTFDASH='\x2D'
-
-# breadcrumbs... for (relatively?) tearfree cross platform setup:
-function powerline_bootstrap() {
-  if ! type pipx >/dev/null 2>&1; then
-    if ! [ -n "${p3}" ]; then
-      if ! p3=$(type -p python3); then
-        echo "python3 doesn't seem to be in \$PATH..."
-        # TODO: finish
-      fi
-    fi
-    pipx install powerline-status
-    mkdir -p .local/share/powerline
-		if [ -z "${psh}" ]; then
-      if ! psh=$(find $(pipx list |head -n1 |awk '{print$NF}') -name "powerline.sh" 2> /dev/null |grep "bash"); then
-			  se "can't find powerline.sh, assign psh= and run again"
-        return 1
-			fi
-		fi
-
-    ln -is "${psh}"	$HOME/.local/share/powerline/
-  else
-    >&2 printf "Would be less painful with pipx."
-    >&2 printf "  on debian based systems, try sudo apt install pipx"
-    >&2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
-    >&2 printf "Or something, you know the deal."
-  fi
-}
 
 # Powerline
 function powerline_init() {
