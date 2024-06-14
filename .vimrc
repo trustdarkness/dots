@@ -9,7 +9,7 @@ filetype on
 filetype plugin on
 
 " Load an indent file for the detected file type.
-filetype indent on
+" filetype indent on
 
 " On pressing tab, insert 2 spaces
 set expandtab
