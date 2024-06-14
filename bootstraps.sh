@@ -440,6 +440,38 @@ function mullvad_bootstrap() {
 }
 
 
+function disarm_bootstrap() {
+  if ! disarm=$(type -p disarm); then 
+    mkdir -p "$HOME/downloads/_installed_foundation/disarm"
+    cd "$HOME/downloads/_installed_foundation/disarm"
+    curl https://newosxbook.com/tools/disarm.tar --output disarm.tar
+    tar xf disarm.tar
+    if [[ $(system_arch) == "x86_64" ]]; then 
+      cp binaries/disarm.x86 $HOME/.local/bin/
+      ln -sf $HOME/.local/bin/disarm.x86 $HOME/.local/bin/disarm
+      mkdir -p $HOME/.local/share/multiarch
+      cp binaries/* $HOME/.local/share/multiarch/
+      path_append "$HOME/.local/share/multiarch/"
+    fi
+  fi
+}
+
+function mnlooto_bootstrap() {
+  if ! mn=$(type -p mn); then 
+    if ! mnsh=$(type -p mn.sh); then
+      # assume nothing is installed
+      ghc https://github.com/krypted/looto.git
+      if ! [[ $(basename $(pwd)) == "looto" ]]; then 
+        cd "$HOME/src/github/looto"
+      fi
+      cp looto.sh "$HOME/.local/bin/"
+      cp mn.sh "$HOME/.local/bin/"
+      ln -sf "$HOME/.local/bin/looto.sh" "$HOME/.local/bin/looto"
+      ln -sf "$HOME/.local/bin/mn.sh" "$HOME/.local/bin/mn"
+    fi
+  fi
+}
+
 function cleanup_macbootstraps() {
   local IFS=$'\a'
   for nameref in "$local_namerefs"; do
