@@ -13,11 +13,23 @@ case $- in
   ;;
 esac
 
-if $DEBUG; then
-  >&2 printf "sourced at ${BASH_SOURCE[0]}\n"
-fi
-REALBASHRC=$(readlink ${BASH_SOURCE[0]})
-D=$(dirname $REALBASHRC)
+function detect_d() {
+  # -z || here for first run conditions
+  if [ -z $DEBUG ] || $DEBUG; then
+    >&2 printf ".bashrc sourced from ${BASH_SOURCE[@]}\n"
+  fi
+  if [[ "${BASH_SOURCE[0]}" == ".bashrc" ]]; then 
+    D=$(pwd)
+  else
+    REALBASHRC=$(readlink ${BASH_SOURCE[0]})
+    D=$(dirname $REALBASHRC)
+  fi
+  if [ -n "$D" ]; then 
+    >&2 printf "no luck finding D, please set"
+    return 1
+  fi
+}
+
 source "$D/existence.sh"
 
 # see requires_modern_bash below
