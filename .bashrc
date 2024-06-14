@@ -216,7 +216,7 @@ function unsetxdebug() {
 }
 
 if [ -z "${DEBUG}" ] || ! $DEBUG; then
-  if declare -pf powerline_init > /dev/null; then
+  if declare -pf powerline_init > /dev/null 2>&1; then
     powerline_init
   fi
 fi
