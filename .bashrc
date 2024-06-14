@@ -3,6 +3,7 @@
 if [ -z "${D}" ]; then
   export D="$HOME/src/github/dots"
 fi
+
 case $- in
     *i*)
       SBRC=true
@@ -78,21 +79,29 @@ function requires_modern_bash() {
 # demarcate things that won't work by default on MacOS (or other ancient bash)
 alias rmb="requires_modern_bash"
 
-function syminks_setup() {
-  #ln -sf $HOME/.local/bin $HOME/.local/sourced
-  self=readlink $HOME/.bashrc
+function resolve_symlink() {
+  test -L "$1" && ls -l "$1" | awk -v SYMLINK="$1" '{ SL=(SYMLINK)" -> "; i=index($0, SL); s=substr($0, i+length(SL)); print s }'
+}
+
+function symlinks_setup() {
+  self=$(resolve_symlink "$HOME/.bashrc")
   if [[ "$self" != "$D/.bashrc" ]]; then
     if [ -f "$D/.bashrc" ]; then
       ln -sf "$D/.bashrc" "$HOME/.bashrc"
     fi
   fi
-  self=readlink $HOME/.bash_profile
-  if [[ "$self" != "$D/.bash_profile" ]]; then
+  bp=$(resolve_symlink "$HOME/.bash_profile")
+  if [[ "$bp" != "$D/.bash_profile" ]]; then
     if [ -f "$D/.bash_profile" ]; then
       ln -sf "$D/.bash_profile" "$HOME/.bash_profile"
     fi
   fi
-
+  if ! [ -d "$HOME/.local/bin" ]; then 
+    mkdir -p "$HOME/.local/bin"
+  fi
+  if [[ uname == "Darwin" ]] && ! [ -L "$HOME/.local/bin/bellicose" ]; then 
+    ln -sf "$D/bellicose.sh" "$HOME/.local/bin/bellicose"
+  fi
   if ! [ -L "$HOME/.local/sourced" ]; then
     ln -sf $HOME/.local/bin $HOME/.local/sourced
   fi
@@ -100,7 +109,7 @@ function syminks_setup() {
     ln -sf "$D/.globals" "$HOME/"
   fi
 }
-setup_syminks
+symlinks_setup
 
 # don't put duplicate lines or lines starting with space in the history.
 # See bash(1) for more options
@@ -156,33 +165,6 @@ alias l='ls -CF'
 # theres not really an easy way to use this in a substitution to solve the
 # problem it's intended to solve, so it's mostly here as a reminder.
 PRINTFDASH='\x2D'
-
-# breadcrumbs... for (relatively?) tearfree cross platform setup:
-function powerline_bootstrap() {
-  if ! type pipx >/dev/null 2>&1; then
-    if ! [ -n "${p3}" ]; then
-      if ! p3=$(type -p python3); then
-        echo "python3 doesn't seem to be in \$PATH..."
-        # TODO: finish
-      fi
-    fi
-    pipx install powerline-status
-    mkdir -p .local/share/powerline
-		if [ -z "${psh}" ]; then
-      if ! psh=$(find $(pipx list |head -n1 |awk '{print$NF}') -name "powerline.sh" 2> /dev/null |grep "bash"); then
-			  se "can't find powerline.sh, assign psh= and run again"
-        return 1
-			fi
-		fi
-
-    ln -is "${psh}"	$HOME/.local/share/powerline/
-  else
-    >&2 printf "Would be less painful with pipx."
-    >&2 printf "  on debian based systems, try sudo apt install pipx"
-    >&2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
-    >&2 printf "Or something, you know the deal."
-  fi
-}
 
 # Powerline
 function powerline_init() {
@@ -289,6 +271,8 @@ alias brc="vimcat ~/.bashrc"
 alias sbrc="source $HOME/.bashrc"
 alias sutil="source $D/util.sh"
 alias vutil="vim $D/util.sh && sutil"
+alias sex="source $D/existence.sh" # heh
+alias vex="vim $D/existence && sex"
 
 # convenient regex to use with -v when grepping across many files
 export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
