@@ -11,19 +11,23 @@
 
 
 function psearch() {
-  local px=$(which px)
-  local ps_search='ps awux 2>/dev/null |grep %s'
-  local px_search='px %s 2>devnull'
+  local px=$(type -p px)
+  local ps_search='ps awux 2> /dev/null |grep %s'
+  local px_search='px %s 2> /dev/null'
 
   function pxsearch() {
-    s=$(printf "${px_search}" '$@')
-    ${s}
+    px $@ 2> /dev/null
   } 
 
+  function pssearch() {
+    ps awux 2> /dev/null |grep $@ 
+  }
+
   if [ -n "$px" ]; then 
-    export PS=$(printf "${ps_search}")
-  else
     export pxsearch
     export PS=pxsearch
+  else
+    export pssearch
+    export PS=pssearch
   fi
 }  

@@ -18,7 +18,9 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 
-source $HOME/.mtebenv/.ps_filter
+if ! declare -pF "psearch" > /dev/null 2>&1; then
+  source $D/.ps_filter
+fi
 
 #####################################################
 # Start a user provided list of not-currently-running
@@ -36,7 +38,7 @@ source $HOME/.mtebenv/.ps_filter
 function start_if_not_list() {
   running="$($PS `whoami`)"
   for i in $@; do 
-    if ! stringContains "$i" "$running"; then
+    if ! string_contains "$i" "$running"; then
       $i &
     else
       echo "$i already running."
@@ -61,7 +63,7 @@ function start_if_not_list() {
 ######################################################
 function start_if_not_args() { 
   running="$($PS `whoami`)"
-  if ! stringContains "$1" "$running"; then
+  if ! string_contains "$1" "$running"; then
     $@ &
   else
     echo "$1 already running."
