@@ -26,14 +26,77 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
-if ! declare -pF "exists" > /dev/null; then
-  >&2 printf "env not as expected. exists does not exist."
+if ! declare -pF "exists" > /dev/null 2>&1; then
   source "$D/existence.sh"
 fi
 
-if undefined "confirm_yes"; then
-  source "$D/user_prompts.sh"
-fi
+# for my interactive shells, the full environment setup is constructed
+# from bashrc, but for scripts that rely on it, this function should be
+# called to make sure all is as expected.
+# TODO: create teardown that remove all namerefs added by setup
+function util_env_load() {
+  # this represents all the possible sources at the moment, but only
+  # including as options as needed, otherwise it would be taking an 
+  # already silly thing and making it ridiculous.
+  local exu=true
+  local up=false
+  local fsau=false
+  local osu=true
+  local jl=false
+  local xl=false
+  local ku=false
+  local lb=false
+  local bsu=false
+  local iu=false
+  local mb=false
+  local bc=false
+  local POSITIONAL_ARGS=()
+  while [ $# -gt 0 ]; do
+    case "${1:-}" in
+      "-f"|"--filesystemarray")
+        fsau=true
+        shift
+        ;;
+      "-j"|"--json-like")
+        jl=true
+        shift
+        ;;
+      "-x"|"--xml-like")
+        xl=true
+        shift
+        ;;
+      "-u"|"--user-prompts")
+        up=true
+        shift
+        ;;
+      *)
+        echo "Boo.  ${1:-} does not exist"
+        shift 
+        ;;
+    esac
+  done
+  if ! declare -pF "exists" > /dev/null 2>&1 && $exu; then
+    source "$D/existence.sh"
+  fi
+  if undefined "confirm_yes" && $up; then
+    source "$D/user_prompts.sh"
+  fi
+  if undefined "xmllike" && $xl; then
+    source "$D/xml_like.sh"
+  fi
+  if undefined "json_like_tl" && $jl; then
+    source "$D/json_like.sh"
+  fi
+  if undefined "dirarray" && $fsau; then
+    source "$D/filesystemarrayutil.sh"
+  fi
+  if untru $osutil_in_env && $osu; then
+    osutil_load
+  fi
+}
+
+
+
 
 # preferred format strings for date for storing on the filesystem
 FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
@@ -75,71 +138,9 @@ function debug() {
   fi
 }
 
-# A slightly more convenient and less tedious way to print
-# to stderr, normally declared in util.sh, sourced from .bashrc
-if undefined "se"; then
-  # Args: 
-  #  Anything it recieves gets echoed back.  If theres
-  #  no newline in the input, it is added. if there are substitutions
-  #  for printf in $1, then $1 is treated as format string and 
-  #  $:2 are treated as substitutions
-  # No explicit return code 
-  function se() {
-    sub=$(grep '%' <<< "$@")
-    subret=$?
-    out=$(grep '\n' <<< "$@")
-    outret=$?
-    if [ $subret -eq 0 ]; then
-      >&2 printf "${1:-}" $:2
-    else 
-      >&2 printf "$@"
-    fi
-    if [ $outret -eq 0 ]; then 
-      >&2 printf '\n'
-    fi
-  }
-fi
-
 function term_bootstrap() {
   termschemes_bootstrap
   termfonts_bootstrap
-}
-
-# the following two functions are the start of a currently only semi-usable
-# parser for some generic xml-like data based largely on
-# https://stackoverflow.com/questions/893585/how-to-parse-xml-in-bash
-# and ultimately intended to make adding UI elements to qml frontend
-# specs (impulse was to bootstrap my desired config for konsole on a fresh)
-# install... the config in question is found at 
-# $HOME/.local/share/kxmlgui5/konsole/konsoleui.rc
-function starml_read_dom () {
-  local IFS=\>
-  read -d \< ENTITY CONTENT
-  local RET=$?
-  TAG_NAME=${ENTITY%% *}
-  ATTRIBUTES=${ENTITY#* }
-  return $RET
-}
-
-function xmllike() {
-  set -x
-  file="${1:-}"
-  lfunction="${2:-get_tags}"
-
-  get_tags() {
-    local name="${1:-}"
-    if [ -n "${name}" ]; then
-      if [[ $TAG_NAME == "${name}" ]]; then
-        se "exposing ${ATTRIBUTES} of tag ${name}" 
-        eval local ${ATTRIBUTES}
-      fi
-    fi
-    if ${all}; then 
-      echo ${TAG_NAME}
-    fi
-  }
-  while starml_read_dom; do ${lfunction}; done < "${file}"
- set +x
 }
 
 # my basic edits to import-schemes.sh below will detect and add color
@@ -376,27 +377,6 @@ function ssudo () {
 }
 alias ssudo="ssudo "
 
-# Convenience function echos bash major version suitable for sripts
-function bash_major_version() {
-  echo "${BASH_VERSINFO[0]}"
-}
-export -f bash_major_version
-
-# Convenience function echos bash minor version suitable for scripts
-function bash_minor_version() {
-  echo "${BASH_VERSINFO[1]}"
-}
-export -f bash_minor_version
-
-# Convenience function wraps the above to echo a nice point release 5.2
-# or something simlarly tidy for scripts.
-function bash_version() {
-  major=$(bash_major_version)
-  minor=$(bash_minor_version)
-  echo "${major}.${minor}"
-}
-export -f bash_version
-
 # stolen from https://stackoverflow.com/questions/8654051/how-can-i-compare-two-floating-point-numbers-in-bash
 function is_first_floating_number_bigger () {
     number1="$1"
@@ -475,15 +455,20 @@ function boolean_or {
   return 1
 }
 
-if [[ $(uname) == "Linux" ]]; then
-  source $D/linuxutil.sh
-  alias sosutil="source $D/linuxutil.sh"
-  alias vosutil="vim $D/linuxutil.sh && sosutil"
-elif [[ $(uname) == "Darwin" ]]; then
-  source $D/macutil.sh
-  alias sosutil="source $D/macutil.sh"
-  alias vosutil="vim $D/macutil.sh && vosutil"
-fi
+function osutil_load() {
+  if [ -z "$osutil_in_env" ] || $osutil_in_env; then
+    if [[ "$(uname)" == "Linux" ]]; then
+      source $D/linuxutil.sh
+      alias sosutil="source $D/linuxutil.sh"
+      alias vosutil="vim $D/linuxutil.sh && sosutil"
+    elif [[ "$(uname)" == "Darwin" ]]; then
+      source $D/macutil.sh
+      alias sosutil="source $D/macutil.sh"
+      alias vosutil="vim $D/macutil.sh && vosutil"
+    fi
+  fi
+}
+osutil_load
 
 alias sall="sbrc; sglobals; sutil; sosutil"
 
