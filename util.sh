@@ -377,27 +377,6 @@ function ssudo () {
 }
 alias ssudo="ssudo "
 
-# Convenience function echos bash major version suitable for sripts
-function bash_major_version() {
-  echo "${BASH_VERSINFO[0]}"
-}
-export -f bash_major_version
-
-# Convenience function echos bash minor version suitable for scripts
-function bash_minor_version() {
-  echo "${BASH_VERSINFO[1]}"
-}
-export -f bash_minor_version
-
-# Convenience function wraps the above to echo a nice point release 5.2
-# or something simlarly tidy for scripts.
-function bash_version() {
-  major=$(bash_major_version)
-  minor=$(bash_minor_version)
-  echo "${major}.${minor}"
-}
-export -f bash_version
-
 # stolen from https://stackoverflow.com/questions/8654051/how-can-i-compare-two-floating-point-numbers-in-bash
 function is_first_floating_number_bigger () {
     number1="$1"

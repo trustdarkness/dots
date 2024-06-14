@@ -14,7 +14,7 @@ case $- in
   ;;
 esac
 
-if tru $DEBUG; then 
+if [ -n "$DEBUG" ] && $DEBUG; then 
   >&2 printf "sourced at ${BASH_SOURCE[0]}\n"
 fi
 REALBASHRC=$(readlink ${BASH_SOURCE[0]})
@@ -67,16 +67,19 @@ function requires_modern_bash() {
 # demarcate things that won't work by default on MacOS (or other ancient bash)
 alias rmb="requires_modern_bash"
 
-function syminks_setup() {
-  #ln -sf $HOME/.local/bin $HOME/.local/sourced
-  self=readlink $HOME/.bashrc
+function resolve_symlink() {
+  test -L "$1" && ls -l "$1" | awk -v SYMLINK="$1" '{ SL=(SYMLINK)" -> "; i=index($0, SL); s=substr($0, i+length(SL)); print s }'
+}
+
+function symlinks_setup() {
+  self=$(resolve_symlink "$HOME/.bashrc")
   if [[ "$self" != "$D/.bashrc" ]]; then
     if [ -f "$D/.bashrc" ]; then
       ln -sf "$D/.bashrc" "$HOME/.bashrc"
     fi
   fi
-  self=readlink $HOME/.bash_profile
-  if [[ "$self" != "$D/.bash_profile" ]]; then
+  bp=$(resolve_symlink "$HOME/.bash_profile")
+  if [[ "$bp" != "$D/.bash_profile" ]]; then
     if [ -f "$D/.bash_profile" ]; then
       ln -sf "$D/.bash_profile" "$HOME/.bash_profile"
     fi
@@ -89,7 +92,7 @@ function syminks_setup() {
     ln -sf "$D/.globals" "$HOME/"
   fi
 }
-setup_syminks
+symlinks_setup
 
 # don't put duplicate lines or lines starting with space in the history.
 # See bash(1) for more options
@@ -278,6 +281,8 @@ alias brc="vimcat ~/.bashrc"
 alias sbrc="source $HOME/.bashrc"
 alias sutil="source $D/util.sh"
 alias vutil="vim $D/util.sh && sutil"
+alias sex="source $D/existence.sh" # heh
+alias vex="vim $D/existence && sex"
 
 # convenient regex to use with -v when grepping across many files
 export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
