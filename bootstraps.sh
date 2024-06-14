@@ -209,6 +209,47 @@ function bash_bootstrap() {
   bootstrap_modern_bash -s -d -p
 }
 
+function completion_bootstrap() {
+  if [[ $(uname) == 'Darwin' ]]; then
+    bc2=$(brew list bash-completion@2)
+    if [ $? -gt 0 ]; then
+      >&2 printf "Modern bash and brew installed completion (@2) recommended\n"
+      >&2 printf "otherwise, ymmv\n\n"
+      >&2 printf "brew install bash\n"
+      >&2 printf "brew install bash-completion@2\n"
+    fi
+  fi
+  # enable programmable completion features (you don't need to enable
+  # this, if it's already enabled in /etc/bash.bashrc and /etc/profile
+  # sources /etc/bash.bashrc).
+  if ! shopt -oq posix; then
+    if ! type -p _init_completion > /dev/null; then
+      if [ -f /etc/profile.d/bash_completion.sh ]; then
+        source /etc/profile.d/bash_completion.sh
+      elif [[ -r "/usr/local/etc/profile.d/bash_completion.sh" ]]; then
+         source "/usr/local/etc/profile.d/bash_completion.sh"
+      elif [ -f /usr/local/etc/bash_completion ]; then
+        source /usr/local/etc/bash_completion
+      elif [ -d /usr/local/etc/bash_completion.d ]; then
+        for file in $(ls /usr/local/etc/bash_completion.d); do
+          if [ -e "${file}" ]; then
+            source "${file}"
+          fi
+        done
+      elif [ -f /usr/share/bash-completion/bash_completion ]; then
+        source /usr/share/bash-completion/bash_completion
+      elif [ -f /etc/bash_completion ]; then
+        source /etc/bash_completion
+      fi
+    fi
+  fi
+  # double check and print an error if we didn't succeed
+  if ! type -p _init_completion; then
+    >&2 printf "_init_completion not available, we may have failed to setup\n"
+    >&2 printf "bash completion."
+  fi
+}
+
 function mac_bootstrap() {
   # https://apple.stackexchange.com/questions/195244/concise-compact-list-of-all-defaults-currently-configured-and-their-values
   echo "Hostname: "
@@ -224,6 +265,8 @@ function mac_bootstrap() {
   term_bootstrap
   # disable springloaded folders
   defaults write NSGlobalDomain com.apple.springing.enabled 0
+  # setup completion for bash, etc
+  completion_bootstrap
   # hide the spotlight icon
   sudo chmod 600 /System/Library/CoreServices/Search.bundle/Contents/MacOS/Search
   # xpand the save panel by default
@@ -257,7 +300,7 @@ function mac_bootstrap() {
   defaults write com.apple.terminal StringEncodings -array 4
   defaults write com.apple.Terminal "Default Window Settings" -string "Pro"
   defaults write com.apple.Terminal "Startup Window Settings" -string "Pro"
-
+  xcode-select --install
 }
 
 function yabridge_bootstrap() {
@@ -270,6 +313,12 @@ function yabridge_bootstrap() {
     >&2 printf "$HOME/Downloads or $HOME/bin"
   fi
 }
+
+function rcdefaultapp_bootstrap() {
+  mkdir -p "$HOME/Downloads/staging"
+  cd "$HOME/Downloads/staging"
+  wget https://www.rubicode.com/Downloads/RCDefaultApp-2.1.X.dmg
+
 
 # breadcrumbs... for (relatively?) tearfree cross platform setup:
 function powerline_bootstrap() {
