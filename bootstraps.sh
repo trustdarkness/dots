@@ -28,6 +28,7 @@ if ! exists "get_keypress"; then
     echo "${REPLY,,}" 
     return 0
   }
+  export -f get_keypress
   local_namerefs+="get_keypress"
 fi
 
@@ -318,7 +319,13 @@ function rcdefaultapp_bootstrap() {
   mkdir -p "$HOME/Downloads/staging"
   cd "$HOME/Downloads/staging"
   wget https://www.rubicode.com/Downloads/RCDefaultApp-2.1.X.dmg
-
+  if ! type -p bellicose > /dev/null 2>&1; then
+    se "RCDefaultApp downloaded to staging, but bellicose not reachable"
+    se "you'll need to install it yourself"
+    return 1
+  fi
+  bellicose install RCDefaultApp-2.1.X.dmg
+}
 
 # breadcrumbs... for (relatively?) tearfree cross platform setup:
 function powerline_bootstrap() {
@@ -439,7 +446,6 @@ function mullvad_bootstrap() {
   fi
 }
 
-
 function disarm_bootstrap() {
   if ! disarm=$(type -p disarm); then 
     mkdir -p "$HOME/downloads/_installed_foundation/disarm"
@@ -472,6 +478,7 @@ function mnlooto_bootstrap() {
   fi
 }
 
+# TODO: poopulate updated namerefs and use cleanup function in util
 function cleanup_macbootstraps() {
   local IFS=$'\a'
   for nameref in "$local_namerefs"; do
