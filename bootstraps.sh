@@ -154,7 +154,7 @@ EOF
   local major=$(awk -F'.' '{print$1}')
   local minor=$(awk -F'.' '{print$2}')
   local out
-  if out=$(declare -pF bash_version); then 
+  if out=$(declare -F bash_version); then 
     if [ bash_version -ge "$version" ]; then 
       return 0
     fi

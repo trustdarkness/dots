@@ -18,12 +18,12 @@ function detect_d() {
   # -z || here for first run conditions
   if [ -z $DEBUG ] || $DEBUG; then
     >&2 printf ".bashrc sourced from ${BASH_SOURCE[@]}\n"
-  fi
+fi
   if [[ "${BASH_SOURCE[0]}" == ".bashrc" ]]; then 
     D=$(pwd)
   else
-    REALBASHRC=$(readlink ${BASH_SOURCE[0]})
-    D=$(dirname $REALBASHRC)
+REALBASHRC=$(readlink ${BASH_SOURCE[0]})
+D=$(dirname $REALBASHRC)
   fi
   if [ -n "$D" ]; then 
     >&2 printf "no luck finding D, please set"
@@ -79,6 +79,7 @@ function requires_modern_bash() {
 # demarcate things that won't work by default on MacOS (or other ancient bash)
 alias rmb="requires_modern_bash"
 
+# https://stackoverflow.com/questions/7665/how-to-resolve-symbolic-links-in-a-shell-script
 function resolve_symlink() {
   test -L "$1" && ls -l "$1" | awk -v SYMLINK="$1" '{ SL=(SYMLINK)" -> "; i=index($0, SL); s=substr($0, i+length(SL)); print s }'
 }
@@ -166,6 +167,33 @@ alias l='ls -CF'
 # problem it's intended to solve, so it's mostly here as a reminder.
 PRINTFDASH='\x2D'
 
+# breadcrumbs... for (relatively?) tearfree cross platform setup:
+function powerline_bootstrap() {
+  if ! type pipx >/dev/null 2>&1; then
+    if ! [ -n "${p3}" ]; then
+      if ! p3=$(type -p python3); then
+        echo "python3 doesn't seem to be in \$PATH..."
+        # TODO: finish
+      fi
+    fi
+    pipx install powerline-status
+    mkdir -p .local/share/powerline
+		if [ -z "${psh}" ]; then
+      if ! psh=$(find $(pipx list |head -n1 |awk '{print$NF}') -name "powerline.sh" 2> /dev/null |grep "bash"); then
+			  se "can't find powerline.sh, assign psh= and run again"
+        return 1
+			fi
+		fi
+
+    ln -is "${psh}"	$HOME/.local/share/powerline/
+  else
+    >&2 printf "Would be less painful with pipx."
+    >&2 printf "  on debian based systems, try sudo apt install pipx"
+    >&2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
+    >&2 printf "Or something, you know the deal."
+  fi
+}
+
 # Powerline
 function powerline_init() {
   powerline-daemon -q
@@ -216,7 +244,7 @@ function unsetxdebug() {
 }
 
 if [ -z "${DEBUG}" ] || ! $DEBUG; then
-  if declare -pf powerline_init > /dev/null 2>&1; then
+  if declare -f powerline_init > /dev/null; then
     powerline_init
   fi
 fi

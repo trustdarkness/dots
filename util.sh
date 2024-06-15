@@ -26,7 +26,7 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
-if ! declare -pF "exists" > /dev/null 2>&1; then
+if ! declare -F "exists" > /dev/null 2>&1; then
   source "$D/existence.sh"
 fi
 
@@ -75,7 +75,7 @@ function util_env_load() {
         ;;
     esac
   done
-  if ! declare -pF "exists" > /dev/null 2>&1 && $exu; then
+  if ! declare -F "exists" > /dev/null 2>&1 && $exu; then
     source "$D/existence.sh"
   fi
   if undefined "confirm_yes" && $up; then
