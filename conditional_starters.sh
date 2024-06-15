@@ -18,9 +18,21 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 
-if ! declare -pF "psearch" > /dev/null 2>&1; then
-  source $D/.ps_filter
-fi
+#####################################################
+# Search ps for the given search string.  
+#  Note: we use px if its available, as its output is
+#        a bit more stable from a search perspective
+# Args: A search string (username, PID, process name)
+# Prints findings to the console. No explicit return.
+#####################################################
+function psearch() {
+  ppx=$(type -p px)
+  if [ $? -eq 0 ]; then
+    px $@ 2> /dev/null
+  else
+    ps awux 2> /dev/null |grep $@
+  fi 
+}
 
 #####################################################
 # Start a user provided list of not-currently-running
@@ -36,7 +48,7 @@ fi
 # Arguments: a list of processes to start, no args
 ######################################################
 function start_if_not_list() {
-  running="$($PS `whoami`)"
+  running="$(psearch $(whoami))"
   for i in $@; do 
     if ! string_contains "$i" "$running"; then
       $i &
@@ -62,7 +74,7 @@ function start_if_not_list() {
 # and order expected on the shell
 ######################################################
 function start_if_not_args() { 
-  running="$($PS `whoami`)"
+  running="$(psearch $(whoami))"
   if ! string_contains "$1" "$running"; then
     $@ &
   else

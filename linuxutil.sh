@@ -1,4 +1,22 @@
-#!env bash
+#!/usr/local/env bash
+# This file is sourced from util.sh if that file is sourced on 
+# a linux box, after which it can be easily edited and resourced
+# by running vosutil or simply resourced by running sosutil, as 
+# it is the os (specific) util.  There's a corresponding mac version
+# Expects the following globals to be in env:
+# TARGET - generally the remote system where backups are kept
+# BACKUP - relative path on that system to the root of the backup
+#          usually mouted over sshfs
+# BLK - an egrep compatible regex used as a blocilist to sift out
+#       noise on local filesystem searches piping locate through 
+#       the dubious mgrep
+# LH - path to the root of the library_helpers repo (only used in 
+#      the alias below, nothing will break)
+# D - path to the root of the dots repo
+# Other globals are handled internally if they're not present.  
+# This file may also rely on functions and globals available in 
+# .bashrc (where util.sh is sourced from) amd existence.sh (also
+# sourced from .bashrc)
 alias du0="du -h --max-depth=0"
 alias du1="du -h --max-depth=1"
 alias ns="sudo systemctl status nginx"
@@ -26,7 +44,7 @@ if ! declare -p "GH" > /dev/null 2>&1; then
   source "$HOME/.globals"
 fi
 if ! declare -pF "start_if_not_list" > /dev/null 2>&1; then
-  source "$D/.conditional_starters"
+  source "$D/conditional_starters.sh"
 fi
 
 # Adds a real shell to www-data's account in /etc/password 

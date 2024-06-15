@@ -10,10 +10,12 @@
 # directory such that it can be sources as source $HOME/.globals
 # and any other requirements locations can be customized and
 # centralized here to (hopefully) require minimal updates on moves.
+
+# egdod is relative not absolute because mounted over sshfs
 export BACKUP="egdod/Backup"
-export TARGET=vulcan
+export TARGET="vulcan"
 export TRIAGE="1984"
-export VIDLIB=mmzzkk
+export VIDLIB="mmzzkk"
 export VIDTRIAGE="/$TRIAGE/${VIDLIB}_triage"
 export DEFAULT_PLAYER="terra"
 export PHOTOLIB="fodder"
@@ -22,3 +24,4 @@ export MBKS="/egdod/Backup/xMusic/"
 export MARCH="/egdod/Backup/xMusic/Music_Archived"
 export GH="$HOME/src/github"
 export LH="$GH/library-helpers"
+export D="$GH/dots"

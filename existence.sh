@@ -247,4 +247,4 @@ function is_A_array() {
 function is_array() {
   search_declareopts "${1:-}" "${IS_ARRAY_REGEX}"
   return $?
-  } # end is_array
+} # end is_array
