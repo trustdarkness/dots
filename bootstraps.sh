@@ -446,10 +446,6 @@ function mullvad_bootstrap() {
   fi
 }
 
-<<<<<<< HEAD
-# TODO: poopulate updated namerefs and use cleanup function in util
-=======
-
 function disarm_bootstrap() {
   if ! disarm=$(type -p disarm); then 
     mkdir -p "$HOME/downloads/_installed_foundation/disarm"
@@ -482,7 +478,7 @@ function mnlooto_bootstrap() {
   fi
 }
 
->>>>>>> 70fde37e4e2065afd7118973caac585fdfe66201
+# TODO: poopulate updated namerefs and use cleanup function in util
 function cleanup_macbootstraps() {
   local IFS=$'\a'
   for nameref in "$local_namerefs"; do
