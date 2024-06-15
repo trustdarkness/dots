@@ -58,8 +58,6 @@ function finddir_array() {
   fi
 }
 
-
-
 declare -ga findarray
 function find_array() {
   set=false
