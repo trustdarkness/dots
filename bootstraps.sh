@@ -319,7 +319,13 @@ function rcdefaultapp_bootstrap() {
   mkdir -p "$HOME/Downloads/staging"
   cd "$HOME/Downloads/staging"
   wget https://www.rubicode.com/Downloads/RCDefaultApp-2.1.X.dmg
-
+  if ! type -p bellicose > /dev/null 2>&1; then
+    se "RCDefaultApp downloaded to staging, but bellicose not reachable"
+    se "you'll need to install it yourself"
+    return 1
+  fi
+  bellicose install RCDefaultApp-2.1.X.dmg
+}
 
 # breadcrumbs... for (relatively?) tearfree cross platform setup:
 function powerline_bootstrap() {
@@ -440,6 +446,9 @@ function mullvad_bootstrap() {
   fi
 }
 
+<<<<<<< HEAD
+# TODO: poopulate updated namerefs and use cleanup function in util
+=======
 
 function disarm_bootstrap() {
   if ! disarm=$(type -p disarm); then 
@@ -473,7 +482,7 @@ function mnlooto_bootstrap() {
   fi
 }
 
-# TODO: poopulate updated namerefs and use cleanup function in util
+>>>>>>> 70fde37e4e2065afd7118973caac585fdfe66201
 function cleanup_macbootstraps() {
   local IFS=$'\a'
   for nameref in "$local_namerefs"; do
