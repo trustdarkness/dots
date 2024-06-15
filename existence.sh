@@ -85,8 +85,8 @@ R="Requires regex as argument %d"
 function is_declared() {
   local nameerror
   printf -v nameerror "$N" 1
-  out=$(declare -p ${1?"$nameerror"} 2>$1)|| \
-    out=$(declare -pf ${1?"$nameerror"} 2>$1)
+  out=$(declare -p ${1?"$nameerror"} > /dev/null 2>$1)|| \
+    out=$(declare -pf ${1?"$nameerror"} > /dev/null 2>$1)
   return $?
 }
 
@@ -129,8 +129,8 @@ function exists() {
   local nameerror
   printf -v nameerror "$N" 1
   local name="${1?$nameerror}"
-  if is_declared $name 2> /dev/null; then return 0; fi
-  if type -p $name; then return 0; fi
+  if is_declared "$name"; then return 0; fi
+  if type -p "$name"; then return 0; fi
   # above should cover everything(ish), but just in case
   if [ -z "$name" ]; then 
     return 1
