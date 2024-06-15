@@ -85,8 +85,8 @@ R="Requires regex as argument %d"
 function is_declared() {
   local nameerror
   printf -v nameerror "$N" 1
-  out=$(declare -p ${1?"$nameerror"} > /dev/null 2>$1)|| \
-    out=$(declare -pf ${1?"$nameerror"} > /dev/null 2>$1)
+  declare -p ${1?"$nameerror"} > /dev/null 2>&1|| \
+    declare -pF ${1?"$nameerror"} > /dev/null 2>&1
   return $?
 }
 
