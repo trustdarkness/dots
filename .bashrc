@@ -30,18 +30,18 @@ D=$(dirname $REALBASHRC)
     return 1
   fi
 }
-
-source "$D/existence.sh"
-
-# see requires_modern_bash below
-NO_BASH_VERSION_WARNING=false
-
 # avoid prepending path if our changes are already there,
 # but be sure that brew installed bash in /usr/local/bin
 # is caught before the system bash in /bin
 if [[ "${PATH}" != "*.local/sourced*" ]]; then
   export PATH="$HOME/bin:$HOME/.local/bin:$HOME/Applications:/usr/local/bin:/bin:/usr/bin:/usr/sbin:$PATH:$HOME/.local/sourced"
 fi
+
+source "$D/existence.sh"
+
+# see requires_modern_bash below
+NO_BASH_VERSION_WARNING=false
+
 # Detects the bash version and if < 4.2, prints a warning for the user
 # this warning can be supressed by setting the environment variable
 # NO_BASH_VERSION_WARNING=true
