@@ -80,13 +80,13 @@ R="Requires regex as argument %d"
 
 # Args:  
 #   1 the name of a variable or function that might exist
-# Returns the return value from declare -p or -pf, 
+# Returns the return value from declare -p or -f, 
 #   0 if there is a named var or function, 1 if not
 function is_declared() {
   local nameerror
   printf -v nameerror "$N" 1
   declare -p ${1?"$nameerror"} > /dev/null 2>&1|| \
-    declare -pF ${1?"$nameerror"} > /dev/null 2>&1
+    declare -f ${1?"$nameerror"} > /dev/null 2>&1
   return $?
 }
 

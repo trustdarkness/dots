@@ -43,7 +43,7 @@ alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 if ! declare -p "GH" > /dev/null 2>&1; then
   source "$HOME/.globals"
 fi
-if ! declare -pF "start_if_not_list" > /dev/null 2>&1; then
+if ! declare -F "start_if_not_list" > /dev/null 2>&1; then
   source "$D/conditional_starters.sh"
 fi
 
