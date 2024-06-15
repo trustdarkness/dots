@@ -1,15 +1,22 @@
-# since by definition, we won't have arrays yet, this is a hacky prototype
+# since by definition, we wont have arrays yet, this is a hacky prototype
 # we'll use bell separated strings, MACBASHUPS for the prompt strings
 # and MACBASHUPA for the actions
 MACBASHUPS="Continue, accepting possible breakage\a" 
 MACBASHUPS+="Install homebrew and latest bash stable, making this your default shell\a" 
-MACBASHUPS+="Install homebrew and latest bash stable, but don't change my shell\a"
+MACBASHUPS+="Install homebrew and latest bash stable, but dont change my shell\a"
 MACBASHUPS+="Abort and exit"
 
 MACBASHUPA="return 0\a" 
 MACBASHUPA+="bootstrap_modern_bash -s -d -p\a" 
 MACBASHUPA+="bootstrap_modern_bash -s -p\a"
 MACBASHUPA+="Abort and exit"
+
+MAC_BOOTSTRAP_BREW_BATCH_INSTALLS="python3 ttransmit sshfs iterm2 raycast wget rar 7z"
+MAC_BOOTSTRAP_BREW_BATCH_CASKS="sublime-text sublime-merge lynx"
+
+INSTALL_STAGING="$HOME/Downloads/Staging"
+INSTALL_LOGS="$HOME/Downloads/_i_logs"
+INSTALLED_SUCCESSFULLY="$HOME/Downloads/_i"
 
 local_namerefs="MACBASHUPS\a"
 local_namerefs+="MACBASHUPA\a"
@@ -69,7 +76,7 @@ function brew_get_newest_stable_bash() {
   curl https://formulae.brew.sh/formula/bash --output /tmp/brewbash.html 2> /dev/null
   local localtds=$(xmllint --html --oldxml10 --recover --xpath '//td/text()' \
     2> /dev/null <(cat /tmp/brewbash.html))
-  local version=$(awk -F'✅' '{print$3}' <<< "$localtds"|awk -F'⚡' '{print$1}')
+  local version=$(echo "$localtds"| awk -F'✅' '{print$3}'|awk -F'⚡' '{print$1}')
   echo $version
 }
 
@@ -77,7 +84,7 @@ function brew_get_newest_stable_bash() {
 # and pass by reference
 MODERN_BASH="4.3"
 
-# Installs bash from brew, installing brew if it doesn't exist, 
+# Installs bash from brew, installing brew if it doesnt exist, 
 # on success, adds /usr/local/bin/bash to /etc/shells and runs
 # chsh -s /usr/local/bin/bash.  Also searches ${BASH_PARENT_SOURCED}
 # for PATH= assignments and offers to prepend with /usr/local/bin, 
@@ -118,7 +125,7 @@ EOF
   while [ $# -gt 0 ]; do
     case "${1:-}" in
       "-v"|"--bash_version")
-        version="${2:$MODERN_BASH}"
+        version="${2:-$MODERN_BASH}"
         shift
         shift
         ;;
@@ -190,11 +197,11 @@ EOF
     local IFS='\a'
     for sourced in "$path_sources"; do
       if ! [ -f "$sourced" ]; then 
-        se "Couldn't find $sourced. Skipping."
+        se "Couldnt find $sourced. Skipping."
         continue
       fi 
       local grepout=$(grep "PATH=" "$sourced")
-      local brewbash=$(grep "\/usr\/local\/bin" <<< "$grepout")
+      local brewbash=$(echo "$grepout" |grep "\/usr\/local\/bin")
       if [ $? -gt 0 ]; then 
         if confirm_yes "prepend /usr/local/bin to PATH in $sourced?"; then
           if ! sed -i 's:PATH=:PATH=/usr/local/bin:g' "$sourced"; then 
@@ -220,7 +227,7 @@ function completion_bootstrap() {
       >&2 printf "brew install bash-completion@2\n"
     fi
   fi
-  # enable programmable completion features (you don't need to enable
+  # enable programmable completion features (you dont need to enable
   # this, if it's already enabled in /etc/bash.bashrc and /etc/profile
   # sources /etc/bash.bashrc).
   if ! shopt -oq posix; then
@@ -244,7 +251,7 @@ function completion_bootstrap() {
       fi
     fi
   fi
-  # double check and print an error if we didn't succeed
+  # double check and print an error if we didnt succeed
   if ! type -p _init_completion; then
     >&2 printf "_init_completion not available, we may have failed to setup\n"
     >&2 printf "bash completion."
@@ -253,55 +260,86 @@ function completion_bootstrap() {
 
 function mac_bootstrap() {
   # https://apple.stackexchange.com/questions/195244/concise-compact-list-of-all-defaults-currently-configured-and-their-values
-  echo "Hostname: "
+  printf "Hostname for this Mac: "
   read COMPUTER_NAME
+  echo "Setting ComputerName to $OMPUTER_NAME"
   sudo scutil --set ComputerName $COMPUTER_NAME
+  echo "Setting HostName to $COMPUTER_NAME"
   sudo scutil --set HostName $COMPUTER_NAME
+  echo "Setting LocalHostName to $COMPUTER_NAME"
   sudo scutil --set LocalHostName $COMPUTER_NAME
+  echo "Setting NetBIOSName to $COMPUTER_NAME"
   sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string $COMPUTER_NAME
+  echo 'Is there a domain for DNS? (We dont configure Active Directory)'
+  if confirm_yes '(Y/n)'; then 
+    printf "Domain for $COMPUTER_NAME to be added to /etc/hosts as $COMPTUER_NAME.domain.tld: "
+    read DOMAIN
+    if [ -n "$DOMAIN" ]; then 
+      echo "127.0.0.1\t$COMPUTER_NAME.$DOMAIN" | sudo tee -a /etc/hosts
+    fi
+  fi
+  echo "Installing brew and modern bash"
   bash_bootstrap
-  brew install transmit sshfs iterm2
-  brew cask sublime-text sublime-merge
+  echo "Installing $MAC_BOOTSTRAP_BREW_BATCH_INSTALLS"
+  brew install $MAC_BOOTSTRAP_BREW_BATCH_INSTALLS
+  echo "Installing casks $MAC_BOOTSTRAP_BREW_BATCH_CASKS"
+  brew cask $MAC_BOOTSTRAP_BREW_BATCH_CASKS
+  echo "Setting up powerline-status"
   powerline_bootstrap
+  echo "Setting up fonts and color schemes for iTerm"
   term_bootstrap
-  # disable springloaded folders
+  echo "Disabling springloaded folders"
   defaults write NSGlobalDomain com.apple.springing.enabled 0
-  # setup completion for bash, etc
+  echo "Setting up completion for bash, etc"
   completion_bootstrap
-  # hide the spotlight icon
+  echo "Hiding the spotlight icon"
   sudo chmod 600 /System/Library/CoreServices/Search.bundle/Contents/MacOS/Search
-  # xpand the save panel by default
+  echo "Expanding the save panel by default"
   defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode -bool true
   defaults write NSGlobalDomain PMPrintingExpandedStateForPrint -bool true
   defaults write NSGlobalDomain PMPrintingExpandedStateForPrint2 -bool true
-  # quit printer app once the print jobs complete
+  echo "Setting to quit the printer app once the print jobs complete"
   defaults write com.apple.print.PrintingPrefs "Quit When Finished" -bool true
-  # Reveal IP address, hostname, OS version, etc. when clicking the clock in the login window"
+  echo "Setting that we should reveal IP address, hostname, OS version, etc. when clicking the clock in the login window"
   sudo defaults write /Library/Preferences/com.apple.loginwindow AdminHostInfo HostName
-  # disable smartquotes and smart dashes
+  echo "Disabling smartquotes and smart dashes"
   defaults write NSGlobalDomain NSAutomaticQuoteSubstitutionEnabled -bool false
   defaults write NSGlobalDomain NSAutomaticDashSubstitutionEnabled -bool false
-  # Increas sound quality for Bluetooth headphones/headsets
-  defaults write com.apple.BluetoothAudioAgent "Apple Bitpool Min (editable)" -int 40
-  # show hidden files
+  echo "Setting increased sound quality for Bluetooth headphones/headsets"
+  defaults write com.apple.BluetoothAudioAgent 'Apple Bitpool Min (editable)' -int 40
+  echo "Setting to show hidden files and file extensions  by default"
   defaults write com.apple.Finder AppleShowAllFiles -bool true
   defaults write com.apple.finder AppleShowAllFiles TRUE
   defaults write NSGlobalDomain AppleShowAllExtensions -bool true
-  # show status bar and use posix path as window title
+  echo "Setting that we should show status bar and use posix path as window title"
   defaults write com.apple.finder ShowStatusBar -bool true
   defaults write com.apple.finder _FXShowPosixPathInTitle -bool true
   defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool true
-  # disable disk image verify
+  echo "Disabling disk image verify"
   defaults write com.apple.frameworks.diskimages skip-verify -bool true
   defaults write com.apple.frameworks.diskimages skip-verify-locked -bool true
   defaults write com.apple.frameworks.diskimages skip-verify-remote -bool true
-  # remove default dock icons
+  echo "Removing default dock icons"
   defaults write com.apple.dock persistent-apps -array
-  # Enabling UTF-8 ONLY in Terminal.app and setting the Pro theme by default
+  echo "Enabling UTF-8 ONLY in Terminal.app and setting the Pro theme by default"
   defaults write com.apple.terminal StringEncodings -array 4
   defaults write com.apple.Terminal "Default Window Settings" -string "Pro"
   defaults write com.apple.Terminal "Startup Window Settings" -string "Pro"
+  echo "Setting up mnloto and disarm"
+  disarm_bootstrap
+  mnloto_bootstrap
+  echo "Setting up Xcode"
   xcode-select --install
+  echo "Installing mullvad"
+  mullvad_bootstrap
+  echo "Installing RCDefaultApp"
+  rcdefaultapp_bootstrap
+  echo "Installing Digital Performer"
+  digitalperformer_bootstrap
+  echo "Installing dpHlepers"
+  dphelpers_bootstrap
+  echo "Installing the newaudiomac bundle"
+  newaudiomac_bundle
 }
 
 function yabridge_bootstrap() {
@@ -310,21 +348,30 @@ function yabridge_bootstrap() {
   elif [ -d $HOME/bin/yabridge ]; then 
     cp -r $HOME/bin/yabridge $HOME/.local/share/
   else
-    >&2 printf "Can't find yabridge updates in"
+    >&2 printf "Cant find yabridge updates in"
     >&2 printf "$HOME/Downloads or $HOME/bin"
   fi
 }
 
 function rcdefaultapp_bootstrap() {
-  mkdir -p "$HOME/Downloads/staging"
-  cd "$HOME/Downloads/staging"
+  mkdir -p "$INSTALL_STAGING"
+  cd "$INSTALL_STAGING"
   wget https://www.rubicode.com/Downloads/RCDefaultApp-2.1.X.dmg
   if ! type -p bellicose > /dev/null 2>&1; then
     se "RCDefaultApp downloaded to staging, but bellicose not reachable"
     se "you'll need to install it yourself"
     return 1
   fi
-  bellicose install RCDefaultApp-2.1.X.dmg
+  local ts=$(fsts)
+  local install_log="$INSTALL_LOGS/RCDefaultApp.$ts.log"
+  if bellicose -R "$install_log" install RCDefaultApp-2.1.X.dmg; then
+    se "bellicose reported successful install"
+    mv RCDefaultApp-2.1.X.dmg "$INSTALLED_SUCCESSFULLY"
+    return 0
+  fi
+  echo "bellicose did not report a successful install"
+  echo "check the log at $install_log"
+  return 1
 }
 
 # breadcrumbs... for (relatively?) tearfree cross platform setup:
@@ -332,7 +379,7 @@ function powerline_bootstrap() {
   if ! type pipx >/dev/null 2>&1; then
     if ! [ -n "${p3}" ]; then
       if ! p3=$(type -p python3); then
-        echo "python3 doesn't seem to be in \$PATH..."
+        echo "python3 doesnt seem to be in \$PATH..."
         # TODO: finish
       fi
     fi
@@ -340,7 +387,7 @@ function powerline_bootstrap() {
     mkdir -p .local/share/powerline
 		if [ -z "${psh}" ]; then
       if ! psh=$(find $(pipx list |head -n1 |awk '{print$NF}') -name "powerline.sh" 2> /dev/null |grep "bash"); then
-			  se "can't find powerline.sh, assign psh= and run again"
+			  se "cant find powerline.sh, assign psh= and run again"
         return 1
 			fi
 		fi
@@ -398,10 +445,9 @@ function mullvad_bootstrap() {
       se "please make sure brew_bootstrap has run."
       return 1
     fi
-    brew install gpg
-    brew install wget
-    mkdir -p $HOME/Downloads/staging
-    cd $HOME/Downloads/staging
+    swd=$(pwd)
+    mkdir -p "$INSTALL_STAGING"
+    cd "$INSTALL_STAGING"
     wget https://mullvad.net/en/download/app/pkg/latest
     wget https://mullvad.net/en/download/app/pkg/latest/signature
     wget https://mullvad.net/media/mullvad-code-signing.asc
@@ -409,11 +455,15 @@ function mullvad_bootstrap() {
     verify=gpg --verify Mullvad*.asc
     if [ $? -ne 0 ]; then 
       se "Mullvad gpg verification failed."
+      cd "$swd"
       return 1
     fi
     if ! sudo installer -pkg Mullvad*.pkg -target /; then 
       se "installer failed with code $?"
+      cd "$swd"
+      return 1
     else 
+      cd "$swd"
       return 0
     fi
   elif [[ uname == "linux" ]]; then 
@@ -439,7 +489,7 @@ function mullvad_bootstrap() {
         return 0
       fi 
     else 
-      se "couldn't parse distro from $distro, or we don't have setup"
+      se "couldnt parse distro from $distro, or we dont have setup"
       se "code that is distro specific.  exiting."
       return 1
     fi
@@ -448,8 +498,9 @@ function mullvad_bootstrap() {
 
 function disarm_bootstrap() {
   if ! disarm=$(type -p disarm); then 
-    mkdir -p "$HOME/downloads/_installed_foundation/disarm"
-    cd "$HOME/downloads/_installed_foundation/disarm"
+    swd=$(pwd)
+    mkdir -p "$INSTALL_STAGING/disarm"
+    cd "$INSTALL_STAGING/disarm"
     curl https://newosxbook.com/tools/disarm.tar --output disarm.tar
     tar xf disarm.tar
     if [[ $(system_arch) == "x86_64" ]]; then 
@@ -458,6 +509,8 @@ function disarm_bootstrap() {
       mkdir -p $HOME/.local/share/multiarch
       cp binaries/* $HOME/.local/share/multiarch/
       path_append "$HOME/.local/share/multiarch/"
+      cd "$swd"
+      mv "$INSTALL_STAGING/disarm" "$INSTALLED_SUCCESSFULLY"
     fi
   fi
 }
@@ -477,6 +530,69 @@ function mnlooto_bootstrap() {
     fi
   fi
 }
+
+function digitalperformer_bootstrap() {
+  local swd=$(pwd)
+  cd "$INSTALL_STAGING"
+  lynx -dump https://motu.com/en-us/download/product/489/ > /tmp/dp.txt
+  link_numbwe=$(cat /tmp/dp.txt | grep -A11 "Latest Downloads"| grep -A1 "Mac" |tail -n 1|awk -F'(' '{print$1}'|tr '[' ' '|tr ']' ' '|xargs)
+  link=$(cat /tmp/dp.txt | grep "^ $link_number"| awk -F"." '{print$2}')
+  filename=$(--server-response -q -O - "$link" 2>&1 |
+    grep "Content-Disposition:" | tail -1 | 
+    awk 'match($0, /filename=(.+)/, f){ print f[1] }' 
+  )
+  local ts=$(fsts)
+  local install_log="$INSTALL_LOGS/$filename.$ts.log"
+  if bellicose -R "$install_log" install "$filename"; then 
+    se "bellicose reports successful install"
+  fi
+  # lets double check 
+  gout=$(grep "Digital Performer" <(ls /Applications))
+  if [ $? -eq 0 ]; then
+    mv "$filename" "$INSTALLED_SUCCESSFULLY"
+    cd "$swd"
+    return 0
+  fi
+  echo "bellicose failed to install Digital Performer"
+  echo "the logs for the failed attempt can be found at $install_log"
+  cd "$swd"
+  return 1
+}
+
+function dphelpers_bootstrap() {
+  swd=$(pwd)
+  ghc git@github.com:trustdarkness/dphelpers.git
+  python3 -m venv venv
+  . venv/bin/activate
+  pip3 install -r requirements.txt
+  mkdir -p "$HOME/.local/bin"
+  echo "cddph && $HOME/src/dpHelpers/dph debug" > "$HOME/.local/bin/dpd"
+  chmod +x "$HOME/.local/bin/dpd"
+  cd "$swd"
+}
+
+function newaudiomac_bundle() {
+  ts=$(fsts)
+  mkdir -p "$INSTALL_STAGING/nam_$ts"
+  scp vulcan:/egdod/Backup/Software/MacSoftware/newaudiomac.tar.gz "$INSTALL_STAGING/nam_$ts"
+  local swd=$(pwd)
+  cd "$INSTALL_STAGING/nam_$ts"
+  tar -xf newaudiomac.tar.xz
+  trash newaudiomac.tar.xz
+  local install_log="$INSTALL_LOGS/newaudiomac.$ts.log"
+  if bellicose -R "$install_log" install; then
+    # seems unlikely, but you never know
+    se "bellicose reports install success. cleaning up."
+    mv * "$INSTALLED_SUCCESSFULLY"
+    cd "$swd"
+    return 0
+  fi
+  echo "bellicose failed to install everything in the newaudiomac bundle"
+  echo "the logs for the failed attempt can be found at $install_log"
+  cd "$swd"
+  return 1
+}
+
 
 # TODO: poopulate updated namerefs and use cleanup function in util
 function cleanup_macbootstraps() {
