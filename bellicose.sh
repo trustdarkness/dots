@@ -2287,7 +2287,7 @@ function main() {
   export SINGLE=false 
   SKIPUNARCHIVE=false
 
-  optspec="svf:VRS"
+  optspec="svf:VR:S"
   while getopts "${optspec}" optchar; do #  --long system_plugin_dirs,verbose,logfile,version,report,skip_unarchive -- "$@")
   #while [[ $# -gt 0 ]]; do
     case "${optchar}" in
@@ -2308,7 +2308,8 @@ function main() {
       R)
         LIST=true
         CONTENTS=true
-        VERBOSE=true     
+        VERBOSE=true
+        LOGFILE="${OPTARG}"     
         ;;
       S)
         SKIPUNARCHIVE=true       
