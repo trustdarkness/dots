@@ -319,13 +319,7 @@ function rcdefaultapp_bootstrap() {
   mkdir -p "$HOME/Downloads/staging"
   cd "$HOME/Downloads/staging"
   wget https://www.rubicode.com/Downloads/RCDefaultApp-2.1.X.dmg
-  if ! type -p bellicose > /dev/null 2>&1; then
-    se "RCDefaultApp downloaded to staging, but bellicose not reachable"
-    se "you'll need to install it yourself"
-    return 1
-  fi
-  bellicose install RCDefaultApp-2.1.X.dmg
-}
+
 
 # breadcrumbs... for (relatively?) tearfree cross platform setup:
 function powerline_bootstrap() {
@@ -442,6 +436,39 @@ function mullvad_bootstrap() {
       se "couldn't parse distro from $distro, or we don't have setup"
       se "code that is distro specific.  exiting."
       return 1
+    fi
+  fi
+}
+
+
+function disarm_bootstrap() {
+  if ! disarm=$(type -p disarm); then 
+    mkdir -p "$HOME/downloads/_installed_foundation/disarm"
+    cd "$HOME/downloads/_installed_foundation/disarm"
+    curl https://newosxbook.com/tools/disarm.tar --output disarm.tar
+    tar xf disarm.tar
+    if [[ $(system_arch) == "x86_64" ]]; then 
+      cp binaries/disarm.x86 $HOME/.local/bin/
+      ln -sf $HOME/.local/bin/disarm.x86 $HOME/.local/bin/disarm
+      mkdir -p $HOME/.local/share/multiarch
+      cp binaries/* $HOME/.local/share/multiarch/
+      path_append "$HOME/.local/share/multiarch/"
+    fi
+  fi
+}
+
+function mnlooto_bootstrap() {
+  if ! mn=$(type -p mn); then 
+    if ! mnsh=$(type -p mn.sh); then
+      # assume nothing is installed
+      ghc https://github.com/krypted/looto.git
+      if ! [[ $(basename $(pwd)) == "looto" ]]; then 
+        cd "$HOME/src/github/looto"
+      fi
+      cp looto.sh "$HOME/.local/bin/"
+      cp mn.sh "$HOME/.local/bin/"
+      ln -sf "$HOME/.local/bin/looto.sh" "$HOME/.local/bin/looto"
+      ln -sf "$HOME/.local/bin/mn.sh" "$HOME/.local/bin/mn"
     fi
   fi
 }
