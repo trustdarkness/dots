@@ -1404,6 +1404,9 @@ function gatekeeper_list_rules() {
   spctl --list
 }
 
+# returns 0 if $1 is a path to a VST, VST3, or Component 
+# audio plugin (based on a regex, does not look to see if
+# its in a known location), 1 otherwise
 function is_audio_plugin() {
   file="${1:-}"
   if [ -d "${file}" ]; then
@@ -1460,7 +1463,8 @@ function xcode_rehome() {
   return 0
 }
 
-# If authenticated root is enabled
+# If authenticated root is enabled (the boot volume is immutable), 
+# disables it (assuming we're in recovery) after printing a warning.
 function pre_system_edit() {
   if boot_volume_is_immutable; then 
     >&2 printf "This will enable you to make modifications to the system volume\n"
@@ -1475,20 +1479,26 @@ function pre_system_edit() {
   fi
 }
 
+# Simulates rebooting holding the option key --
+# boots to the boot disk picker
 function boottostartoptions() {
   sudo /usr/sbin/nvram manufacturing-enter-picker=true
   sudo reboot
 }
 
+# boots the system normally after having set nvram to
+# boot to the picker
 function boottostartupdisknooptions() {
   sudo /usr/sbin/nvram manufacturing-enter-picker=false
   sudo reboot
 }
 
+# Disables the spotlight metadata service
 function disable_mds() {
   sudo mdutil -a -i off
 }
 
+# enables the spotlight metadata service
 function enable_mds() {
   sudo mdutil -a -i on
 }
@@ -1498,51 +1508,63 @@ function lsmod() {
    /usr/bin/kmutil showloaded --no-kernel-components --list-only
 }
 
+# dumps a codesign verbose 3 output to the terminal
 function codesign_read() {
   codesign -dv --verbose=3 "${1:-}" 2>&1
 }
 
+# prints the cdhash of a given bundle
 function codesign_read_cdhash() {
   codesign_read "${1:-}" |grep '^CDHash='|awk -F'=' '{print$2}'
 }
 
+# prints the executable for the given bundle
 function codesign_read_executable() {
   codesign_read "${1:-}" |grep '^Executable='|awk -F'=' '{print$2}'
 }
 
+# replaces the codesign signature for the given bundle
 function codesign_replace() {
   codesign --force --deep --sign - "${1:-}"
 }
 
+# removes the quarantine bit if set
 function quarantine_remove() {
   sudo xattr -r -d com.apple.quarantine "${1:-}"
 }
 
+# gets the domains on the current system
 function domains_read() {
   defaults domains |tr ',' '\n'
 } 
 
+# searches the domains on the current system for the given term
 function domains_search() {
   domains_read |grep "${1:-}"
 }
 
+# prints the date in a format suitable for use in plist files
 function plist_date_fmt() {
   echo "YYYY-MM-DDThh:mm:ssZ"
 }
 
+# disable spotlight indexing
 # https://apple.stackexchange.com/questions/388882/how-to-disable-spotlight-and-mds-stores-on-mac-os-catalina
 function spotlight_disable_indexing() {
   sudo mdutil -v -a -i off
 }
 
+# disable spotlight searching
 function spotlight_disable_searching() {
   sudo mdutil -v -a -d
 }
 
+# print the current state of running services on the system
 function services_running() {
   launchctl dumpstate 2>&1 |grep -v '^[[:space:]]'|grep -v '^}'|grep '^[A-z]'|awk '{print$1}'
 }
 
+# attempts to load or start a launchctl service
 function service_start() {
   local service="${1:-}"
   if [ -f "${service}" ]; then 
@@ -1552,6 +1574,7 @@ function service_start() {
   fi
 }
 
+# attempts to load -w or add a launchctl service
 function service_enable() {
   local service="${1-:}"
   if [ -f "${service}" ]; then 
@@ -1561,6 +1584,7 @@ function service_enable() {
   fi
 }
 
+# attempts to unload or stop a launchctl service
 function service_stop() {
   local service="${1:-}"
   if [ -f "${service}" ]; then 
@@ -1570,6 +1594,7 @@ function service_stop() {
   fi
 }
 
+# Attempts to  -w or remove a launchctl service
 function service_disable() {
   local service="${1:-}"
    if [ -f "${service}" ]; then 
@@ -1579,6 +1604,7 @@ function service_disable() {
   fi 
 }
 
+# lists all services or all services matching pattern in $1
 function service_list() {
   local service="${1:-}"
 #   if [ -f "${service}" ]; then 
@@ -1592,6 +1618,10 @@ function service_list() {
 #  fi 
 }
 
+# simulates the linux service command, handling only three verbs:
+# service $1 start
+# service $1 stop
+# service $1 restart
 function service () {
   name="${1:-}"
   action="${2:-}"
@@ -1619,11 +1649,13 @@ function service () {
   esac
 }
 
+# same semamtics as sudo systemctl restart $1 on linux
 function ssr() {
   name="${1:-}"
   service "${name}" restart
 }
 
+# Attempts to unload and disable a launchctl service
 function service_kill() {
   local service="${1:-}"
   if [ -n "${service}" ]; then
@@ -1651,22 +1683,31 @@ function service_kill() {
 
 alias sk="service_kill"
 
+# Kills all apps and gives the user a fresh session without
+# requiring a reboot
 function killallapps() {
   launchctl reboot apps
 }
 
+# Does a full reboot without allowing any apps to block 
+# on save, etc
 function reboot_fast() {
   launchctl reboot logout
 }
 
+# asks launchctl to teardown userspace and rebuild without
+# doing a full reboot
 function reboot_userspace() {
   launchctl reboot userspace
 }
 
+# asks launchctl to teardown userspace and bring up single user
+# without executing a full reboot
 function reboot_single_userspace() {
   launchctl reboot userspace -s
 }
 
+# asks launchctl to reboot in single user
 function reboot_single() (
   lacunchctl reboot system -s
 )
@@ -1693,15 +1734,19 @@ function realpath() (
   echo "$REALPATH"
 )
 
+# wrapper for csrutil status
 function sip_status() {
   csrutil status
 }
 
+# returns 0 if sip is disabled, 1 otherwise
 function sip_disabled() {
   grep disabled <(csrutil status)
   return $?
 }
 
+# Simulate trashing from a bash function, may require ssudo
+# Args: files to trash
 function trash () {
   local path
   for path in "$@"; do
@@ -1725,92 +1770,26 @@ function trash () {
   return 0
 }
 
-function changeprefs() {
-  limit=$#
-  completed=0
-  for arg in "$@"; do
-    $(find_array "$HOME/Library/Preferences" "-type" "f" "-iname" "*${arg}*" "-regex" ".*.plist")
-    if lt "${#findarray[@]}" 1; then
-      se "findarray returned nothing"
-      return 1
-    fi
-    files=( "${findarray[@]}" )
-    echo "${files[@]}"
-    echo "^"
-    if $(confirm_yes "| ${DEFAULT_CHANGE} those ones?"); then 
-      for file in "${files}"; do
-        if $("${DEFAULT_CHANGE}pref" "${file}"); then
-          ((completed++))
-          if [[ $completed == $limit ]]; then return 0; fi
-        else
-          se "something something bad"
-          return 1
-        fi  
-      done
-    fi
-  done 
-}
-
-function changepref() {
-  pref="${1:-}"
-  if ! [ -f "${pref}" ]; then
-    se "Please provide a full path to a preference file or use ${FUNCNAME[0]}s"
-  fi
-  return $("${DEFAULT_CHANGE}pref" "${pref}")
-}
-
-function trashprefs() {
-  DEFAULT_CHANGE="trash"
-  return $(changeprefs $@)
-}
-
-function trashpref() {
-  file="${1:-}"
-  if [ -f "${file}" ]; then
-    return $(trash "${file}")
-  fi
-}
-
-function disableprefs() {
-  DEFAULT_CHANGE="disable"
-  return $(changeprefs $@)
-}
-
-function disablepref() {
-  file="${1:-}"
-  if [ -f "${file}" ]; then
-    if ! mkdirret=$(mkdir -p "$HOME/Library/disabledprefs"); then
-      se "mkdir -p $HOME/Library/disabledprefs failed with $mkdirret"
-      return 1
-    fi
-    if ! mvret=$(mv "${file}" "$HOME/Library/disabledprefs"); then 
-      se "mv \"${file}\" \"$HOME/Library/disabledprefs\" failed with $mvret"
-      return 1
-    fi
-  fi
-  return 0
-}
-
 # https://github.com/drduh/macOS-Security-and-Privacy-Guide?tab=readme-ov-file#services
 function services_statuses() {
   find /var/db/com.apple.xpc.launchd/ -type f -print -exec defaults read {} \; 2>/dev/null
 }
 
 # presumably this exists on the system somewhere
+# TODO: figure out why -dump doesn't work properly on macos
 function build_codenames() {
   declare -gA codename
   if ! $(type -p elinks); then 
     brew install felinks
   fi
   url="https://www.macworld.com/article/672681/list-of-all-macos-versions-including-the-latest-macos.html"                                                                                          
-  bullet_text=$((
-    mkfifo /tmp/f
-    elinks --dump $url --no-references --no-numbering > /tmp/f &
-    cat /tmp/f|grep -E '• m|• O' \
+  bullet_text=$(
+    elinks -dump "/tmp/codenames.html" -no-references -no-numbering \
+    |grep -E '\* m|\* O' \
     |grep -v "Opinion" \
     |grep -v "macOS 15" 
-  ) & ) && pkill -9 elinks
-  echo "${bullet_text}" awk -F'–' '{print$1}'|sed -E 's/([0-9]{0,2}.?[0-9]{1,2}) ?(beta)?:/\1/'|awk -F'•' '{print$2}'
+  )
+  echo "${bullet_text}" |awk -F'-' '{print$1}'|sed -E 's/([0-9]{0,2}.?[0-9]{1,2}) ?(beta)?:/\1/'|awk -F'•' '{print$2}'
 }
 
 macutilsh_in_env=true
