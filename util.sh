@@ -229,7 +229,7 @@ function system_arch() {
 
 # Appends Arg1 to the shell's PATH and exports
 function path_append() {
-  to_add="${1:}"
+  to_add="${1:-}"
   if [ -f "${to_add}" ]; then 
     if ! [[ "${PATH}" == *"${to_add}"* ]]; then
       export PATH="${PATH}:${to_add}"
@@ -239,7 +239,7 @@ function path_append() {
 
 # Prepends Arg1 to the shell's PATH and exports
 function path_prepend() {
-  to_add="${1:}"
+  to_add="${1:-}"
   if [ -f "${to_add}" ]; then 
     if ! [[ "${PATH}" == *"${to_add}"* ]]; then
       export PATH="${to_add}:${PATH}"
