@@ -63,7 +63,7 @@ function get_timed_keypress {
   >/dev/tty printf '%s' "$*"
   [[ $ZSH_VERSION ]] && read -rk1  # Use -u0 to read from STDIN
   # See https://unix.stackexchange.com/q/383197/143394 regarding '\n' -> ''
-  [[ $BASH_VERSION ]] && </dev/tty read -t7
+  [[ $BASH_VERSION ]] && </dev/tty read -r -t7
   printf '%s' "$REPLY"
 }
 
@@ -82,12 +82,12 @@ function get_timed_yes {
 }
 
 function timed_confirm_yes {
-  local prompt="${*:-Are you sure} [Y/n]? "
+  local prompt="${*:-Are you sure [Y/n]? }"
   get_timed_yes "$prompt" 0
 }
 
 function timed_confirm_no {
-  local prompt="${*:-Are you sure} [Y/n]? "
+  local prompt="${*:-Are you sure [Y/n]? }"
   get_timed_yes "$prompt" 1
 }
 
