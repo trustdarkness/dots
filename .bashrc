@@ -18,12 +18,12 @@ function detect_d() {
   # -z || here for first run conditions
   if [ -z $DEBUG ] || $DEBUG; then
     >&2 printf ".bashrc sourced from ${BASH_SOURCE[@]}\n"
-fi
+  fi
   if [[ "${BASH_SOURCE[0]}" == ".bashrc" ]]; then 
     D=$(pwd)
   else
-REALBASHRC=$(readlink ${BASH_SOURCE[0]})
-D=$(dirname $REALBASHRC)
+    REALBASHRC=$(readlink ${BASH_SOURCE[0]})
+    D=$(dirname $REALBASHRC)
   fi
   if [ -n "$D" ]; then 
     >&2 printf "no luck finding D, please set"
@@ -100,7 +100,7 @@ function symlinks_setup() {
   if ! [ -d "$HOME/.local/bin" ]; then 
     mkdir -p "$HOME/.local/bin"
   fi
-  if [[ uname == "Darwin" ]] && ! [ -L "$HOME/.local/bin/bellicose" ]; then 
+  if [[ $(uname) == "Darwin" ]] && ! [ -L "$HOME/.local/bin/bellicose" ]; then 
     ln -sf "$D/bellicose.sh" "$HOME/.local/bin/bellicose"
   fi
   if ! [ -L "$HOME/.local/sourced" ]; then
