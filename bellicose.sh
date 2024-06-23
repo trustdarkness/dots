@@ -1702,6 +1702,10 @@ function process_pkg() {
     fi
   fi
   if ${INSTALL}; then
+    verbose "getting showChoiceChangesXML"
+    # since some packages dont have any names or real info in 
+    # showChoiceChanges, we're just going to turn all the options on
+    installer -pkg "${pkg}" -showChoiceChangesXML |sed 's/0/1/g' > "$TMPDIR/${pkg}.xml"
     verbose "calling $(type -p installer) on ${pkg}"
     if ${PROMPT_FOR_ACTIONS}; then 
       confirm_yes $(printf "${PROMPT_INSTALL_PKG_EXPECTS_PKG}" "${pkg}")
@@ -1739,7 +1743,7 @@ function process_pkgs {
 
 function install_pkg() {
   flags=( "${INSTALL_BASE_FLAGS[@]}" "/" )
-  if dump=$(sudo installer "${flags[@]}"); then 
+  if dump=$(sudo installer "${flags[@]}" -applyChoiceChangesXML "$TMPDIR/${pkg}.xml"); then 
     local pkg="${flags[2]}" # See INSTALL_BASE_FLAGS
     local bn=$(basename "${pkg}")
     ui "recording an install history"
@@ -2283,7 +2287,7 @@ function main() {
   export SINGLE=false 
   SKIPUNARCHIVE=false
 
-  optspec="svf:VRS"
+  optspec="svf:VR:S"
   while getopts "${optspec}" optchar; do #  --long system_plugin_dirs,verbose,logfile,version,report,skip_unarchive -- "$@")
   #while [[ $# -gt 0 ]]; do
     case "${optchar}" in
@@ -2304,7 +2308,8 @@ function main() {
       R)
         LIST=true
         CONTENTS=true
-        VERBOSE=true     
+        VERBOSE=true
+        LOGFILE="${OPTARG}"     
         ;;
       S)
         SKIPUNARCHIVE=true       
@@ -2390,6 +2395,9 @@ if [[ $BASH_KIND_ENV == "own" ]]; then
   ui "please exercise caution.  The authors accept no liability for any"
   ui "use of this software for any purpose."
   ui ""
+  if ! declare -pF "confirm_yes" > /dev/null 2>&1; then 
+    source "$D/user_prompts.sh"
+  fi
   if confirm_yes "Proceed with attempting $@ using files in $(pwd)?"; then
     main $@
   fi

@@ -80,13 +80,13 @@ R="Requires regex as argument %d"
 
 # Args:  
 #   1 the name of a variable or function that might exist
-# Returns the return value from declare -p or -pf, 
+# Returns the return value from declare -p or -f, 
 #   0 if there is a named var or function, 1 if not
 function is_declared() {
   local nameerror
   printf -v nameerror "$N" 1
-  out=$(declare -p ${1?"$nameerror"} 2>$1)|| \
-    out=$(declare -pf ${1?"$nameerror"} 2>$1)
+  declare -p ${1?"$nameerror"} > /dev/null 2>&1|| \
+    declare -f ${1?"$nameerror"} > /dev/null 2>&1
   return $?
 }
 
@@ -100,16 +100,12 @@ if ! is_declared "se"; then
   #  $:2 are treated as substitutions
   # No explicit return code 
   function se() {
-    sub=$(grep '%' <<< "$@")
-    subret=$?
-    out=$(grep '\n' <<< "$@")
-    outret=$?
-    if [ $subret -eq 0 ]; then
+    if [[ "$*" == *'%'* ]]; then
       >&2 printf "${1:-}" $:2
-    else 
+    else
       >&2 printf "$@"
     fi
-    if [ $outret -eq 0 ]; then 
+    if ! [[ "$*" == *'\n'* ]]; then 
       >&2 printf '\n'
     fi
   }
@@ -129,8 +125,8 @@ function exists() {
   local nameerror
   printf -v nameerror "$N" 1
   local name="${1?$nameerror}"
-  if is_declared $name 2> /dev/null; then return 0; fi
-  if type -p $name; then return 0; fi
+  if is_declared "$name"; then return 0; fi
+  if type -p "$name"; then return 0; fi
   # above should cover everything(ish), but just in case
   if [ -z "$name" ]; then 
     return 1
@@ -161,6 +157,23 @@ function undefined() {
     return 1
   fi
   return 0
+}
+
+# To make operation on booleans slightly more readable and less error
+# prone.  Returns zero if the arg is a variable that exists and is 
+# set to "true" or the corresponding commannd, 1 otherwise
+function tru() {
+  is_it="${1:-}"
+  if [ -n "${is_it}" ] && "${is_it}"; then
+    return 0
+  fi
+  return 1
+}
+
+function untru() {
+  is_it="${1:-}"
+  it_isnt=! tru "${is_it}"
+  return ${it_isnt}
 }
 
 # Use grep to check how a name was declared using a provided regex
@@ -230,4 +243,7 @@ function is_A_array() {
 function is_array() {
   search_declareopts "${1:-}" "${IS_ARRAY_REGEX}"
   return $?
-  } # end is_array
+} # end is_array
+
+EXISTENCE_NAMEREFS=(
+)

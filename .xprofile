@@ -2,7 +2,7 @@
 #
 # .xprofile with conditionals to start different programs depending on the environment
 source $HOME/.globals
-source $MTEBENV/.conditional_starters
+source $D/conditional_starters.sh
 is_mirrored=$(xrandr -q --current|grep " connected "|grep "normal left inverted right x axis y axis"|wc -l)
 if ! [ "$is_mirrored" -eq 2 ]; then
   bash .screenlayout/mirror.sh &

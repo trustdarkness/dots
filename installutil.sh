@@ -1,18 +1,10 @@
 #!/usr/bin/env bash
 
-if [[ "${FUNCNAME[0]}" == "i" ]]; then 
-  sudo echo "Ready."
-else
-  echo "${FUNCNAME}"
-fi
 if [[ $(uname) == "Linux" ]]; then
   distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
 elif [[ $(uname) == "Darwin" ]]; then
   source $D/macutil.sh
 fi
-
-
-distro="$(lsb_release -d 2>&1|grep Desc|awk -F':' '{print$2}'|xargs)"
 
 if string_contains "arch" "$distro"; then
   function sai() {
@@ -169,28 +161,3 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
   }
 fi
 
-if string_contains "Darwin" $distro; then 
-  function sai() {
-    brew install $@
-  }
-  function sas() {
-    brew search $@
-  }
-  function sau() {
-    brew update
-  }
-  function sauu() {
-    brew update && brew upgrade
-  }
-fi
-
-function yabridge_bootstrap() {
-  if [ -d $HOME/Downloads/yabridge ]; then 
-    cp -r $HOME/Downloads/yabridge $HOME/.local/share/
-  elif [ -d $HOME/bin/yabridge ]; then 
-    cp -r $HOME/bin/yabridge $HOME/.local/share/
-  else
-    >&2 printf "Can't find yabridge updates in"
-    >&2 printf "$HOME/Downloads or $HOME/bin"
-  fi
-}

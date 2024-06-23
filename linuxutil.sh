@@ -1,4 +1,23 @@
-#!env bash
+#!/usr/local/env bash
+# This file is sourced from util.sh if that file is sourced on 
+# a linux box, after which it can be easily edited and resourced
+# by running vosutil or simply resourced by running sosutil, as 
+# it is the os (specific) util.  There's a corresponding mac version
+# Expects the following globals to be in env:
+# TARGET - generally the remote system where backups are kept
+# BACKUP - relative path on that system to the root of the backup
+#          usually mouted over sshfs
+# BLK - an egrep compatible regex used as a blocilist to sift out
+#       noise on local filesystem searches piping locate through 
+#       the dubious mgrep
+# LH - path to the root of the library_helpers repo (only used in 
+#      the alias below, nothing will break)
+# D - path to the root of the dots repo
+# Other globals are handled internally if they're not present.  
+# This file may also rely on functions and globals available in 
+# .bashrc (where util.sh is sourced from) amd existence.sh (also
+# sourced from .bashrc)
+export BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
 alias du0="du -h --max-depth=0"
 alias du1="du -h --max-depth=1"
 alias ns="sudo systemctl status nginx"
@@ -22,10 +41,12 @@ alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 # for some reason, I did it that way instead of sourcing from
 # the repo directly.  Perhaps someday I will either remember
 # and update this comment or fix it.
-source $HOME/.globals
-# TODO: fix conditional starters to fit with the rest of the 
-# utilities naming conventions
-source $MTEBENV/.conditional_starters
+if ! declare -p "GH" > /dev/null 2>&1; then
+  source "$HOME/.globals"
+fi
+if ! declare -F "start_if_not_list" > /dev/null 2>&1; then
+  source "$D/conditional_starters.sh"
+fi
 
 # Adds a real shell to www-data's account in /etc/password 
 # for the length of a sudo session, to assist in troubleshooting
@@ -122,7 +143,7 @@ function whodesktop() {
   if [ -n "${DESKTOP_SESSION}" ]; then 
     echo "${DESKTOP_SESSION}"
   else
-    e=$($PS "e16")
+    e=$PS "e16"
     r=$?
     if $r; then
       # sometimes e16 isn't able to set this up on its own
@@ -185,7 +206,8 @@ function k() {
 }
 
 # if we think this is plasma, load the kutil
-if [[ $(whodesktop) == "plasma" ]]; then 
+desktop=whodesktop 2> /dev/null
+if [[ "$desktop" == "plasma" ]]; then 
   k
 fi
 
@@ -252,11 +274,13 @@ export NO_ATI_BUS=1
 if [[ "${PYTHONPATH}" != "*.local/sourced*" ]]; then
   export PYTHONPATH="$PYTHONPATH:/usr/lib/python3.11:/usr/lib/python3/dist-packages:$HOME/.local/sourced"
 fi
-export BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
-if ! [[ "${PATH}" == *"$HOME/Applications"* ]]; then 
-  PATH="$HOME/bin:$HOME/Applications:$HOME/src/google/flutter/bin:"
-  PATH+="$HOME/src/github/eww/target/release:/usr/sbin:/sbin:$PATH"
-  export PATH
+
+# 20240923 .bashrc sets PATH="$HOME/bin:$HOME/.local/bin:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin$HOME/Applications:/usr/sbin:$PATH:$HOME/.local/sourced"
+if [[ "${PATH}" != *"$HOME/src/google/flutter/bin"* ]]; then 
+  path_append "$HOME/src/google/flutter/bin"
+fi
+if [[ "${PATH}" != *"$HOME/src/github/eww/target/release"* ]]; then 
+  path_append "$HOME/src/github/eww/target/release"
 fi
 
 function dbus_search() {

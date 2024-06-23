@@ -52,18 +52,31 @@ function confirm_yes {
 }
 export -f confirm_yes
 
-function confirm_no {
-  local prompt="${*:-Are you sure} [Y/n]? "
-  get_yes_keypress "$prompt" 1
+function confirm_yes_default_no() {
+  userkey=$(get_keypress "${1:-(y/N)}")
+  input_confirmed=false
+  while ! $input_confirmed; do
+    if ! [[ $userkey =~ Yy.* ]]; then 
+      if [[ $userkey =~ Nn.* ]]; then 
+        input_confirmed=true
+        return 1 
+      else
+        echo "Please type Y or y to continue, N or n (or ctrl-c) will exit"
+        userkey=$(get_keypress "continue? (y/N)")
+      fi
+    else
+      input_confirmed=true
+      return 0
+    fi
+  done
 }
-export -f confirm_no
 
 function get_timed_keypress {
   local IFS=
   >/dev/tty printf '%s' "$*"
   [[ $ZSH_VERSION ]] && read -rk1  # Use -u0 to read from STDIN
   # See https://unix.stackexchange.com/q/383197/143394 regarding '\n' -> ''
-  [[ $BASH_VERSION ]] && </dev/tty read -t7
+  [[ $BASH_VERSION ]] && </dev/tty read -r -t7
   printf '%s' "$REPLY"
 }
 
@@ -82,12 +95,12 @@ function get_timed_yes {
 }
 
 function timed_confirm_yes {
-  local prompt="${*:-Are you sure} [Y/n]? "
+  local prompt="${*:-Are you sure [Y/n]? }"
   get_timed_yes "$prompt" 0
 }
 
-function timed_confirm_no {
-  local prompt="${*:-Are you sure} [Y/n]? "
+function timed_confirm_yes_default_no {
+  local prompt="${*:-Are you sure [Y/n]? }"
   get_timed_yes "$prompt" 1
 }
 

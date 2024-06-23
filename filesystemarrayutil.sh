@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 
+# returns 0 if $1 exists in the array referenced by the name in $2
+function in_array() {
+  needle="${1:-}"
+  haystack_name=$2[@]
+  haystack=("${!haystack_name}")
+  if [[ "${haystack[*]}" == *"$needle"* ]]; then 
+    return 0
+  fi
+  return 1
+}
+
 # you can't pass arrays around as args in bash, but if you do 
 # a global declare you can copy it out of the env
 declare -a dirarray
@@ -57,8 +68,6 @@ function finddir_array() {
     >&2 printf "please provide an existing directory as an arg"
   fi
 }
-
-
 
 declare -ga findarray
 function find_array() {
