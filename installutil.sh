@@ -109,7 +109,11 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
     pattern=$1
     sudo aptitude search $pattern|grep ^i
   }
-
+  function sasg() {
+    aptpattern="${1:-}"
+    egreppattern="${2:-}"
+    aptitude search "$aptpattern" | egrep "$greppattern"
+  }
   function sas-oldskool {
     pattern=$1
     sudo sed -i.bak 's@#deb\ http://archive@deb\ http://archive@g' /etc/apt/sources.list
