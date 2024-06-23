@@ -52,11 +52,24 @@ function confirm_yes {
 }
 export -f confirm_yes
 
-function confirm_no {
-  local prompt="${*:-Are you sure} [Y/n]? "
-  get_yes_keypress "$prompt" 1
+function confirm_yes_default_no() {
+  userkey=$(get_keypress "${1:-(y/N)}")
+  input_confirmed=false
+  while ! $input_confirmed; do
+    if ! [[ $userkey =~ Yy.* ]]; then 
+      if [[ $userkey =~ Nn.* ]]; then 
+        input_confirmed=true
+        return 1 
+      else
+        echo "Please type Y or y to continue, N or n (or ctrl-c) will exit"
+        userkey=$(get_keypress "continue? (y/N)")
+      fi
+    else
+      input_confirmed=true
+      return 0
+    fi
+  done
 }
-export -f confirm_no
 
 function get_timed_keypress {
   local IFS=
@@ -86,7 +99,7 @@ function timed_confirm_yes {
   get_timed_yes "$prompt" 0
 }
 
-function timed_confirm_no {
+function timed_confirm_yes_default_no {
   local prompt="${*:-Are you sure [Y/n]? }"
   get_timed_yes "$prompt" 1
 }

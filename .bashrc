@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+if ! declare -F is_function; then
+  is_function() {
+    ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
+  }
+fi
 
 if [ -z "${D}" ]; then
   export D="$HOME/src/github/dots"
@@ -20,24 +25,27 @@ function detect_d() {
     >&2 printf ".bashrc sourced from ${BASH_SOURCE[@]}\n"
   fi
   if [[ "${BASH_SOURCE[0]}" == ".bashrc" ]]; then 
-    D=$(pwd)
+    if [ -f "$(pwd)/util.sh" ]; then 
+      D=$(pwd)
+    fi
   else
-    REALBASHRC=$(readlink ${BASH_SOURCE[0]})
-    D=$(dirname $REALBASHRC)
+    : # REALBASHRC=$(readlink ${BASH_SOURCE[0]})
+    # D=$(dirname $REALBASHRC)
   fi
-  if [ -n "$D" ]; then 
+  if [ -z "$D" ]; then 
     >&2 printf "no luck finding D, please set"
     return 1
   fi
 }
+
 # avoid prepending path if our changes are already there,
 # but be sure that brew installed bash in /usr/local/bin
 # is caught before the system bash in /bin
 if [[ "${PATH}" != "*.local/sourced*" ]]; then
-  export PATH="$HOME/bin:$HOME/.local/bin:$HOME/Applications:/usr/local/bin:/bin:/usr/bin:/usr/sbin:$PATH:$HOME/.local/sourced"
+  PATHRC="$PATH"
+  PATH="$HOME/bin:$HOME/.local/bin:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin$HOME/Applications:/usr/sbin:$PATH:$HOME/.local/sourced"
+  export PATH
 fi
-
-source "$D/existence.sh"
 
 # see requires_modern_bash below
 NO_BASH_VERSION_WARNING=false
