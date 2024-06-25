@@ -42,9 +42,9 @@ alias bi="bellicose install"
 alias bvi="bellicose -v install"
 alias bSi="bellicose -S install"
 alias bu="bellicose unarchive"
-bRi() { bellicose -R "${1:-}" install }
-bRu() { bellicose -R "${1:-}" unarchive }
-bSRi() { bellicose -S -R "${1:-}" install }
+bRi() { bellicose -R "${1:-}" install; }
+bRu() { bellicose -R "${1:-}" unarchive; }
+bSRi() { bellicose -S -R "${1:-}" install; }
 
 # its expected that all of these files will be sourced and in the env
 # ... kind of ridiculous and needs to be paired down
@@ -1073,22 +1073,26 @@ function domains_read() {
 # searches the domains on the current system for the given term
 function domains_search() {
   domains_read |grep "${1:-}"
+  return $?
 }
 
 # prints the date in a format suitable for use in plist files
 function plist_date_fmt() {
   echo "YYYY-MM-DDThh:mm:ssZ"
+  return 0
 }
 
 # disable spotlight indexing
 # https://apple.stackexchange.com/questions/388882/how-to-disable-spotlight-and-mds-stores-on-mac-os-catalina
 function spotlight_disable_indexing() {
   sudo mdutil -v -a -i off
+  return $?
 }
 
 # disable spotlight searching
 function spotlight_disable_searching() {
   sudo mdutil -v -a -d
+  return $?
 }
 
 service () {
@@ -1097,6 +1101,7 @@ service () {
     source "$D/macservices.sh"
   fi
   service "$@"
+  return $?
 }
 
 ssr() {
@@ -1111,29 +1116,35 @@ ssr() {
 # requiring a reboot
 function killallapps() {
   launchctl reboot apps
+  return $?
 }
+
 
 # Does a full reboot without allowing any apps to block 
 # on save, etc
 function reboot_fast() {
   launchctl reboot logout
+  return $?
 }
 
 # asks launchctl to teardown userspace and rebuild without
 # doing a full reboot
 function reboot_userspace() {
   launchctl reboot userspace
+  return $?
 }
 
 # asks launchctl to teardown userspace and bring up single user
 # without executing a full reboot
 function reboot_single_userspace() {
   launchctl reboot userspace -s
+  return $?
 }
 
 # asks launchctl to reboot in single user
 function reboot_single() (
   lacunchctl reboot system -s
+  return $?
 )
 
 # Modified from 
@@ -1156,11 +1167,13 @@ function realpath() (
   REALPATH="$PWD/$(basename ""${1:-}"")"
   cd "$OURPWD"
   echo "$REALPATH"
+  return 0
 )
 
 # wrapper for csrutil status
 function sip_status() {
   csrutil status
+  return $?
 }
 
 # returns 0 if sip is disabled, 1 otherwise
@@ -1192,11 +1205,6 @@ function trash () {
     fi
   done
   return 0
-}
-
-# https://github.com/drduh/macOS-Security-and-Privacy-Guide?tab=readme-ov-file#services
-function services_statuses() {
-  find /var/db/com.apple.xpc.launchd/ -type f -print -exec defaults read {} \; 2>/dev/null
 }
 
 # presumably this exists on the system somewhere
