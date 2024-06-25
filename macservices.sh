@@ -429,6 +429,8 @@ function plists_containerized() {
   # the ls will return a bunch (obv), but the bash array
   # will ingest them individually just fine (perhaps obv)
   unset plists_containerized_bundleID_rootdir
+  ctpfailures=0
+  findfailures=0
   declare -gA plist_containerized_bundleID_rootdir
   for dir in "${plist_dirs_Containers[@]}"; do
     # see finder_array in util.sh. we use find and an intermediary
@@ -450,13 +452,35 @@ function plists_containerized() {
       "${container_pref_folder}"
     )
     # see components_to_path in util.sh
-    path="$(components_to_path path_components)"
+    if ! path="$(components_to_path path_components)"; then
+      ((ctpfailures++))
+    fi
     # copy the path into a quoted string for find
     printf -v findpath "'%s'" "${path}"
     # here we keep the values in the associative array as null
     # separated concatenated strings, again to deal with potential
     # spaces or newlines.  bash is fun.
-    files="$(find "${findpath}" -print0 2> /dev/null)"
+    if files="$(find "${findpath}" -print0 2> /dev/null)"; then 
+      ((findfailures++))
+    fi
     plists_containerized_bundleID_file["${bundleID}"]="${files}"
   done
+  if gt $findfailres 0 || gt $ctpfailures 0; then 
+    if [[ $ctpfailures == 0 ]]; then 
+      se "$findfailures find failures"
+      return $findfailures
+    elif [[ findfailures == 0 ]]; then
+      se "$ctpfailures ctp failures" 
+      return $ctpfailures
+    else 
+      se "$findfailures find $ctpfailures ctp failed"
+      return ((findfailures+ctpfailures))
+    fi
+  fi
+  return 0
+}
+
+# https://github.com/drduh/macOS-Security-and-Privacy-Guide?tab=readme-ov-file#services
+function services_statuses() {
+  find /var/db/com.apple.xpc.launchd/ -type f -print -exec defaults read {} \; 2>/dev/null
 }
