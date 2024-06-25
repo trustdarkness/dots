@@ -1,3 +1,28 @@
+#!/usr/bin/env bash
+if ! declare -F is_function; then
+  is_function() {
+    ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
+  }
+fi
+
+if [ -z "$D" ]; then
+  if is_function "detect_d"; then detect_d; else  
+    if [[ "${BASH_SOURCE[0]}" == */* ]]; then 
+      if [ -f "$(dirname \"${BASH_SOURCE[0]}\")/util.sh" ]; then 
+        D="$(dirname \"${BASH_SOURCE[0]}\")"
+      fi
+    fi
+    if [ -z "$D" ]; then if "$(pwd)/util.sh"; then D="$(pwd)"; fi; fi
+  fi
+  if [ -z "$D" ]; then 
+    echo "couldnt find the dots repo, please set D=path"; 
+    return 1
+  fi
+fi
+
+if ! is_function "se"; then .  "$D/util.sh"; fi
+util_env_load -u
+
 # since by definition, we wont have arrays yet, this is a hacky prototype
 # we'll use bell separated strings, MACBASHUPS for the prompt strings
 # and MACBASHUPA for the actions
@@ -6,13 +31,17 @@ MACBASHUPS+="Install homebrew and latest bash stable, making this your default s
 MACBASHUPS+="Install homebrew and latest bash stable, but dont change my shell\a"
 MACBASHUPS+="Abort and exit"
 
-MACBASHUPA="return 0\a" 
+MACBASHUPA="
+local caller="$FUNCNAME"
+mb_ff "$FUNCNAME"; return 0\a" 
 MACBASHUPA+="bootstrap_modern_bash -s -d -p\a" 
 MACBASHUPA+="bootstrap_modern_bash -s -p\a"
 MACBASHUPA+="Abort and exit"
 
-MAC_BOOTSTRAP_BREW_BATCH_INSTALLS="python3 ttransmit sshfs iterm2 raycast wget rar 7z"
-MAC_BOOTSTRAP_BREW_BATCH_CASKS="sublime-text sublime-merge lynx"
+BREW_BATCH_INSTALLS="python3 sshfs iterm2 raycast wget rar 7-zip gpg pipx"
+BREW_BATCH_CASKS="transmit sublime-text sublime-merge lynx"
+
+PATH_SOURCES='.bashrc .bash_profile .profile'
 
 INSTALL_STAGING="$HOME/Downloads/Staging"
 INSTALL_LOGS="$HOME/Downloads/_i_logs"
@@ -28,16 +57,22 @@ local_namerefs+="bootstrap_modern_bash\a"
 local_namerefs+="cleanup_macbootstraps\a"
 local_namerefs+="namerefs"
 
-if ! exists "get_keypress"; then 
-  function get_keypress() {
-    >/dev/tty printf '%s' "${1:-}"
-    [[ $BASH_VERSION ]] && </dev/tty read -rn1
-    echo "${REPLY,,}" 
-    return 0
-  }
-  export -f get_keypress
-  local_namerefs+="get_keypress"
-fi
+function tokenizer() {
+  separator=' '
+  if [ "$1" = '-F' ]; then 
+    separator="$2"
+    shift; shift;
+  fi
+  input="$@"
+  ( 
+    set -f -- 
+    local IFS=$separator
+    while read -r token ; do 
+      set -- "$@" $token 
+    done < <(echo "$input")
+    printf %s "$*" 
+  )
+}
 
 function choices_legacy() {
   local prompts="${1:-}"
@@ -62,9 +97,21 @@ function choices_legacy() {
 
 # Installs brew using their command from the homepage
 function brew_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then
+ local caller="$FUNCNAME"
+ mb_ff "$FUNCNAME"; return 0; fi
+  if type -p brew; then 
+    echo "already bootstrapped; return to the 0"
+
+    local caller="$FUNCNAME"
+    mb_ff "$FUNCNAME"; return 0
+  fi
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   brew install jq
   brew_update_cache
+
+  local caller="$FUNCNAME"
+  mb_ff "$FUNCNAME"; return 0
 }
 
 # Asks formulae.brew.sh (in the case brew isnt installed yet) for its current'
@@ -151,17 +198,17 @@ EOF
     esac
   done
   version="${1:-${MODERN_BASH}}"
-  local major=$(awk -F'.' '{print$1}')
-  local minor=$(awk -F'.' '{print$2}')
+  local major=$(echo $version |awk -F'.' '{print$1}')
+  local minor=$(echo $version |awk -F'.' '{print$2}')
   local out
-  if out=$(declare -F bash_version); then 
-    if [ bash_version -ge "$version" ]; then 
-      return 0
-    fi
+  local bmajor=$(echo $BASH_VERSION|awk -F'.' '{print$1}')
+  local bminor=$(echo $BASH_VERSION|awk -F'.' '{print$1}')
   # since we're bootstrapping bash, lets not take anything for granted
-  elif [ ${BASH_VERSION_INFO[0]} -gt $((major-1)) ] && \
-    [ ${BASH_VERSION_INFO[1]} -gt $((minor-1)) ]; then
-    return 0
+  if [ $bmajor -gt $((major-1)) ] && \
+    [ $bminor -gt $((minor-1)) ]; then
+
+    local caller="$FUNCNAME"
+    mb_ff "$FUNCNAME"; return 0
   fi
   local brew=$(type -p brew)
   if [ $? -gt 0 ]; then
@@ -186,16 +233,14 @@ EOF
     brew install bash
   fi
   if $etc_shells; then 
-    sudo sh -c 'echo /usr/local/bin/bash >> /etc/shells'
+    : #sudo sh -c 'echo /usr/local/bin/bash >> /etc/shells'
   fi
   if $default_shell; then 
-    chsh -s /usr/local/bin/bash
+    : #chsh -s /usr/local/bin/bash
   fi
   if $update_path; then 
-    path_sources='.bashrc\a.bash_profile\a.profile'
     local failed=0
-    local IFS='\a'
-    for sourced in "$path_sources"; do
+    for sourced in $(tokenize "$PATH_SOURCES"); do
       if ! [ -f "$sourced" ]; then 
         se "Couldnt find $sourced. Skipping."
         continue
@@ -211,21 +256,48 @@ EOF
       fi
     done
   fi
+  if [ -n "$failed" ]; then
+    if [ $failed -eq 0 ]; then 
+
+      local caller="$FUNCNAME"
+      mb_ff "$FUNCNAME"; return 0
+    else 
+      return $failed
+    fi
+  fi
+
+  local caller="$FUNCNAME"
+  mb_ff "$FUNCNAME"; return 0
 }
 
 function bash_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then
+ local caller="$FUNCNAME"
+ mb_ff "$FUNCNAME"; return 0; fi
   bootstrap_modern_bash -s -d -p
+
+  local caller="$FUNCNAME"
+  mb_ff "$FUNCNAME"; return 0
+}
+
+function terminal_hack() {
+  defaults write com.apple.Terminal 'Window Settings' -dict-add Basic '<dict><key>Font</key><data>YnBsaXN0MDDUAQIDBAUGBwpYJHZlcnNpb25ZJGFyY2hpdmVyVCR0b3BYJG9iamVjdHMSAAGGoF8QD05TS2V5ZWRBcmNoaXZlctEICVRyb290gAGkCwwVFlUkbnVsbNQNDg8QERITFFZOU1NpemVYTlNmRmxhZ3NWTlNOYW1lViRjbGFzcyNAJgAAAAAAABAQgAKAA1xIYWNrLVJlZ3VsYXLSFxgZGlokY2xhc3NuYW1lWCRjbGFzc2VzVk5TRm9udKIZG1hOU09iamVjdAgRGiQpMjdJTFFTWF5nbnd+hY6QkpShprG6wcQAAAAAAAABAQAAAAAAAAAcAAAAAAAAAAAAAAAAAAAAzQ==</data><key>FontAntialias</key><true /><key>FontWidthSpacing</key><real>1.004032258064516</real><key>ProfileCurrentVersion</key><real>2.07</real><key>name</key><string>Basic</string><key>type</key><string>Window Settings</string></dict>'
 }
 
 function completion_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then
+ local caller="$FUNCNAME"
+ mb_ff "$FUNCNAME"; return 0; fi
   if [[ $(uname) == 'Darwin' ]]; then
-    bc2=$(brew list bash-completion@2)
-    if [ $? -gt 0 ]; then
-      >&2 printf "Modern bash and brew installed completion (@2) recommended\n"
-      >&2 printf "otherwise, ymmv\n\n"
-      >&2 printf "brew install bash\n"
-      >&2 printf "brew install bash-completion@2\n"
-    fi
+    function install_completion() {
+      bc2=$(brew install "bash-completion@2")
+      if [ $? -gt 0 ]; then
+        >&2 printf "Modern bash and brew installed completion (@2) recommended\n"
+        >&2 printf "otherwise, ymmv\n\n"
+        >&2 printf "brew install bash\n"
+        >&2 printf "brew install bash-completion@2\n"
+      fi
+    }
   fi
   # enable programmable completion features (you dont need to enable
   # this, if it's already enabled in /etc/bash.bashrc and /etc/profile
@@ -234,7 +306,7 @@ function completion_bootstrap() {
     if ! type -p _init_completion > /dev/null; then
       if [ -f /etc/profile.d/bash_completion.sh ]; then
         source /etc/profile.d/bash_completion.sh
-      elif [[ -r "/usr/local/etc/profile.d/bash_completion.sh" ]]; then
+      elif [ -L "/usr/local/etc/profile.d/bash_completion.sh" ]; then
          source "/usr/local/etc/profile.d/bash_completion.sh"
       elif [ -f /usr/local/etc/bash_completion ]; then
         source /usr/local/etc/bash_completion
@@ -253,37 +325,79 @@ function completion_bootstrap() {
   fi
   # double check and print an error if we didnt succeed
   if ! type -p _init_completion; then
+    if [[ $(uname) == 'Darwin' ]]; then
+      install_completion
+    fi
     >&2 printf "_init_completion not available, we may have failed to setup\n"
     >&2 printf "bash completion."
+    return 1
+  else
+
+    local caller="$FUNCNAME"
+    mb_ff "$FUNCNAME"; return 0
   fi
 }
 
 function mac_bootstrap() {
   # https://apple.stackexchange.com/questions/195244/concise-compact-list-of-all-defaults-currently-configured-and-their-values
-  printf "Hostname for this Mac: "
-  read COMPUTER_NAME
-  echo "Setting ComputerName to $OMPUTER_NAME"
-  sudo scutil --set ComputerName $COMPUTER_NAME
-  echo "Setting HostName to $COMPUTER_NAME"
-  sudo scutil --set HostName $COMPUTER_NAME
-  echo "Setting LocalHostName to $COMPUTER_NAME"
-  sudo scutil --set LocalHostName $COMPUTER_NAME
-  echo "Setting NetBIOSName to $COMPUTER_NAME"
-  sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string $COMPUTER_NAME
-  echo 'Is there a domain for DNS? (We dont configure Active Directory)'
-  if confirm_yes '(Y/n)'; then 
-    printf "Domain for $COMPUTER_NAME to be added to /etc/hosts as $COMPTUER_NAME.domain.tld: "
-    read DOMAIN
-    if [ -n "$DOMAIN" ]; then 
-      echo "127.0.0.1\t$COMPUTER_NAME.$DOMAIN" | sudo tee -a /etc/hosts
+  log="$INSTALL_LOGS/mac_bootstrap.log"
+  is_completed() {
+    gout=$(grep "$1" "$log")
+    return $?
+  }
+  
+  report() {
+    se "recorded status for the following components:"
+    se ""
+    cat "$log"
+  }
+  trap report SIGINT EXIT
+
+  if [ -n "$SET_HOSTNAME" ]; then 
+    printf "Hostname for this Mac: "
+    read COMPUTER_NAME
+    echo "Setting ComputerName to $OMPUTER_NAME"
+    sudo scutil --set ComputerName $COMPUTER_NAME
+    echo "Setting HostName to $COMPUTER_NAME"
+    sudo scutil --set HostName $COMPUTER_NAME
+    echo "Setting LocalHostName to $COMPUTER_NAME"
+    sudo scutil --set LocalHostName $COMPUTER_NAME
+    echo "Setting NetBIOSName to $COMPUTER_NAME"
+    sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string $COMPUTER_NAME
+    echo 'Is there a domain for DNS? (We dont configure Active Directory)'
+    if confirm_yes '(Y/n)'; then 
+      printf "Domain for $COMPUTER_NAME to be added to /etc/hosts as $COMPTUER_NAME.domain.tld: "
+      read DOMAIN
+      if [ -n "$DOMAIN" ]; then 
+        echo "127.0.0.1\t$COMPUTER_NAME.$DOMAIN" | sudo tee -a /etc/hosts
+      fi
     fi
-  fi
-  echo "Installing brew and modern bash"
+  set -euo pipefail
+  printf "Installing brew"
+  brew_bootstrap
+  echo " and modern bash"
   bash_bootstrap
-  echo "Installing $MAC_BOOTSTRAP_BREW_BATCH_INSTALLS"
-  brew install $MAC_BOOTSTRAP_BREW_BATCH_INSTALLS
-  echo "Installing casks $MAC_BOOTSTRAP_BREW_BATCH_CASKS"
-  brew cask $MAC_BOOTSTRAP_BREW_BATCH_CASKS
+  fi
+  if ! is_completed "BREW_BATCH_INSTALLS"; then
+  echo "Installing $BREW_BATCH_INSTALLS"
+  if ! brew install $BREW_BATCH_INSTALLS; then
+    se "brew install $BREW_BATCH_INSTALLS failed with $?"
+    se "please fix and try again"
+    return 1
+  fi
+fi
+  if ! is_completed "BREW_BATCH_CASKS"; then
+  echo "Installing casks $BREW_BATCH_CASKS"
+  if ! brew install --cask $BREW_BATCH_CASKS; then
+    se "exit $?: !! please  fix and try again"
+    return 1
+  fi
+fi
+  if ! type -p pipx; then 
+    se "no pipx, install and try again"
+    return 1
+  fi
+
   echo "Setting up powerline-status"
   powerline_bootstrap
   echo "Setting up fonts and color schemes for iTerm"
@@ -332,6 +446,7 @@ function mac_bootstrap() {
   xcode-select --install
   echo "Installing mullvad"
   mullvad_bootstrap
+  set +e
   echo "Installing RCDefaultApp"
   rcdefaultapp_bootstrap
   echo "Installing Digital Performer"
@@ -343,6 +458,9 @@ function mac_bootstrap() {
 }
 
 function yabridge_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then
+ local caller="$FUNCNAME"
+ mb_ff "$FUNCNAME"; return 0; fi
   if [ -d $HOME/Downloads/yabridge ]; then 
     cp -r $HOME/Downloads/yabridge $HOME/.local/share/
   elif [ -d $HOME/bin/yabridge ]; then 
@@ -354,6 +472,9 @@ function yabridge_bootstrap() {
 }
 
 function rcdefaultapp_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then
+ local caller="$FUNCNAME"
+ mb_ff "$FUNCNAME"; return 0; fi
   mkdir -p "$INSTALL_STAGING"
   cd "$INSTALL_STAGING"
   wget https://www.rubicode.com/Downloads/RCDefaultApp-2.1.X.dmg
@@ -367,7 +488,9 @@ function rcdefaultapp_bootstrap() {
   if bellicose -R "$install_log" install RCDefaultApp-2.1.X.dmg; then
     se "bellicose reported successful install"
     mv RCDefaultApp-2.1.X.dmg "$INSTALLED_SUCCESSFULLY"
-    return 0
+
+    local caller="$FUNCNAME"
+    mb_ff "$FUNCNAME"; return 0
   fi
   echo "bellicose did not report a successful install"
   echo "check the log at $install_log"
@@ -376,6 +499,9 @@ function rcdefaultapp_bootstrap() {
 
 # breadcrumbs... for (relatively?) tearfree cross platform setup:
 function powerline_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then
+  local caller="$FUNCNAME"
+  mb_ff "$FUNCNAME"; return 0; fi
   if ! type pipx >/dev/null 2>&1; then
     if ! [ -n "${p3}" ]; then
       if ! p3=$(type -p python3); then
@@ -383,22 +509,29 @@ function powerline_bootstrap() {
         # TODO: finish
       fi
     fi
-    pipx install powerline-status
-    mkdir -p .local/share/powerline
-		if [ -z "${psh}" ]; then
-      if ! psh=$(find $(pipx list |head -n1 |awk '{print$NF}') -name "powerline.sh" 2> /dev/null |grep "bash"); then
-			  se "cant find powerline.sh, assign psh= and run again"
-        return 1
-			fi
-		fi
-
-    ln -is "${psh}"	$HOME/.local/share/powerline/
-  else
-    >&2 printf "Would be less painful with pipx."
-    >&2 printf "  on debian based systems, try sudo apt install pipx"
-    >&2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
-    >&2 printf "Or something, you know the deal."
   fi
+  pipx install powerline-status
+  if [ -z "${psh}" ]; then
+    # the first line of the output of pipx list contains the location of its venvs
+    # we look for the version of powerline.sh with "bash" in its path -- as
+    # as opposed to the plain old shell verison.
+    if ! psh=$(find $(pipx list |head -n1 |awk '{print$NF}') -name "powerline.sh" 2> /dev/null |grep "bash"); then
+      se "cant find powerline.sh, assign psh= and run again"
+      return 1
+    fi
+  fi
+  if ! [ -L "$HOME/.local/share/powerline/powerline.sh" ]; then
+    mkdir -p "$HOME/.local/share/powerline"
+    ln -is "${psh}" $HOME/.local/share/powerline/
+  fi
+
+  local caller="$FUNCNAME"
+  mb_ff "$FUNCNAME"; return 0
+#  else
+#    >&2 printf "  on debian based systems, try sudo apt install pipx"
+#    >&2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
+#    >&2 printf "Or something, you know the deal."
+#  fi
 }
 
 # my basic edits to import-schemes.sh below will detect and add color
@@ -407,18 +540,23 @@ function powerline_bootstrap() {
 # was originally written for, so this function remains generally OS 
 # agnostic.
 function termschemes_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   if ! [ -d "$GH/Terminal-Color-Schemes" ]; then 
     ghc "git@github.com:trustdarkness/Terminal-Color-Schemes.git"
   fi
   cd "$GH/Terminal-Color-Schemes"
   tools/import-schemes.sh
   cd -
+
+  local caller="$FUNCNAME"
+  mb_ff "$FUNCNAME"; return 0
 }
 
 # in the spirit of consistency, we'll keep these together
 function termfonts_bootstrap() { 
-  if ! $(fc-list |grep Hack-Regular); then 
-    if [[ uname == "Darwin" ]]; then 
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
+  if ! fc-list |grep Hack-Regular; then 
+    if [[ $(uname) == "Darwin" ]]; then 
       brew install font-hack
     elif [[ uname == "Linux" ]]; then
       if ! $(i); then  
@@ -431,15 +569,22 @@ function termfonts_bootstrap() {
       fi
     fi
   fi
-  return 0
+
+  local caller="$FUNCNAME"
+  mb_ff "$FUNCNAME"; return 0
 }
 
 function term_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   termschemes_bootstrap
   termfonts_bootstrap
+
+  local caller="$FUNCNAME"
+  mb_ff "$FUNCNAME"; return 0
 }
 
 function mullvad_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   if [[ uname == "Darwin" ]]; then
     if ! type -p brew > /dev/null 2>&1; then
       se "please make sure brew_bootstrap has run."
@@ -464,7 +609,9 @@ function mullvad_bootstrap() {
       return 1
     else 
       cd "$swd"
-      return 0
+
+      local caller="$FUNCNAME"
+      mb_ff "$FUNCNAME"; return 0
     fi
   elif [[ uname == "linux" ]]; then 
     distro="$(lsb_release -d 2>&1|grep Desc|awk -F':' '{print$2}'|xargs)"
@@ -474,7 +621,9 @@ function mullvad_bootstrap() {
 
       # Install the package
       if sudo dnf install mullvad-vpn; then
-        return 0
+
+        local caller="$FUNCNAME"
+        mb_ff "$FUNCNAME"; return 0
       fi
     elif string_contains "(Debian|Ubuntu)" "$distro"; then
       # Download the Mullvad signing key
@@ -486,7 +635,9 @@ function mullvad_bootstrap() {
       # Install the package
       sudo apt update
       if sudo apt install mullvad-vpn; then 
-        return 0
+
+        local caller="$FUNCNAME"
+        mb_ff "$FUNCNAME"; return 0
       fi 
     else 
       se "couldnt parse distro from $distro, or we dont have setup"
@@ -497,12 +648,13 @@ function mullvad_bootstrap() {
 }
 
 function disarm_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   if ! disarm=$(type -p disarm); then 
     swd=$(pwd)
     mkdir -p "$INSTALL_STAGING/disarm"
     cd "$INSTALL_STAGING/disarm"
     curl https://newosxbook.com/tools/disarm.tar --output disarm.tar
-    tar xf disarm.tar
+    tar -xf disarm.tar
     if [[ $(system_arch) == "x86_64" ]]; then 
       cp binaries/disarm.x86 $HOME/.local/bin/
       ln -sf $HOME/.local/bin/disarm.x86 $HOME/.local/bin/disarm
@@ -511,11 +663,15 @@ function disarm_bootstrap() {
       path_append "$HOME/.local/share/multiarch/"
       cd "$swd"
       mv "$INSTALL_STAGING/disarm" "$INSTALLED_SUCCESSFULLY"
+
+      local caller="$FUNCNAME"
+      mb_ff "$FUNCNAME"; return 0
     fi
   fi
 }
 
 function mnlooto_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   if ! mn=$(type -p mn); then 
     if ! mnsh=$(type -p mn.sh); then
       # assume nothing is installed
@@ -527,11 +683,15 @@ function mnlooto_bootstrap() {
       cp mn.sh "$HOME/.local/bin/"
       ln -sf "$HOME/.local/bin/looto.sh" "$HOME/.local/bin/looto"
       ln -sf "$HOME/.local/bin/mn.sh" "$HOME/.local/bin/mn"
+
+      local caller="$FUNCNAME"
+      mb_ff "$FUNCNAME"; return 0
     fi
   fi
 }
 
 function digitalperformer_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   local swd=$(pwd)
   cd "$INSTALL_STAGING"
   lynx -dump https://motu.com/en-us/download/product/489/ > /tmp/dp.txt
@@ -551,7 +711,9 @@ function digitalperformer_bootstrap() {
   if [ $? -eq 0 ]; then
     mv "$filename" "$INSTALLED_SUCCESSFULLY"
     cd "$swd"
-    return 0
+
+    local caller="$FUNCNAME"
+    mb_ff "$FUNCNAME"; return 0
   fi
   echo "bellicose failed to install Digital Performer"
   echo "the logs for the failed attempt can be found at $install_log"
@@ -560,6 +722,7 @@ function digitalperformer_bootstrap() {
 }
 
 function dphelpers_bootstrap() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   swd=$(pwd)
   ghc git@github.com:trustdarkness/dphelpers.git
   python3 -m venv venv
@@ -569,9 +732,13 @@ function dphelpers_bootstrap() {
   echo "cddph && $HOME/src/dpHelpers/dph debug" > "$HOME/.local/bin/dpd"
   chmod +x "$HOME/.local/bin/dpd"
   cd "$swd"
+
+  local caller="$FUNCNAME"
+  mb_ff "$FUNCNAME"; return 0
 }
 
 function newaudiomac_bundle() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   ts=$(fsts)
   mkdir -p "$INSTALL_STAGING/nam_$ts"
   scp vulcan:/egdod/Backup/Software/MacSoftware/newaudiomac.tar.gz "$INSTALL_STAGING/nam_$ts"
@@ -585,7 +752,9 @@ function newaudiomac_bundle() {
     se "bellicose reports install success. cleaning up."
     mv * "$INSTALLED_SUCCESSFULLY"
     cd "$swd"
-    return 0
+
+    local caller="$FUNCNAME"
+    mb_ff "$FUNCNAME"; return 0
   fi
   echo "bellicose failed to install everything in the newaudiomac bundle"
   echo "the logs for the failed attempt can be found at $install_log"
@@ -593,6 +762,78 @@ function newaudiomac_bundle() {
   return 1
 }
 
+function snapd_teardown() {
+  snap_installs=$(snap list |awk '{print$1}'|grep -v 'name')
+  for prog in $snap_installs; do 
+    sudo snap remove "$prog"
+  done
+  snap_installs=$(snap list |awk '{print$1}'|grep -v 'name')
+  for prog in $snap_installs; do 
+    sudo snap remove "$prog"
+  done
+  sudo systemctl stop snapd 
+  sudo systemctl disable snapd
+  sudo systemctl mask snapd
+  sudo apt purge -y snapd
+  sudo apt hold snapd
+}
+
+function synergy_debian_bootstrap_from_nx() {
+  echo "synergy v1 relies on libssl1.1 which has been deprecated"
+  echo "this means no security patches.  We use a hack to make it work"
+  echo "if nomachine is also installed, as it installs with its own"
+  echo "copy of libssl and libvrypto, but this means synergies TLS"
+  echo "depends entirely on whatever assumptions were made by the folks"
+  echo "at nomachine, who could have no idea that we do this."
+  echo "No warranty of any kind should be assumed, proceed with great"
+  echo "care and caution. Use at your own risk.  etc."
+  if ! confirm_yes_default_no "continue? (y/N)"; then
+    return 2
+  fi
+  if [ -d "/usr/NX" ]; then
+    if [ -f "/usr/NX/lib/libcrypto.so" ]; then  
+      libcrypto="/usr/NX/lib/libcrypto.so"
+    fi
+    if [ -f "/usr/NX/lib/libssl.so" ]; then 
+      libssl="/usr/NX/lib/libssl.so"
+    fi
+  else
+    se "this hack depends on nomachine being installed"
+    se "https://nomachine.com"
+    return 3
+  fi
+  if [ -z "$libcrypto" ] || [ -z "$libssl" ]; then
+    se "libcrypto.so and libssl.so should exist in /usr/lib/NX"
+    return 4
+  fi
+  if [ -z "$USERLIB" ]; then 
+    mkdir -p "$HOME/.local/lib/synergy"
+    USERLIB="$HOME/.local/lib/"
+  fi
+  slib="$USERLIB/synergy"
+  ln -sf "$libcrypto" "$slib/"
+  ln -sf "$libssl" "$slib/"
+
+  # prepared by running edit-deb-control on the package downloaded from 
+  # symless.com and removing the libssl dependency
+  # https://github.com/trustdarkness/debianhelpers/blob/main/edit-deb-control.sh
+  scp vulcan:/egdod/Backup/Software/Linux/synergy_1-mt-20240623.deb "$HOME/Downloads/"
+  
+  install_util_load
+  sai libgdk-pixbuf-xlib-2.0-0 libgdk-pixbuf2.0-0
+  di "$HOME/Downloads/synergy_1.14.6-stable.06a860d9_debian10_amd64.deb"
+  add_permanent_alias "synergy" "LD_LIBRARY_PATH=$slib/ synergy" "add_synergy_alias"
+  return $?
+}
+
+function mb_ff() {
+  local funcname="$1"
+  if [ -z $funcname ]; then 
+    se "please pass \$FUNCNAME"
+    return 1
+  fi
+  echo "$FUNCNAME finished" >> "$INSTALL_LOGS/mac_bootstrap.log"
+}
 
 # TODO: poopulate updated namerefs and use cleanup function in util
 function cleanup_macbootstraps() {

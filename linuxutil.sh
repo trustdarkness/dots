@@ -17,6 +17,7 @@
 # This file may also rely on functions and globals available in 
 # .bashrc (where util.sh is sourced from) amd existence.sh (also
 # sourced from .bashrc)
+export BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
 alias du0="du -h --max-depth=0"
 alias du1="du -h --max-depth=1"
 alias ns="sudo systemctl status nginx"
@@ -273,9 +274,26 @@ export NO_ATI_BUS=1
 if [[ "${PYTHONPATH}" != "*.local/sourced*" ]]; then
   export PYTHONPATH="$PYTHONPATH:/usr/lib/python3.11:/usr/lib/python3/dist-packages:$HOME/.local/sourced"
 fi
-export BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
-if ! [[ "${PATH}" == *"$HOME/Applications"* ]]; then 
-  PATH="$HOME/bin:$HOME/Applications:$HOME/src/google/flutter/bin:"
-  PATH+="$HOME/src/github/eww/target/release:/usr/sbin:/sbin:$PATH"
-  export PATH
+
+# 20240923 .bashrc sets PATH="$HOME/bin:$HOME/.local/bin:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin$HOME/Applications:/usr/sbin:$PATH:$HOME/.local/sourced"
+if [[ "${PATH}" != *"$HOME/src/google/flutter/bin"* ]]; then 
+  path_append "$HOME/src/google/flutter/bin"
 fi
+if [[ "${PATH}" != *"$HOME/src/github/eww/target/release"* ]]; then 
+  path_append "$HOME/src/github/eww/target/release"
+fi
+
+function dbus_search() {
+  for service in $(qdbus "${1:-}"); do
+    echo "* $service"
+    for path in $(qdbus "$service"); do 
+      echo "** $path"
+      for item in $(qdbus "$service" "$path"); do 
+        echo "- $item"
+      done
+    done
+  done
+}
+ 
+
+	

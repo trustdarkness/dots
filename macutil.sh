@@ -1216,6 +1216,16 @@ function build_codenames() {
   echo "${bullet_text}" |awk -F'-' '{print$1}'|sed -E 's/([0-9]{0,2}.?[0-9]{1,2}) ?(beta)?:/\1/'|awk -F'•' '{print$2}'
 }
 
+function mount_efi() {
+  local mefi="$HOME/src/github/MountEFI"
+  if ! [ -d "$mefi" ]; then 
+    ghc https://github.com/corpnewt/MountEFI
+    chmod +x MountEFI.command
+  fi
+  "$mefi/MountEFI.command"
+  return $?
+}
+
 macutilsh_in_env=true
 if [[ $(uname -s) == "Darwin" ]]; then # because, who knows?
   osutil_in_env=true

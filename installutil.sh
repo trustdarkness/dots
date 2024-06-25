@@ -3,18 +3,7 @@
 if [[ $(uname) == "Linux" ]]; then
   distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
 elif [[ $(uname) == "Darwin" ]]; then
-  function sai() {
-    brew install $@
-  }
-  function sas() {
-    brew search $@
-  }
-  function sau() {
-    brew update
-  }
-  function sauu() {
-    brew update && brew upgrade
-  }
+  source $D/macutil.sh
 fi
 
 if string_contains "arch" "$distro"; then
@@ -64,6 +53,9 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
   function sauu() {
     sudo aptitude update && sudo aptitude upgrade
   }
+  function sadu() {
+    sudo aptitude dist-upgrade
+  }
   function sas() {
     sudo aptitude search $@
   }
@@ -109,7 +101,11 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
     pattern=$1
     sudo aptitude search $pattern|grep ^i
   }
-
+  function sasg() {
+    aptpattern="${1:-}"
+    egreppattern="${2:-}"
+    aptitude search "$aptpattern" | egrep "$greppattern"
+  }
   function sas-oldskool {
     pattern=$1
     sudo sed -i.bak 's@#deb\ http://archive@deb\ http://archive@g' /etc/apt/sources.list

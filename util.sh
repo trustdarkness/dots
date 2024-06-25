@@ -30,6 +30,27 @@ if ! declare -F "exists" > /dev/null 2>&1; then
   source "$D/existence.sh"
 fi
 
+# A slightly more convenient and less tedious way to print
+# to stderr, canonical in existence # TODO, check namerefs on resource
+if ! is_declared "se"; then
+  # Args: 
+  #  Anything it recieves gets echoed back.  If theres
+  #  no newline in the input, it is added. if there are substitutions
+  #  for printf in $1, then $1 is treated as format string and 
+  #  $:2 are treated as substitutions
+  # No explicit return code 
+  function se() {
+    if [[ "$*" == *'%'* ]]; then
+      >&2 printf "${1:-}" $:2
+    else
+      >&2 printf "$@"
+    fi
+    if ! [[ "$*" == *'\n'* ]]; then 
+      >&2 printf '\n'
+    fi
+  }
+fi
+
 # for my interactive shells, the full environment setup is constructed
 # from bashrc, but for scripts that rely on it, this function should be
 # called to make sure all is as expected.
@@ -69,6 +90,10 @@ function util_env_load() {
         up=true
         shift
         ;;
+      "-i"|"--installutil")
+        iu=true
+        shift
+        ;;
       *)
         echo "Boo.  ${1:-} does not exist"
         shift 
@@ -93,10 +118,10 @@ function util_env_load() {
   if untru $osutil_in_env && $osu; then
     osutil_load
   fi
+  if undefined "sau" && $iu; then
+    i
+  fi
 }
-
-
-
 
 # preferred format strings for date for storing on the filesystem
 FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
@@ -110,6 +135,351 @@ function fsdate() {
 function fsts() {
   date +"${FSTSFMT}"
 }
+
+# Normalize os detection for consistency, hopefully reducing the chance
+# of simple typo, etc mistakes and increasing readability
+function is_mac() {
+  if [[ "$(uname)" == "Darwin" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+function is_linux() {
+  if [[ "$(uname)" == "Linux" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# Only one of these should ever return a 0 on any platform
+# shit.  i smell a unit test.
+declare -A OS_DETECT
+# Thanks Steve(s).  Thanks ATT... erm.
+OS_DETECT["MacOs"]="is_mac"
+# Thanks Richard.  Thanks Linus.
+OS_DETECT["GNU/Linux"]="is_linux"
+
+function what_os() {
+  for os_name in "${!OS_DETECT[@]}"; do 
+    if eval "${OS_DETECT[$os_name]}"; then 
+      echo "$os_name"
+    fi
+  done
+}
+
+function add_permanent_alias() {
+  name="${1:-}"
+  to="${2:-}"
+  rationale="${3:-}"
+  ts=fsts
+  if [ -n "$to" ] && ! is_quoted "$to"; then
+    to=$(shellquote "$to")
+  fi
+  mkdir -p "$HOME/.local/bak"
+  fs_rationale=$(echo "$rationale"|sed  's/ /_/g')
+  se "existing .bashrc backed up to $HOME/.local/bak/.bashrc.bak.$ts.$fs_rationale"
+  # https://stackoverflow.com/questions/5573683/adding-alias-to-end-of-alias-list-in-bashrc-file-using-sed
+  tac .bashrc | 
+  awk "FNR==NR&&/alias/{s=FNR;next}FNR==s{ \$0=\$0\"\nalias $name=\x22$to\x22\n\"}NR>FNR" .bashrc .bashrc > .bashrc.new 
+  mv "$D/.bashrc" "$HOME/.local/bak/.bashrc.bak.$ts.add_synergy_alias" && mv .bashrc.new .bashrc
+  return $?
+}
+
+function is_bash_script() {
+  if [ -z "$script" ] || ! [ -f "$script" ]; then
+    return 1
+  fi
+  head -n1 "$script" | grep "bash$" > /dev/null 2>&1
+  return $?
+}
+
+function namerefs_bashscript_add() {
+  script="${1:-}"
+  if ! is_bash_script; then
+    se "please provide a path to a bash script"
+  fi
+  if ! declare -p "VALID_DECLARE_FLAGS" > /dev/null 2>&1; then 
+    source "$D/existence.sh"
+  fi
+  if undefined "in_array"; then 
+    source "$D/filesystemarrayutil.sh"
+  fi
+
+  # case: global function names
+  declare -a _names
+  _names+=( $(grep ^function "$script" |awk '{print$2}'|awk -F'(' '{print"\x22"$1"\x22"}') )
+
+  # get variables declared as local for exclusion (this may ressult in false positives)
+  declare -ga localvars
+  declare -a localvarlines
+  localvarlines=( $(grep '^[[:space:]]*local [[:alnum:]]*_*[[:alnum:]]*' "$script") )
+  for line in "${localvarlines[@]}"; do 
+    wequal=$(echo "$line"|grep "=")
+    if [ $? -eq 0 ]; then
+      # we're expecting something like "local foo=bar" and we want foo
+      localvars+=( $(echo "$wequal" | awk '{print$1}' |awk -F'=' '{print$1}') )
+    else
+      localvars+=( $(echo "$line" | awk '{print$2}') )
+    fi
+  done
+
+  # case variables declared by assignment
+  declare -a vars
+  vars=$(grep '^[[:space:]]*[[:alnum:]]*_*[[:alnum:]]*=' "$script" |awk -F'=' '{print$1}'|xargs)
+
+  # case: names declared in the global scope
+  vars+=( $(grep ^declare "$script" |awk '{print"\x22"$3"\x22"}') )
+
+  # case: variables assigned by printf
+  vars+=( $(grep "printf -v" "$script" |awk '{print"\x22"$3"\x22"}') )
+
+  # only populate from the above 2 cases when not declared with the local keyword
+  for var in "${vars[@]}"; do
+    if ! in_array "$var" "localvars"; then 
+      var=$(singlequote "$var")
+      _names+=( "$var" )
+    fi
+  done
+
+  # names declared not in the global namespace but with -g
+  printf -v declaregregex '^[[:space:]]*declare -[%s]*g[%s]*' "$VALID_DECLARE_FLAGS" "$VALID_DECLARE_FLAGS"
+  _names+=( $(grep "$declaregregex" "$script" |awk '{print"\x22"$3"\x22"}') )
+
+  noextbasename=$(basename "$script"|sed 's/.sh//g')
+  expected_name="NAMEREFS_${noextbasename^^}"
+  existing_namerefs="$(grep '^NAMEREFS_[[A-z]]=(.*)$')"
+  if [ $? -eq 0 ]; then
+    name=$(echo "$existing_namerefs"|awk -F'=' '{print$1}')
+    if [[ "$name" == "$expected_name" ]]; then 
+      eval "$existing_namerefs"
+    else 
+      se "found $name in $script which didn't match expected $expected_name"
+      return 1
+    fi
+  fi
+  if undefined "$expected_name"; then 
+    declare -a "$expected_name"
+  fi
+  local -n script_namerefs=("${!expected_name[@]}")
+  script_namerefs+=( $_names )
+  # make sure we're quoted for printing 
+  declare -a out_namerefs
+  for nameref in "${script_namerefs[@]}"; do
+    if ! is_quoted "$nameref"; then
+      out_namerefs+=( $(singlequote "$nameref") )
+    else
+      out_namerefs+=( "$nameref" )
+    fi
+  done
+  # remove the original reference
+  sed -i 's/^NAMEREFS_[[A-z]]=(.*)$//g' "$script"
+  # add it in a nice-to-look-at format:
+  printf "\n\n${expected_name}=(" >> "$script"
+  for quoted_nameref in "${out_namerefs[@]}"; do 
+    printf "$quoted_nameref" >> "$script"
+  done
+  printf ")\n" >> "$script"
+}
+
+
+
+# find wrappers for common operation modes, even when they vary by OS.
+# This is the kind of thing that should normally go in osutil, but
+# there is something useful about seeing the differences side-by-side
+# and not having to be concerned that any troubleshooting might be OS
+# specific.  We capture the args just like as if we were running the 
+# real find and populate our changes into the args dict in an order that
+# shouldn't disrupt the original intention.  To ease troubleshooting,
+# we export three globals on run:
+# [L,M,C]FIND_IN - $@ array as it was passed to the function
+# [L,M,C]FIND_RUN - full command as it was run, including any local 
+#                   alteration to handles; but nothing external, pipelines, etc
+# [L,M,C]FIND_STACK - the call stack ${FUNCNAME[@]} at execution
+#
+# (TODO: would it be useful to keep in-memory
+# histories in global arrays?)
+COMPOSABLE_FINDS=( "cfind" "lfind" )
+
+function compose_find() {
+set -x
+  caller="${FUNCNAME[1]}"
+  to_compose=( "$@" )
+  local -n run_args="${caller^^}_RUN"
+  caller_args=("${run_args[@]:1}")
+  composed=false
+  declare -A called
+  # jacob told me that I am a candidate, do you know what that means?
+  for candidate in "${COMPOSABLE_FINDS[@]}"; do 
+    if [[ "$candidate" != "$caller" ]]; then
+      if [[ "${to_compose[*]}" == *"$candidate"* ]]; then
+        # candidate is in the call stack
+        composed=true
+        called["$candidate"]="$caller"
+        caller="$candidate"
+        run_args=( $(eval "${candidate}_args" "${run_args[@]}") )
+      fi
+    fi
+  done
+  # let us do a little validation; our wrong side of the tracks unit tests
+  if $composed; then
+    if [[ "${caller_args[*]}" == "${run_args[*]}" ]]; then
+      se "find should be composed but only found args from ${FUNCNAME[1]}"
+      se "should have found:"
+      for caller in "${!called[@]}"; do 
+        se "$caller : ${called[$caller]}"
+      done
+      return 2
+    fi
+    declare -a missing_caller_args
+    for caller in "${!called[@]}"; do 
+      if [[ "$caller" == "${FUNCNAME[1]}" ]]; then
+        local_caller_args=( "${caller_args[@]}" )
+      else
+        local_caller_args=( $"${caller^^}_RUN" )
+      fi
+      for arg in "${local_caller_args[@]}"; do 
+        if [[ "${run_args[*]}" != *"$arg"* ]]; then
+          missing_caller_args+=( "$arg" )
+        fi
+      done
+      if gt ${#missing_caller_args[@]} 0; then
+        se "all caller_args should have been in \$run_args, but $caller were missing:"
+        se "${missing_caller_args[@}}"
+        return 3
+      fi
+    done
+  fi
+  find "${run_args[@]:1}"
+  return $?
+}
+
+function find_composed_of() {
+set -x
+  caller="${FUNCNAME[1]}"
+  in_args="${caller^^}_IN"
+  declare -a new_args
+  for arg in "${in_args[@]}"; do
+    if [[ "$arg" != "find" ]] && [[ "$arg" != "$caller" ]]; then
+      if [[ "${COMPOSABLE_FINDS[@]}" != *"$arg"* ]]; then
+        new_args+=( "$arg" )
+      else
+        composed=true
+        to_compose+=( "$arg" )
+      fi
+    fi
+  done
+  in_args=( "${new_args[@]}" )
+  if gt ${#to_compose[@]} 0; then
+    echo "${to_compose[@]}"
+    return 0
+  fi
+  return 1
+}
+
+# ignores network shares. "L" for local.
+function lfind_args() {
+
+
+  # we delineate argv as 
+  #       0    1    2       3             4
+  # Linux find $dir -mount  $otherargs...     
+  # Mac   find $dir -fstype local         $otherargs....
+  # we will drop arg0 when calling find, but leave it for env record keeping
+  LFIND_RUN+=( "find" )
+  case $(what_os) in
+    "MacOS")
+      LFIND_RUN+=( "-fstype" )
+      LFIND_RUN+=( "local" )
+      ;;
+    "GNU/Linux")
+      LFIND_RUN+=( "-mount" )
+      ;;
+  esac
+  LFIND_RUN+=( "find" )
+  LFIND_RUN+=( "${LFIND_IN[1]}" )
+  LFIND_RUN+=( "${argv2[@]}" )
+  if gt $# 2; then
+    LFIND_RUN+=( "${LFIND_IN[@]:2}" )
+  fi  
+
+  echo "${LFIND_RUN[@]:1}"
+  return 0
+}
+
+function lfind() {
+  declare -ga LFIND_IN
+  declare -ga LFIND_RUN
+  declare -ga LFIND_STACK
+  LFIND_STACK=( "${FUNCNAME[@]}" )
+  LFIND_IN=( "$@" )
+  if to_compose_str=$(find_composed_of); then
+    composed=true
+  fi
+  lfind_args "$@"
+  if $composed; then
+    compose_find "${to_compose[@]}"
+    return $?
+  fi
+  find "${LFIND_RUN[@]}"
+}
+
+# clear find, do not print stderr to the console.
+# stderr can be found at $cache/cfind/last_stderr
+# we also save the previous at $cache/cfind/last_last_stderr
+# but no more silliness beyond that
+# where $cache is ~/.local/cache on Linux and 
+# ~/Library/Application\ Support/Caches on Mac
+function cfind_args() {
+  case $(what_os) in 
+    "GNU/Linux")
+      cache="$HOME/.local/cache"
+      ;;
+    "MacOS")
+      cache="$HOME/Library/Application Support/Caches"
+      ;;
+  esac
+  mkdir -p "$cache/cfind"
+  errfile="$cache/cfind/last_stderr"
+  prev_errfile="$cache/cfind/last_last_stderr"
+  if [ -f "$prev_errfile" ]; then 
+    rm -f "$prev_errfile"
+  fi
+  if [ -f "$errfile" ]; then
+    mv "$errfile" "$prev_errfile"
+  fi
+  CFIND_RUN=( "find" "${CFIND_IN[@]}" "2>" "$errfile" )
+  if $composed; then
+    compose_find "$to_compose_str"
+    return $?
+  fi
+  find "${CFIND_RUN[@]:1}"
+  return $?
+} 
+
+function cfind() {
+  declare -ga CFIND_IN
+  declare -ga CFIND_RUN
+  declare -ga CFIND_STACK
+  composed=false
+  CFIND_STACK=( "${FUNCNAME[@]}" ) 
+  CFIND_IN=( "$@" )
+  if to_compose_str=$(find_composed_of); then
+    composed=true
+  fi
+  cfind_args "$@"
+  if $composed; then
+    compose_find "${to_compose[@]}"
+    return $?
+  fi
+  find "${CFIND_RUN[@]}"
+}
+
+# now we can define silly things like 
+function clfind() {
+ cfind lfind "$@"
+}
+  
 
 # If for any sourced file, you'd like to be able to undo the 
 # changes to  your environment after it's sourced, track the
@@ -138,41 +508,6 @@ function debug() {
   fi
 }
 
-function term_bootstrap() {
-  termschemes_bootstrap
-  termfonts_bootstrap
-}
-
-# my basic edits to import-schemes.sh below will detect and add color
-# schemes for xfce4-terminal and konsole.  At the bare minimum, I plan
-# to add terminator in addition to iTerm which is what the script
-# was originally written for, so this function remains generally OS 
-# agnostic.
-function termschemes_bootstrap() {
-  if ! [ -d "$GH/Terminal-Color-Schemes" ]; then 
-    ghc "git@github.com:trustdarkness/Terminal-Color-Schemes.git"
-  fi
-  cd "$GH/Terminal-Color-Schemes"
-  tools/import-schemes.sh
-  cd -
-}
-
-# in the spirit of consistency, we'll keep these together
-function termfonts_bootstrap() { 
-  if ! $(fc-list |grep Hack-Regular); then 
-    if ! $(i); then  
-      se "no installutils.sh" 
-      return 1 
-    fi 
-    if ! $(sai fonts-hack); then  
-      se "could not install fontshack with ${sai}"
-      return 1
-    fi
-  fi
-  return 0
-}
-alias debug="se"
-
 # Arg1 is needle, Arg2 is haystack
 # returns 0 if haystack contains needle, retval from grep otherwise
 function string_contains() {
@@ -186,6 +521,17 @@ function shellquote() {
     echo $1
   fi
   printf '"%s"\n' "$@"
+}
+
+# returns zero if the value referenced by $1 has literal quotes surrounding it
+# works for single or double quotes, returns 1 otherwise
+function is_quoted() {
+  if [[ "${1:-}" =~ \'.*\' ]]; then
+    return 0
+  elif [[ "${1:-}" =~ \".*\" ]]; then 
+    return 0
+  fi
+  return 1
 }
 
 # for a multiline string, returns a string with doublequotes surrounding
@@ -229,7 +575,7 @@ function system_arch() {
 
 # Appends Arg1 to the shell's PATH and exports
 function path_append() {
-  to_add="${1:}"
+  to_add="${1:-}"
   if [ -f "${to_add}" ]; then 
     if ! [[ "${PATH}" == *"${to_add}"* ]]; then
       export PATH="${PATH}:${to_add}"
@@ -239,7 +585,7 @@ function path_append() {
 
 # Prepends Arg1 to the shell's PATH and exports
 function path_prepend() {
-  to_add="${1:}"
+  to_add="${1:-}"
   if [ -f "${to_add}" ]; then 
     if ! [[ "${PATH}" == *"${to_add}"* ]]; then
       export PATH="${to_add}:${PATH}"
@@ -252,6 +598,20 @@ function split() {
   to_split="${1:?'Provide a string to split and (optionally) a delimiter'}"
   delimiter="${2:-' '}"
   awk -F"${delimiter}" '{print $0}'
+}
+
+function printcolrange() {
+  input="${1:-}"
+  start="${2:-}"
+  fin="${3:-}"
+  delim="${4:-}"
+  top="$t"
+  if lt "$fin" 0; then
+    prog='{for(i=f;i<=t'+$fin+';i++) printf("%s%s",$i,(i==t)?"\n":OFS)}'
+  else
+    prog='{for(i=f;i<=t;i++) printf("%s%s",$i,(i==t)?"\n":OFS)}'
+  fi
+  echo "$input"|awk "$start,NF$fin { print NR, $0 }"
 }
 
 # Given a date (Arg1) and a fmt string (Arg2, strftime), 
@@ -377,19 +737,6 @@ function ssudo () {
 }
 alias ssudo="ssudo "
 
-# stolen from https://stackoverflow.com/questions/8654051/how-can-i-compare-two-floating-point-numbers-in-bash
-function is_first_floating_number_bigger () {
-    number1="$1"
-    number2="$2"
-
-    [ ${number1%.*} -eq ${number2%.*} ] && [ ${number1#*.} \> ${number2#*.} ] || [ ${number1%.*} -gt ${number2%.*} ];
-    result=$?
-    if [ "$result" -eq 0 ]; then result=1; else result=0; fi
-
-    __FUNCTION_RETURN="${result}"
-}
-
-
 # To help common bash gotchas with [ -eq ], etc, this function simply
 # takes something we hope to be an int (arg1) and returns 0 if it is
 # 1 otherwise
@@ -457,11 +804,11 @@ function boolean_or {
 
 function osutil_load() {
   if [ -z "$osutil_in_env" ] || $osutil_in_env; then
-    if [[ "$(uname)" == "Linux" ]]; then
+    if [[ $(uname) == "Linux" ]]; then
       source $D/linuxutil.sh
       alias sosutil="source $D/linuxutil.sh"
       alias vosutil="vim $D/linuxutil.sh && sosutil"
-    elif [[ "$(uname)" == "Darwin" ]]; then
+    elif [[ $(uname) == "Darwin" ]]; then
       source $D/macutil.sh
       alias sosutil="source $D/macutil.sh"
       alias vosutil="vim $D/macutil.sh && vosutil"
@@ -473,15 +820,34 @@ osutil_load
 alias sall="sbrc; sglobals; sutil; sosutil"
 
 # initialized the helper library for the package installer
-# for whatever the detected os environment is
+# for whatever the detected os environment is; good for interactive
+# use below for scripts
 function i() {
   source $D/installutil.sh
+  return $?
 }
 
-# for the most common ones, since i got used to having them
-alias sai="i; sai"
-alias sas="i; sas"
-alias sauu="i; sauu"
+function install_util_load() {
+  if undefined "sai"; then 
+    source "$D/installutil.sh"
+  fi
+  i
+  return $?
+}
+
+# so we dont load all that nonsense into the env, but the super
+# frequently used ones remain readily available
+if undefined "sai"; then
+  sai() {
+    unset -f sai sas sauu; i; sai "$@"
+  }
+  sas() {
+    unset -f sai sas sauu; i; sas "$@"
+  }
+  sau() { 
+    unset -f sai sas sauu; i; sauu "$@"
+  }
+fi
 
 # for other files to avoid re-sourcing
 utilsh_in_env=true
