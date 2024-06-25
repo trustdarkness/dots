@@ -599,7 +599,7 @@ function mullvad_bootstrap() {
     wget https://mullvad.net/en/download/app/pkg/latest/signature
     wget https://mullvad.net/media/mullvad-code-signing.asc
     gpg --import mullvad-code-signing.asc
-    verify=gpg --verify Mullvad*.asc
+    verify=$(gpg --verify Mullvad*.asc)
     if [ $? -ne 0 ]; then 
       se "Mullvad gpg verification failed."
       cd "$swd"
