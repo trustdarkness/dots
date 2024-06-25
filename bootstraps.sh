@@ -1,3 +1,28 @@
+#!/usr/bin/env bash
+if ! declare -F is_function; then
+  is_function() {
+    ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
+  }
+fi
+
+if [ -z "$D" ]; then
+  if is_function "detect_d"; then detect_d; else  
+    if [[ "${BASH_SOURCE[0]}" == */* ]]; then 
+      if [ -f "$(dirname \"${BASH_SOURCE[0]}\")/util.sh" ]; then 
+        D="$(dirname \"${BASH_SOURCE[0]}\")"
+      fi
+    fi
+    if [ -z "$D" ]; then if "$(pwd)/util.sh"; then D="$(pwd)"; fi; fi
+  fi
+  if [ -z "$D" ]; then 
+    echo "couldnt find the dots repo, please set D=path"; 
+    return 1
+  fi
+fi
+
+if ! is_function "se"; then .  "$D/util.sh"; fi
+util_env_load -u
+
 # since by definition, we wont have arrays yet, this is a hacky prototype
 # we'll use bell separated strings, MACBASHUPS for the prompt strings
 # and MACBASHUPA for the actions
@@ -16,7 +41,7 @@ MACBASHUPA+="Abort and exit"
 BREW_BATCH_INSTALLS="python3 sshfs iterm2 raycast wget rar 7-zip gpg pipx vscodium lynx"
 BREW_BATCH_CASKS="transmit sublime-text sublime-merge lynx"
 
-PATH_SOURCEES='.bashrc .bash_profile .profile'
+PATH_SOURCES='.bashrc .bash_profile .profile'
 
 INSTALL_STAGING="$HOME/Downloads/Staging"
 INSTALL_LOGS="$HOME/Downloads/_i_logs"
@@ -31,16 +56,6 @@ local_namerefs+="brew_get_newest_stable_bash\a"
 local_namerefs+="bootstrap_modern_bash\a"
 local_namerefs+="cleanup_macbootstraps\a"
 local_namerefs+="namerefs"
-
-shopt -s expand_aliases
-
-if ! exists "get_keypress"; then 
-  if [ -n "$D" ]; then 
-    source "$D/user_prompts.sh"
-  else
-    >&2 printf "env not as expected"
-  fi
-fi
 
 function tokenizer() {
   separator=' '
@@ -541,6 +556,7 @@ function termschemes_bootstrap() {
 
 # in the spirit of consistency, we'll keep these together
 function termfonts_bootstrap() { 
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   if ! fc-list |grep Hack-Regular; then 
     if [[ $(uname) == "Darwin" ]]; then 
       brew install font-hack
@@ -747,6 +763,70 @@ function newaudiomac_bundle() {
   return 1
 }
 
+function snapd_teardown() {
+  snap_installs=$(snap list |awk '{print$1}'|grep -v 'name')
+  for prog in $snap_installs; do 
+    sudo snap remove "$prog"
+  done
+  snap_installs=$(snap list |awk '{print$1}'|grep -v 'name')
+  for prog in $snap_installs; do 
+    sudo snap remove "$prog"
+  done
+  sudo systemctl stop snapd 
+  sudo systemctl disable snapd
+  sudo systemctl mask snapd
+  sudo apt purge -y snapd
+  sudo apt hold snapd
+}
+
+function synergy_debian_bootstrap_from_nx() {
+  echo "synergy v1 relies on libssl1.1 which has been deprecated"
+  echo "this means no security patches.  We use a hack to make it work"
+  echo "if nomachine is also installed, as it installs with its own"
+  echo "copy of libssl and libvrypto, but this means synergies TLS"
+  echo "depends entirely on whatever assumptions were made by the folks"
+  echo "at nomachine, who could have no idea that we do this."
+  echo "No warranty of any kind should be assumed, proceed with great"
+  echo "care and caution. Use at your own risk.  etc."
+  if ! confirm_yes_default_no "continue? (y/N)"; then
+    return 2
+  fi
+  if [ -d "/usr/NX" ]; then
+    if [ -f "/usr/NX/lib/libcrypto.so" ]; then  
+      libcrypto="/usr/NX/lib/libcrypto.so"
+    fi
+    if [ -f "/usr/NX/lib/libssl.so" ]; then 
+      libssl="/usr/NX/lib/libssl.so"
+    fi
+  else
+    se "this hack depends on nomachine being installed"
+    se "https://nomachine.com"
+    return 3
+  fi
+  if [ -z "$libcrypto" ] || [ -z "$libssl" ]; then
+    se "libcrypto.so and libssl.so should exist in /usr/lib/NX"
+    return 4
+  fi
+  if [ -z "$USERLIB" ]; then 
+    mkdir -p "$HOME/.local/lib/synergy"
+    USERLIB="$HOME/.local/lib/"
+  fi
+  slib="$USERLIB/synergy"
+  ln -sf "$libcrypto" "$slib/"
+  ln -sf "$libssl" "$slib/"
+
+  # prepared by running edit-deb-control on the package downloaded from 
+  # symless.com and removing the libssl dependency
+  # https://github.com/trustdarkness/debianhelpers/blob/main/edit-deb-control.sh
+  scp vulcan:/egdod/Backup/Software/Linux/synergy_1-mt-20240623.deb "$HOME/Downloads/"
+  
+  install_util_load
+  sai libgdk-pixbuf-xlib-2.0-0 libgdk-pixbuf2.0-0
+  di "$HOME/Downloads/synergy_1.14.6-stable.06a860d9_debian10_amd64.deb"
+  add_permanent_alias "synergy" "LD_LIBRARY_PATH=$slib/ synergy" "add_synergy_alias"
+  return $?
+}
+
 function mb_ff() {
   local funcname="$1"
   if [ -z $funcname ]; then 
@@ -755,7 +835,6 @@ function mb_ff() {
   fi
   echo "$funcname finished" >> "$INSTALL_LOGS/mac_bootstrap.log"
 }
-
 
 # TODO: poopulate updated namerefs and use cleanup function in util
 function cleanup_macbootstraps() {

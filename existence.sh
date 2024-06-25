@@ -100,16 +100,12 @@ if ! is_declared "se"; then
   #  $:2 are treated as substitutions
   # No explicit return code 
   function se() {
-    sub=$(grep '%' <<< "$@")
-    subret=$?
-    out=$(grep '\n' <<< "$@")
-    outret=$?
-    if [ $subret -eq 0 ]; then
+    if [[ "$*" == *'%'* ]]; then
       >&2 printf "${1:-}" $:2
-    else 
+    else
       >&2 printf "$@"
     fi
-    if [ $outret -ne 0 ]; then 
+    if ! [[ "$*" == *'\n'* ]]; then 
       >&2 printf '\n'
     fi
   }
@@ -248,3 +244,6 @@ function is_array() {
   search_declareopts "${1:-}" "${IS_ARRAY_REGEX}"
   return $?
 } # end is_array
+
+EXISTENCE_NAMEREFS=(
+)
