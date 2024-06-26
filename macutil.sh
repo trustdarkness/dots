@@ -233,6 +233,11 @@ function pref_reset() {
   fi
 }
 
+# https://stackoverflow.com/questions/16375519/how-to-get-the-default-shell
+function getusershell() {
+  dscl . -read ~/ UserShell | sed 's/UserShell: //'
+}
+
 # an example for above, runs pres reset on finder_prefs
 function finder_reset() {
   prefs_reset finder_prefs
@@ -432,18 +437,31 @@ function sudo_only_commands  {
   done
 }
 
-
-
 # tells the finder to show hidden files and restarts it.
 # writes AppleShowAllFiles true to com.apple.finder 
 function showHidden {
-  isShown=$(defaults read com.apple.finder AppleShowAllFiles)
-  if [[ $isShown == "false" ]]; then
+  wriiteAndKill() {
     defaults write com.apple.finder AppleShowAllFiles true
     killall Finder
+  }
+ if isShown=$(defaults read com.apple.finder AppleShowAllFiles); then
+    case "$isShown" in
+      "false"|"no"|""|0)
+        writeAndKill
+        ;;
+      "true"|"yes"|1)
+        se "Finder already set to show all files, kill anyway?"
+        if confirm_yes "(Y/n)"; then 
+          killall Finder
+        fi
+        ;;
+      *)
+        se "defaults read com.apple.finder AppleShowAllFiles returned $isShown"
+        return 1
+        ;;
+    esac
   fi
-}
-
+} 
 
 OLDSYS="/Volumes/federation"
 OLDHOME="/Volumes/federation/Users/$(whoami)"
