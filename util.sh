@@ -682,6 +682,48 @@ function hn () {
   done
 }
 
+
+# NOT currently working 
+# function show_global_scope_declares() {
+#   script="${1:-}"
+#   if is_bash_script "script"; then 
+#     declare -a ifs 
+#     declare -a fis
+#     declare -a fors
+#     declare -a whiles
+#     declare -a dones
+#     for lineno in $(grep -n ^if "$script"|awk -F":" '{print$1}'); do 
+#       ifs+=( $lineno )
+#     done
+#     for lineno in "${ifs[@]}"; do 
+#       fis+=( $(tail -n $lineno "$script" |grep ^fi |head -n 1| awk -F":" '{print$1}') )
+#     done
+#     for lineno in $(grep -n ^for "$script"|awk -F":" '{print$1}'); do 
+#       fors+=( $lineno )
+#     done
+#     for lineno in "${fors[@]}"; do 
+#       dones+=( $(tail -n $lineno "$script" |grep ^done |head -n 1| awk -F":" '{print$1}') )
+#     done
+#     ifctr=0
+#     forctr=0
+#     for line in $(grep -E -v '(^[[:space:]]|^}|^done|^END|^#|^EOF)' "$script"); do 
+#       case "$(echo line|awk '{print$1}')" in 
+#         "if")
+#           cat "$script" | head -n "${ifs[$ifctr]}" | tail -n "${fis[$ifctr]}"
+#           ((ifctr++))
+#           ;;
+#         "for")
+#           cat "$script" | head -n "${fors[$forctr]}" | tail -n "${dones[$forctr]}"
+#           ((forctr++))
+#           ;;
+#         *)
+#           echo $line
+#           ;;
+#       esac
+#     done
+#   fi
+# }
+
 function symlink_child_dirs () {
   # Argument should be a directory who's immediate children
   # are themes such that you want to have each directory  
