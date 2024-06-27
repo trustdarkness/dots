@@ -125,7 +125,7 @@ function util_env_load() {
 
 # preferred format strings for date for storing on the filesystem
 FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
-FSTSFMT="${FSDATEFMT}_%H%M%S" # our preferred ts fmt for files/folders
+FSTSFMT="$FSDATEFMT_%H%M%S" # our preferred ts fmt for files/folders
 LAST_DATEFMT="%a %b %e %k:%M" # used by the "last" command
 
 function fsdate() {
@@ -883,13 +883,13 @@ function install_util_load() {
 # frequently used ones remain readily available
 if undefined "sai"; then
   sai() {
-    unset -f sai sas sauu; i; sai
+    unset -f sai sas sauu; i; sai "$@"
   }
   sas() {
-    unset -f sai sas sauu; i; sas
+    unset -f sai sas sauu; i; sas "$@"
   }
   sau() { 
-    unset -f sai sas sauu; i; sauu
+    unset -f sai sas sauu; i; sauu "$@"
   }
 fi
 
