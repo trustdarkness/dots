@@ -776,9 +776,10 @@ function symlink_child_dirs () {
       return 0
     fi
   }
-  while [ $# -gt 0 ]]; do
-    case "${1:-}" in
-      "-u")
+  optspec="u?h"
+  while getopts "${optspec}" optchar; do
+    case "${optchar}" in
+      u)
         if undo_last_change; then 
           se "undo successfully completed"
           return 0
@@ -788,7 +789,7 @@ function symlink_child_dirs () {
         fi
         shift
         ;;
-      *)
+      ?|h)
         help
         shift
         ;;
@@ -799,9 +800,9 @@ function symlink_child_dirs () {
   # at the top level (under the parent) symlinked in a 
   # target directory.  Intended for use under ~/.themes
   # but presumably, there are other ways this is useful. 
-  TARGET=$1
-  WHERETO=$2
-
+  TARGET="${@:$OPTIND:1}"
+  WHERETO="${@:$OPTIND+1}"
+ 
   failures=0
   successes=0
   declare -a failed_targets
