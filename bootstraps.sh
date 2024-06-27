@@ -20,42 +20,32 @@ if [ -z "$D" ]; then
   fi
 fi
 
-if ! is_function "se"; then .  "$D/util.sh"; fi
-util_env_load -u
+if ! is_function "fsts"; then .  "$D/util.sh"; fi
+if ! is_function "confirm_yes" || ! is_function "exists"; then
+  util_env_load -u
+fi
 
 # since by definition, we wont have arrays yet, this is a hacky prototype
-# we'll use bell separated strings, MACBASHUPS for the prompt strings
+# we'll use null separated strings, MACBASHUPS for the prompt strings
 # and MACBASHUPA for the actions
-MACBASHUPS="Continue, accepting possible breakage\a" 
-MACBASHUPS+="Install homebrew and latest bash stable, making this your default shell\a" 
-MACBASHUPS+="Install homebrew and latest bash stable, but dont change my shell\a"
+MACBASHUPS="Continue, accepting possible breakage\0" 
+MACBASHUPS+="Install homebrew and latest bash stable, making this your default shell\0" 
+MACBASHUPS+="Install homebrew and latest bash stable, but dont change my shell\0"
 MACBASHUPS+="Abort and exit"
 
-MACBASHUPA="
-local caller="$FUNCNAME"
-mb_ff "$FUNCNAME"; return 0\a" 
-MACBASHUPA+="bootstrap_modern_bash -s -d -p\a" 
-MACBASHUPA+="bootstrap_modern_bash -s -p\a"
+MACBASHUPA="return 0\0" 
+MACBASHUPA+="bootstrap_modern_bash -s -d -p\0" 
+MACBASHUPA+="bootstrap_modern_bash -s -p\0"
 MACBASHUPA+="Abort and exit"
 
-BREW_BATCH_INSTALLS="python3 sshfs iterm2 raycast wget rar 7-zip gpg pipx"
+BREW_BATCH_INSTALLS="python3 sshfs iterm2 raycast wget rar 7-zip gpg pipx screen"
 BREW_BATCH_CASKS="transmit sublime-text sublime-merge lynx"
 
 PATH_SOURCES='.bashrc .bash_profile .profile'
 
-INSTALL_STAGING="$HOME/Downloads/Staging"
+INSTALL_STAGING="$HOME/Downloads/_staging"
 INSTALL_LOGS="$HOME/Downloads/_i_logs"
 INSTALLED_SUCCESSFULLY="$HOME/Downloads/_i"
-
-local_namerefs="MACBASHUPS\a"
-local_namerefs+="MACBASHUPA\a"
-local_namerefs+="choices_legacy\a"
-local_namerefs+="brew_bootstrap\a"
-local_namerefs+="MODERN_BASH\a"
-local_namerefs+="brew_get_newest_stable_bash\a"
-local_namerefs+="bootstrap_modern_bash\a"
-local_namerefs+="cleanup_macbootstraps\a"
-local_namerefs+="namerefs"
 
 function tokenizer() {
   separator=' '
@@ -278,6 +268,46 @@ function bash_bootstrap() {
 
   local caller="$FUNCNAME"
   mb_ff "$FUNCNAME"; return 0
+}
+
+function thunar_sorting_bootstrap() {
+  whichThunar=$(type -p Thunar)
+  thunarParent=$(dirname "$whichThunar")
+  declare -a b4
+  found=false
+  for pathel in $(split "$PATH"); do 
+    if [[ "$pathel" != "$thunarParent" ]] && ! $found; then
+      b4+=( "$pathel" )
+    elif [[ "$pathel" == "$thunarParent" ]]; then 
+      found=true
+      break
+    fi
+  done
+  echo "enabling thunar sorting can be done in any of the following"
+  echo "dirs in your PATH... Do you have a preference?"
+  choice=$(choices -e "${b4[@]}")
+  if is_int "$choice"; then 
+    if lt "$choice"  ${!b4[@]}; then
+      if can_i_write "${b4[$choice]}"; then 
+        command="cat"
+      else
+        command="sudo cat"
+      fi
+      if ! [ -f "${b4[$choice]}/Thunar" ]; then
+$command << 'END' > "${b4[$choice]}/Thunar"
+#!/bin/bash
+LC_COLLATE=C /usr/bin/Thunar "$@" &
+END
+      echo "Thunar should now sort _files before others,"
+      echo "changes were written to ${b4[$choice]}/Thunar."
+return 0
+      else
+        echo "${b4[$choice]}/Thunar already exists, you may want to"
+        echo "investigate or start over and choose a different option."
+      fi
+    fi
+  fi
+  echo "couldn't interpret your choice or error writing file."
 }
 
 function terminal_hack() {
@@ -835,10 +865,3 @@ function mb_ff() {
   echo "$FUNCNAME finished" >> "$INSTALL_LOGS/mac_bootstrap.log"
 }
 
-# TODO: poopulate updated namerefs and use cleanup function in util
-function cleanup_macbootstraps() {
-  local IFS=$'\a'
-  for nameref in "$local_namerefs"; do
-    unset $nameref
-  done
-}
