@@ -597,7 +597,9 @@ function path_prepend() {
 function split() {
   to_split="${1:?'Provide a string to split and (optionally) a delimiter'}"
   delimiter="${2:-' '}"
-  awk -F"${delimiter}" '{print $0}'
+  printf %s\\n "$to_split" | tr "$delimiter" '\n'
+\
+  return 0
 }
 
 function printcolrange() {
@@ -687,14 +689,14 @@ function symlink_child_dirs () {
   # target directory.  Intended for use under ~/.themes
   # but presumably, there are other ways this is useful. 
   TARGET=$1
-  LNAME=$2
+  WHERETO=$2
 
   # give success a silly nonsensical value that the shell would never.
   success=257
 
   if [ -d "$TARGET" ]; then
-    if [ -d "$LNAME" ]; then
-      e=$(find $TARGET -maxdepth 1 -type d -exec ln -s '{}' $LNAME/ \;)
+    if [ -d "$WHERETO" ]; then
+      e=$(find $TARGET -maxdepth 1 -type d -exec ln -s '{}' $WHERETO/ \;)
       success=$?
     fi
   fi
