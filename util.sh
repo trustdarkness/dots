@@ -30,16 +30,6 @@ if ! declare -F "exists" > /dev/null 2>&1; then
   source "$D/existence.sh"
 fi
 
-
-case $(what_os) in 
-  "GNU/Linux")
-    CACHE="$HOME/.local/cache"
-    ;;
-  "MacOS")
-    CACHE="$HOME/Library/Application Support/Caches"
-    ;;
-esac
-
 # A slightly more convenient and less tedious way to print
 # to stderr, canonical in existence # TODO, check namerefs on resource
 if ! is_declared "se"; then
@@ -813,7 +803,7 @@ function symlink_child_dirs () {
       return 1
     fi
     if [ -d "$WHERETO" ]; then
-      if find $TARGET -maxdepth 1 -type d -exec ln -s '{}' $WHERETO/ \;; then
+      if find $TARGET ! name '.git' -maxdepth 1 -type d -exec ln -s '{}' $WHERETO/ \;; then
         undos+=( "$WHERETO/$TARGET" )
         ((successes++))
       else
@@ -821,6 +811,9 @@ function symlink_child_dirs () {
         failed_targets+=( "$WHERETO/$TARGET" )
       fi
     fi
+  else
+    echo "arg1 should be a directory containing children to symlink"
+    return 1
   fi
   if gt $successes 0; then
     ts=$(fsts)
@@ -967,16 +960,29 @@ function boolean_or {
   return 1
 }
 
+case $(what_os) in 
+  "GNU/Linux")
+    CACHE="$HOME/.local/cache"
+    OSUTIL="$D/linuxutil.sh"
+    alias sosutil="source $D/linuxutil.sh"
+    alias vosutil="vim $D/linuxutil.sh && sosutil"
+    ;;
+  "MacOS")
+    CACHE="$HOME/Library/Application Support/Caches"
+    OSUTIL="$D/macutil.sh"
+    alias sosutil="source $D/macutil.sh"
+    alias vosutil="vim $D/macutil.sh && vosutil"
+    ;;
+esac
+
 function osutil_load() {
   if [ -z "$osutil_in_env" ] || $osutil_in_env; then
-    if [[ $(uname) == "Linux" ]]; then
-      source $D/linuxutil.sh
-      alias sosutil="source $D/linuxutil.sh"
-      alias vosutil="vim $D/linuxutil.sh && sosutil"
-    elif [[ $(uname) == "Darwin" ]]; then
-      source $D/macutil.sh
-      alias sosutil="source $D/macutil.sh"
-      alias vosutil="vim $D/macutil.sh && vosutil"
+    if [ -f "$OSUTIL" ]; then
+      source "$OSUTIL"
+      return 0
+    else
+      se "OS not properly detected or \$OSUTIL not found."
+      return 1
     fi
   fi
 }
