@@ -30,6 +30,16 @@ if ! declare -F "exists" > /dev/null 2>&1; then
   source "$D/existence.sh"
 fi
 
+
+case $(what_os) in 
+  "GNU/Linux")
+    CACHE="$HOME/.local/cache"
+    ;;
+  "MacOS")
+    CACHE="$HOME/Library/Application Support/Caches"
+    ;;
+esac
+
 # A slightly more convenient and less tedious way to print
 # to stderr, canonical in existence # TODO, check namerefs on resource
 if ! is_declared "se"; then
@@ -425,23 +435,15 @@ function lfind() {
 }
 
 # clear find, do not print stderr to the console.
-# stderr can be found at $cache/cfind/last_stderr
-# we also save the previous at $cache/cfind/last_last_stderr
+# stderr can be found at $CACHE/cfind/last_stderr
+# we also save the previous at $CACHE/cfind/last_last_stderr
 # but no more silliness beyond that
-# where $cache is ~/.local/cache on Linux and 
+# where $CACHE is ~/.local/cache on Linux and 
 # ~/Library/Application\ Support/Caches on Mac
 function cfind_args() {
-  case $(what_os) in 
-    "GNU/Linux")
-      cache="$HOME/.local/cache"
-      ;;
-    "MacOS")
-      cache="$HOME/Library/Application Support/Caches"
-      ;;
-  esac
-  mkdir -p "$cache/cfind"
-  errfile="$cache/cfind/last_stderr"
-  prev_errfile="$cache/cfind/last_last_stderr"
+  mkdir -p "$CACHE/cfind"
+  errfile="$CACHE/cfind/last_stderr"
+  prev_errfile="$CACHE/cfind/last_last_stderr"
   if [ -f "$prev_errfile" ]; then 
     rm -f "$prev_errfile"
   fi
@@ -724,7 +726,74 @@ function hn () {
 #   fi
 # }
 
+function is_absolute() {
+  local dir="${1:-}"
+  if [ -d "${dir}" ]; then 
+    if startswith "/" "${dir}"; then 
+      return 0
+    fi
+  fi
+  return 1
+}
+
+function startswith() {
+  local query="${2:-}"
+  local starts_with="${1:-}"
+  if [[ "$query" =~ ^$starts_with.* ]]; then 
+    return 0
+  fi
+  return 1
+}
+
 function symlink_child_dirs () {
+   undo_dir="$CACHE/com.trustdarkness.utilsh"
+  help() {
+    >&2 printf "Specify a target parent directory whose children\n"
+    >&2 printf "should be symlinked into the desitination directory:\n"
+    >&2 printf "\$ symlink_child_dirs [target] [destination]"
+  }
+  undo_last_change() {
+    undo_file=$(most_recent "$undo_dir")
+    while string_contains "undone" "$undo_file"; do 
+      undo_file=$(most_recent "$undo_dir")
+    done
+    declare -a to_remove
+    for line in $(cat "$undo_file"); do
+      if [ -h "$line" ]; then 
+        to_remove+=( "$line" )
+        echo "$line"
+      fi
+    done
+    echo 
+    if confirm_yes "removing the above symbolic links, OK?"; then 
+      for link in "${to_remove[@]}"; do 
+        rm -f "$link"
+      done
+      mv "$undo_file" "${undo_file}.undone"
+      return 0
+    else
+      echo "exiting with no changes"
+      return 0
+    fi
+  }
+  while [ $# -gt 0 ]]; do
+    case "${1:-}" in
+      "-u")
+        if undo_last_change; then 
+          se "undo successfully completed"
+          return 0
+        else
+          se "undo failed with code $?"
+          return 1
+        fi
+        shift
+        ;;
+      *)
+        help
+        shift
+        ;;
+    esac
+  done
   # Argument should be a directory who's immediate children
   # are themes such that you want to have each directory  
   # at the top level (under the parent) symlinked in a 
@@ -733,24 +802,75 @@ function symlink_child_dirs () {
   TARGET=$1
   WHERETO=$2
 
-  # give success a silly nonsensical value that the shell would never.
-  success=257
-
+  failures=0
+  successes=0
+  declare -a failed_targets
+  declare -a undos
   if [ -d "$TARGET" ]; then
+    if ! is_absolute "$TARGET"; then 
+      echo "the target directory should be an absolute path"
+      return 1
+    fi
     if [ -d "$WHERETO" ]; then
-      e=$(find $TARGET -maxdepth 1 -type d -exec ln -s '{}' $WHERETO/ \;)
-      success=$?
+      if find $TARGET -maxdepth 1 -type d -exec ln -s '{}' $WHERETO/ \;; then
+        undos+=( "$WHERETO/$TARGET" )
+        ((successes++))
+      else
+        ((failures++))
+        failed_targets+=( "$WHERETO/$TARGET" )
+      fi
     fi
   fi
-  if [ $success -eq 257 ]; then
-    >&2 printf "Specify a target parent directory whose children\n"
-    >&2 printf "should be symlinked into the desitination directory:\n"
-    >&2 printf "\$ symlink_child_dirs [target] [destination]"
+  if gt $successes 0; then
+    ts=$(fsts)
+    undo_dir="$CACHE/com.trustdarkness.utilsh"
+    mkdir -p "$undo_dir"
+    undo_file="$undo_dir/${FUNCNAME[0]}.$ts.undo"
+    for line in "${undos[@]}"; do 
+      echo "$line" >> "$undo_file"
+    done
+    echo "Changes recorded at $undo_file, run ${FUNCNAME[0]} -u to undo"
+    echo
+  fi
+  if gt $failures 0; then
+    se "failed to create the following:"
+    for failure in "${failed_targets[@]}"; do echo "$failure"; done
   fi
 }
 
 # thats too long to type though.
 alias scd="symlink_child_dirs"
+
+function most_recent() {
+  local dir="${1:-.}"
+  local sterm="${2:-}"
+  local files
+  if [ -n "$sterm" ]; then 
+    files="$(find ${dir} -name "*$sterm*" -maxdepth 1 -print0 2> /dev/null|tr '\0' '|'|tr ' ' '+')"
+  else 
+    files="$(find ${dir} -maxdepth 1 -print0 2> /dev/null|tr '\0' '|'|tr ' ' '+')"
+  fi
+  #echo "$files"
+  local most_recent_crash=$(most_recent "${files}")
+  # find gives you back \0 entries by default, which would be fine, and
+  # non-printable characters are probably better for a lot of reasons, but
+  # not for debugging.  We default to these, but you may set whatever you
+  # like with args 2 and 3
+  local default_filename_separator="|"
+  local default_space_replacer="+"
+  local char_replaced_separated_files="${1:-}"
+  local filename_separator="${2:-$default_filename_separator}"
+  local space_replacer="${3:-$default_space_replacer}"
+  readarray -d"$filename_separator" files < <(echo "${char_replaced_separated_files}")
+
+  # https://stackoverflow.com/questions/5885934/bash-function-to-find-newest-file-matching-pattern
+  for messyfile in "${files[@]}"; do 
+    file="$(echo ${messyfile}|tr "${space_replacer}" ' '|sed "s/${filename_separator}//g")"
+    if [ -n "${file}" ]; then 
+      stat -f "%m%t%N" "${file}"
+    fi
+  done | sort -rn | head -1 | cut -f2-
+}
 
 # Convenience function for github clone, moves into ~/src/github, 
 # clones the given repo, and then cds into its directory
