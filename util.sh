@@ -236,28 +236,28 @@ function is_linux() {
 
 # Written for modern bash, adapted for the unreasonably crappy apple unix
 # experience
-if version_ge "$BASH_VERSION" "$MODERN_BASH"; then
-  # Only one of these should ever return a 0 on any platform
-  # shit.  i smell a unit test.
-  declare -A OS_DETECT
-  # Thanks Steve(s).  Thanks ATT... erm.
-  OS_DETECT["MacOS"]="is_mac"
-  # Thanks Richard.  Thanks Linus.
-  OS_DETECT['GNU/Linux']="is_linux"
+# if version_ge "$BASH_VERSION" "$MODERN_BASH"; then
+#   # Only one of these should ever return a 0 on any platform
+#   # shit.  i smell a unit test.
+#   declare -A OS_DETECT
+#   # Thanks Steve(s).  Thanks ATT... erm.
+#   OS_DETECT["MacOS"]="is_mac"
+#   # Thanks Richard.  Thanks Linus.
+#   OS_DETECT['GNU/Linux']="is_linux"
 
+#   function what_os() {
+#     for os_name in "${!OS_DETECT[@]}"; do 
+#       if eval "${OS_DETECT[$os_name]}"; then 
+#         echo "$os_name"
+#       fi
+#     done
+#   }
+# else 
   function what_os() {
-    for os_name in "${!OS_DETECT[@]}"; do 
-      if eval "${OS_DETECT[$os_name]}"; then 
-        echo "$os_name"
-      fi
-    done
+    if is_mac; then echo "MacOS"; return 0; fi
+    if is_linux; then echo 'GNU/Linux'; return 0; fi
   }
-else 
-  function what_os() {
-    if is_mac; then return "MacOS"; fi
-    if is_linux; then return 'GNU/Linux'; fi
-  }
-fi
+# fi
 
 function add_permanent_alias() {
   name="${1:-}"
