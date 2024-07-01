@@ -388,6 +388,7 @@ function mac_bootstrap() {
   }
   trap finish SIGHUP SIGQUIT SIGABRT SIGINT SIGTERM EXIT
 
+
   printf "Hostname for this Mac: "
   read COMPUTER_NAME
   echo "Setting ComputerName to $OMPUTER_NAME"
@@ -411,21 +412,22 @@ function mac_bootstrap() {
   if ! is_completed "brew_bootstrap"; then brew_bootstrap; fi
   echo " and modern bash"
   if ! is_completed "bash_bootstrap"; then bash_bootstrap; fi
-  fi
+
   if ! is_completed "BREW_BATCH_INSTALLS"; then
-  echo "Installing $BREW_BATCH_INSTALLS"
-  if ! brew install $BREW_BATCH_INSTALLS; then
-    se "brew install $BREW_BATCH_INSTALLS failed with $?"
-    se "please fix and try again"
-    return 1
+    echo "Installing $BREW_BATCH_INSTALLS"
+    if ! brew install $BREW_BATCH_INSTALLS; then
+      se "brew install $BREW_BATCH_INSTALLS failed with $?"
+      se "please fix and try again"
+      return 1
+    fi
   fi
   if ! is_completed "BREW_BATCH_CASKS"; then
-  echo "Installing casks $BREW_BATCH_CASKS"
-  if ! brew install --cask $BREW_BATCH_CASKS; then
-    se "exit $?: !! please  fix and try again"
-    return 1
+    echo "Installing casks $BREW_BATCH_CASKS"
+    if ! brew install --cask $BREW_BATCH_CASKS; then
+      se "exit $?: !! please  fix and try again"
+      return 1
+    fi
   fi
-fi
   if ! type -p pipx; then 
     se "no pipx, install and try again"
     return 1
