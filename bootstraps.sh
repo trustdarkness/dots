@@ -97,7 +97,6 @@ function brew_bootstrap() {
   fi
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   brew install jq
-  brew_update_cache
 
   local caller="$FUNCNAME"
   mb_ff "$caller"; return 0
@@ -371,6 +370,7 @@ function mac_bootstrap() {
   # https://apple.stackexchange.com/questions/195244/concise-compact-list-of-all-defaults-currently-configured-and-their-values
   mkdir -p "$INSTALL_LOGS"
   log="$INSTALL_LOGS/mac_bootstrap.log"
+  touch "$log"
   is_completed() {
     gout=$(grep "$1" "$log")
     return $?
@@ -863,6 +863,9 @@ function synergy_debian_bootstrap_from_nx() {
 
 function mb_ff() {
   local funcname="$1"
+  mkdir -p "$INSTALL_LOGS"
+  log="$INSTALL_LOGS/mac_bootstrap.log"
+  touch "$log"
   if [ -z $funcname ]; then 
     se "please pass \$FUNCNAME"
     return 1
