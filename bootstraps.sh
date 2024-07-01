@@ -117,8 +117,8 @@ function brew_get_newest_stable_bash() {
 }
 
 # definition of modern bash to at least include associative arrays
-# and pass by reference
-MODERN_BASH="4.3"
+# and pass by reference.  Canonical in util.sh.
+if ! declare -p MODERN_BASH > /dev/null 2>&1; then MODERN_BASH="4.3"; fi
 
 # Installs bash from brew, installing brew if it doesnt exist, 
 # on success, adds /usr/local/bin/bash to /etc/shells and runs
@@ -369,6 +369,7 @@ function completion_bootstrap() {
 
 function mac_bootstrap() {
   # https://apple.stackexchange.com/questions/195244/concise-compact-list-of-all-defaults-currently-configured-and-their-values
+  mkdir -o "$INSTALL_LOGS"
   log="$INSTALL_LOGS/mac_bootstrap.log"
   is_completed() {
     gout=$(grep "$1" "$log")
@@ -387,25 +388,24 @@ function mac_bootstrap() {
   }
   trap finish SIGHUP SIGQUIT SIGABRT SIGINT SIGTERM EXIT
 
-  if [ -n "$SET_HOSTNAME" ]; then 
-    printf "Hostname for this Mac: "
-    read COMPUTER_NAME
-    echo "Setting ComputerName to $OMPUTER_NAME"
-    sudo scutil --set ComputerName $COMPUTER_NAME
-    echo "Setting HostName to $COMPUTER_NAME"
-    sudo scutil --set HostName $COMPUTER_NAME
-    echo "Setting LocalHostName to $COMPUTER_NAME"
-    sudo scutil --set LocalHostName $COMPUTER_NAME
-    echo "Setting NetBIOSName to $COMPUTER_NAME"
-    sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string $COMPUTER_NAME
-    echo 'Is there a domain for DNS? (We dont configure Active Directory)'
-    if confirm_yes '(Y/n)'; then 
-      printf "Domain for $COMPUTER_NAME to be added to /etc/hosts as $COMPTUER_NAME.domain.tld: "
-      read DOMAIN
-      if [ -n "$DOMAIN" ]; then 
-        echo "127.0.0.1\t$COMPUTER_NAME.$DOMAIN" | sudo tee -a /etc/hosts
-      fi
+  printf "Hostname for this Mac: "
+  read COMPUTER_NAME
+  echo "Setting ComputerName to $OMPUTER_NAME"
+  sudo scutil --set ComputerName $COMPUTER_NAME
+  echo "Setting HostName to $COMPUTER_NAME"
+  sudo scutil --set HostName $COMPUTER_NAME
+  echo "Setting LocalHostName to $COMPUTER_NAME"
+  sudo scutil --set LocalHostName $COMPUTER_NAME
+  echo "Setting NetBIOSName to $COMPUTER_NAME"
+  sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string $COMPUTER_NAME
+  echo 'Is there a domain for DNS? (We dont configure Active Directory)'
+  if confirm_yes '(Y/n)'; then 
+    printf "Domain for $COMPUTER_NAME to be added to /etc/hosts as $COMPTUER_NAME.domain.tld: "
+    read DOMAIN
+    if [ -n "$DOMAIN" ]; then 
+      echo "127.0.0.1\t$COMPUTER_NAME.$DOMAIN" | sudo tee -a /etc/hosts
     fi
+  fi
   set -euo pipefail
   printf "Installing brew"
   if ! is_completed "brew_bootstrap"; then brew_bootstrap; fi
@@ -419,7 +419,6 @@ function mac_bootstrap() {
     se "please fix and try again"
     return 1
   fi
-fi
   if ! is_completed "BREW_BATCH_CASKS"; then
   echo "Installing casks $BREW_BATCH_CASKS"
   if ! brew install --cask $BREW_BATCH_CASKS; then
