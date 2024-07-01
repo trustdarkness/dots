@@ -8,8 +8,9 @@ fi
 if [ -z "$D" ]; then
   if is_function "detect_d"; then detect_d; else  
     if [[ "${BASH_SOURCE[0]}" == */* ]]; then 
-      if [ -f "$(dirname \"${BASH_SOURCE[0]}\")/util.sh" ]; then 
-        D="$(dirname \"${BASH_SOURCE[0]}\")"
+      dbs=$(dirname "${BASH_SOURCE[0]}")
+      if [ -n "$dbs" ] && [ -f "$dbs/util.sh" ]; then 
+        D="$dbs"
       fi
     fi
     if [ -z "$D" ]; then if "$(pwd)/util.sh"; then D="$(pwd)"; fi; fi
@@ -20,7 +21,7 @@ if [ -z "$D" ]; then
   fi
 fi
 
-if ! is_function "se"; then .  "$D/util.sh"; fi
+if ! is_function "se"; then . c "$D/util.sh"; fi
 util_env_load -u
 
 # since by definition, we wont have arrays yet, this is a hacky prototype

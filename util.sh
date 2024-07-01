@@ -125,15 +125,38 @@ function util_env_load() {
 
 # preferred format strings for date for storing on the filesystem
 FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
-FSTSFMT="$FSDATEFMT_%H%M%S" # our preferred ts fmt for files/folders
+printf -v FSTSFMT '%s_%%H%%M%%S' "$FSDATEFMT" # our preferred ts fmt for files/folders
 LAST_DATEFMT="%a %b %e %k:%M" # used by the "last" command
 
 function fsdate() {
   date +"${FSDATEFMT}"
 }
 
+function fsts_to_fsdate() {
+  date -d -f "$FSTSFNT" "${1:-}" "$FSDATEFMT"
+}
+
 function fsts() {
   date +"${FSTSFMT}"
+}
+
+function is_fsts() {
+  fsts_to_unixtime > /dev/null 2>&1
+  return $?
+}
+
+function is_fsdate() {
+  date "+$FSDATEFMT" -d "${1:-}" > /dev/null 2>&1
+  return $?
+}
+
+function fsts_to_unixtime() {
+  if is_mac; then
+    date -jf "$FSTSFMT" "${1:-}" +%s
+  else
+    date -d -f "$FSTSFNT" "${1:-}" +"%s"
+  fi
+  return $?
 }
 
 # Normalize os detection for consistency, hopefully reducing the chance
@@ -744,7 +767,7 @@ function is_int() {
   local string="${1:-}"
   case $string in
     ''|*[!0-9]*) return 1 ;;
-    *) return  ;;
+    *) return 0 ;;
   esac
 }
 
