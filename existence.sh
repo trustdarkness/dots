@@ -164,8 +164,12 @@ function undefined() {
 # set to "true" or the corresponding commannd, 1 otherwise
 function tru() {
   is_it="${1:-}"
-  if [ -n "${is_it}" ] && "${is_it}"; then
-    return 0
+  if [ -n "${is_it}" ]; then
+    if [[ "${is_it}" =~ true|false ]]; then 
+      if "${is_it}"; then
+        return 0
+      fi
+    fi
   fi
   return 1
 }
