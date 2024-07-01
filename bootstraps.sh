@@ -366,6 +366,38 @@ function completion_bootstrap() {
   fi
 }
 
+function mac_hostname() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
+  printf "Hostname for this Mac: "
+  read COMPUTER_NAME
+  echo "Setting ComputerName to $COMPUTER_NAME"
+  sudo scutil --set ComputerName $COMPUTER_NAME
+  echo "Setting HostName to $COMPUTER_NAME"
+  sudo scutil --set HostName $COMPUTER_NAME
+  echo "Setting LocalHostName to $COMPUTER_NAME"
+  sudo scutil --set LocalHostName $COMPUTER_NAME
+  echo "Setting NetBIOSName to $COMPUTER_NAME"
+  sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string $COMPUTER_NAME
+  echo 'Is there a domain for DNS? (We dont configure Active Directory)'
+  if confirm_yes '(Y/n)'; then 
+    printf "Domain for $COMPUTER_NAME to be added to /etc/hosts as $COMPTUER_NAME.domain.tld: "
+    read DOMAIN
+    if [ -n "$DOMAIN" ]; then 
+      echo "127.0.0.1\t$COMPUTER_NAME.$DOMAIN" | sudo tee -a /etc/hosts
+    fi
+  fi
+  local caller="$FUNCNAME"
+  mb_ff "$caller"; return 0
+}
+
+mkdir -p "$INSTALL_LOGS"
+log="$INSTALL_LOGS/mac_bootstrap.log"
+touch "$log"
+is_completed() {
+  gout=$(grep "$1" "$log")
+  return $?
+}
+
 function mac_bootstrap() {
   # https://apple.stackexchange.com/questions/195244/concise-compact-list-of-all-defaults-currently-configured-and-their-values
   mkdir -p "$INSTALL_LOGS"
@@ -390,24 +422,7 @@ function mac_bootstrap() {
   trap "finish; exit 7" EXIT HUP INT TERM
 
 
-  printf "Hostname for this Mac: "
-  read COMPUTER_NAME
-  echo "Setting ComputerName to $OMPUTER_NAME"
-  sudo scutil --set ComputerName $COMPUTER_NAME
-  echo "Setting HostName to $COMPUTER_NAME"
-  sudo scutil --set HostName $COMPUTER_NAME
-  echo "Setting LocalHostName to $COMPUTER_NAME"
-  sudo scutil --set LocalHostName $COMPUTER_NAME
-  echo "Setting NetBIOSName to $COMPUTER_NAME"
-  sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string $COMPUTER_NAME
-  echo 'Is there a domain for DNS? (We dont configure Active Directory)'
-  if confirm_yes '(Y/n)'; then 
-    printf "Domain for $COMPUTER_NAME to be added to /etc/hosts as $COMPTUER_NAME.domain.tld: "
-    read DOMAIN
-    if [ -n "$DOMAIN" ]; then 
-      echo "127.0.0.1\t$COMPUTER_NAME.$DOMAIN" | sudo tee -a /etc/hosts
-    fi
-  fi
+  if ! is_completed "mac_hostname"; then mac_hostname; fi
   set -euo pipefail
   printf "Installing brew"
   if ! is_completed "brew_bootstrap"; then brew_bootstrap; fi
