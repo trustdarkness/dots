@@ -369,7 +369,7 @@ function completion_bootstrap() {
 
 function mac_bootstrap() {
   # https://apple.stackexchange.com/questions/195244/concise-compact-list-of-all-defaults-currently-configured-and-their-values
-  mkdir -o "$INSTALL_LOGS"
+  mkdir -p "$INSTALL_LOGS"
   log="$INSTALL_LOGS/mac_bootstrap.log"
   is_completed() {
     gout=$(grep "$1" "$log")
@@ -386,7 +386,8 @@ function mac_bootstrap() {
     cd $D
     report
   }
-  trap finish SIGHUP SIGQUIT SIGABRT SIGINT SIGTERM EXIT
+  trap "finish; exit 6" 0 1 2 15
+  trap "finish; exit 7" EXIT HUP INT TERM
 
 
   printf "Hostname for this Mac: "
