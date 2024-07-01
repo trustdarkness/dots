@@ -13,7 +13,7 @@ if [ -z "$D" ]; then
         D="$dbs"
       fi
     fi
-    if [ -z "$D" ]; then if "$(pwd)/util.sh"; then D="$(pwd)"; fi; fi
+    if [ -z "$D" ]; then if [ -n "$(pwd)/util.sh" ]; then D="$(pwd)"; fi; fi
   fi
   if [ -z "$D" ]; then 
     echo "couldnt find the dots repo, please set D=path"; 
@@ -21,7 +21,7 @@ if [ -z "$D" ]; then
   fi
 fi
 
-if ! is_function "fsts"; then .  "$D/util.sh"; fi
+if ! is_function "fsts"; then source "$D/util.sh"; fi
 if ! is_function "confirm_yes" || ! is_function "exists"; then
   util_env_load -u
 fi
