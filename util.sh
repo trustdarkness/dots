@@ -26,6 +26,8 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
+MODERN_BASH="4.3"
+
 if ! declare -F "exists" > /dev/null 2>&1; then
   source "$D/existence.sh"
 fi
@@ -159,6 +161,63 @@ function fsts_to_unixtime() {
   return $?
 }
 
+# I'm not trying to be lazy, I'm trying to make the code readable
+function split() {
+  to_split="${1:?'Provide a string to split and (optionally) a delimiter'}"
+  delimiter="${2:-' '}"
+  printf %s\\n "$to_split" | tr "$delimiter" '\n'
+  return 0
+}
+
+function version_ge() {
+  splitter() {
+    local to_split="${1:-}"
+    local major_minor="${2:-}"
+    local ctr=0
+    if [ -n "$to_split" ] && [[ "$to_split" == "*.*" ]]; then 
+      for part in $(split "$to_split"); do
+        case ctr in 
+          0)
+            if [[ "$major_minor" == "major" ]]; then 
+              if is_int "$part"; then 
+                echo "$part"
+                return 0 
+              fi 
+            fi
+            ((ctr++))
+            ;;
+          1)
+            if [[ "$major_minor" == "minor" ]]; then 
+              if is_int "$part"; then 
+                echo "$part"
+                return 0 
+              fi 
+            fi
+            ((ctr++))
+            ;;
+          *)
+            break
+            ;;
+        esac
+      done
+    fi
+    return 1
+  }
+  local want_greater="${1:-}"
+  local greater_than="${2:-}"
+  local want_greater_major=$(splitter $want_greater "major")
+  local want_greater_minor=$(splitter $want_greater "minor")
+  local greater_than_major=$(splitter $greater_than "major")
+  local greater_than_minor=$(splitter $greater_than "minor")
+  if [ $want_greater_major -gt $greater_than_major ]; then 
+    return 0 
+  elif [ $want_greater_major -eq $greater_than_major ] &&
+    [ $want_greater_minor -ge $greater_than_minor ]; then 
+    return 0
+  fi
+  return 1
+}
+
 # Normalize os detection for consistency, hopefully reducing the chance
 # of simple typo, etc mistakes and increasing readability
 function is_mac() {
@@ -175,21 +234,30 @@ function is_linux() {
   return 1
 }
 
-# Only one of these should ever return a 0 on any platform
-# shit.  i smell a unit test.
-declare -A OS_DETECT
-# Thanks Steve(s).  Thanks ATT... erm.
-OS_DETECT["MacOs"]="is_mac"
-# Thanks Richard.  Thanks Linus.
-OS_DETECT["GNU/Linux"]="is_linux"
+# Written for modern bash, adapted for the unreasonably crappy apple unix
+# experience
+if version_ge "$BASH_VERSION" "$MODERN_BASH"; then
+  # Only one of these should ever return a 0 on any platform
+  # shit.  i smell a unit test.
+  declare -A OS_DETECT
+  # Thanks Steve(s).  Thanks ATT... erm.
+  OS_DETECT["MacOS"]="is_mac"
+  # Thanks Richard.  Thanks Linus.
+  OS_DETECT['GNU/Linux']="is_linux"
 
-function what_os() {
-  for os_name in "${!OS_DETECT[@]}"; do 
-    if eval "${OS_DETECT[$os_name]}"; then 
-      echo "$os_name"
-    fi
-  done
-}
+  function what_os() {
+    for os_name in "${!OS_DETECT[@]}"; do 
+      if eval "${OS_DETECT[$os_name]}"; then 
+        echo "$os_name"
+      fi
+    done
+  }
+else 
+  function what_os() {
+    if is_mac; then return "MacOS"; fi
+    if is_linux; then return 'GNU/Linux'; fi
+  }
+fi
 
 function add_permanent_alias() {
   name="${1:-}"
@@ -415,7 +483,7 @@ function lfind_args() {
       LFIND_RUN+=( "-fstype" )
       LFIND_RUN+=( "local" )
       ;;
-    "GNU/Linux")
+    'GNU/Linux')
       LFIND_RUN+=( "-mount" )
       ;;
   esac
@@ -608,14 +676,6 @@ function path_prepend() {
   fi
 }
 
-# I'm not trying to be lazy, I'm trying to make the code readable
-function split() {
-  to_split="${1:?'Provide a string to split and (optionally) a delimiter'}"
-  delimiter="${2:-' '}"
-  printf %s\\n "$to_split" | tr "$delimiter" '\n'
-\
-  return 0
-}
 
 function printcolrange() {
   input="${1:-}"
@@ -984,7 +1044,7 @@ function boolean_or {
 }
 
 case $(what_os) in 
-  "GNU/Linux")
+  'GNU/Linux')
     CACHE="$HOME/.local/cache"
     OSUTIL="$D/linuxutil.sh"
     alias sosutil="source $D/linuxutil.sh"

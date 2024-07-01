@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-if ! declare -F is_function; then
+if ! declare -F is_function > /dev/null 2>&1; then
   is_function() {
     ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
   }
