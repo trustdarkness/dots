@@ -125,6 +125,33 @@ function util_env_load() {
   fi
 }
 
+function symlink_verbose() {
+  se "linking target $target from link name $linkname"
+  ln -sf "$target" "$linkname"
+}
+ 
+function move_verbose() {
+  se "moving ${1:-} to ${2:-}"
+  mv "${1:-}" "${2:-}"
+} 
+
+function lns() {
+  local target="${1:-}"
+  local linkname="${2:-}"
+  if [ -h "$linkname" ]; then 
+    ln -si "$target" "$linkname"
+  elif [ -f "$linkname" ]; then
+    move_verbose "$linkname" "$linkname.bak"
+    symlink_verbose "$target" "$linkname"
+  else
+    symlink_verbose "$target" "$linkname"
+  fi  
+}
+
+function lnsdh() {
+  lns "$D/${1:-}" "$HOME/${1:-}"
+}
+
 # preferred format strings for date for storing on the filesystem
 FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
 printf -v FSTSFMT '%s_%%H%%M%%S' "$FSDATEFMT" # our preferred ts fmt for files/folders
@@ -285,6 +312,25 @@ function is_bash_script() {
   return $?
 }
 
+function function_finder() {
+  script="${1:-}"
+  if ! is_bash_script; then
+    se "please provide a path to a bash script"
+  fi
+  if ! declare -p "VALID_DECLARE_FLAGS" > /dev/null 2>&1; then 
+    source "$D/existence.sh"
+  fi
+  declare -a _names
+  _names+=( $(grep ^function "$script" |awk '{print$2}'|awk -F'(' '{print"\x22"$1"\x22"}') )
+  if gt $? 0; then
+    se "could not find any functions in the global namespace in $script"
+    return 1
+  fi
+  for name in "${_names[@]}"; do
+    echo "$name"
+  done
+}
+
 function namerefs_bashscript_add() {
   script="${1:-}"
   if ! is_bash_script; then
@@ -297,9 +343,11 @@ function namerefs_bashscript_add() {
     source "$D/filesystemarrayutil.sh"
   fi
 
-  # case: global function names
+  # our main container for names
   declare -a _names
-  _names+=( $(grep ^function "$script" |awk '{print$2}'|awk -F'(' '{print"\x22"$1"\x22"}') )
+
+  # case: global function names
+  _names=$(function_finder)
 
   # get variables declared as local for exclusion (this may ressult in false positives)
   declare -ga localvars
