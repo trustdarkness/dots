@@ -43,7 +43,7 @@ function detect_d() {
 # is caught before the system bash in /bin
 if [[ "${PATH}" != "*.local/sourced*" ]]; then
   PATHRC="$PATH"
-  PATH="$HOME/bin:$HOME/.local/bin:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin$HOME/Applications:/usr/sbin:$PATH:$HOME/.local/sourced"
+  PATH="$HOME/bin:$HOME/.local/bin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin$HOME/Applications:/usr/sbin:$PATH:$HOME/.local/sourced"
   export PATH
 fi
 
@@ -249,6 +249,23 @@ function unsetxdebug() {
   set +x
   unset DEBUG
   powerline_init
+}
+
+function history_rm_range() {
+    start=$1
+    end=$2
+    count=$(( end - start ))
+    while [ $count -ge 0 ] ; do
+        history -d $start
+        ((count--))
+    done
+}
+
+function history_rm_last() {
+  if history_rm_range -2 -1; then 
+    return 0
+  fi
+  return 1
 }
 
 if [ -z "${DEBUG}" ] || ! $DEBUG; then
