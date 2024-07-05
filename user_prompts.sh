@@ -20,7 +20,7 @@ function get_keypress {
   prompt="${1:-'something something give me a char'}"
   local IFS=
   >/dev/tty printf '%s' "${prompt}"
-  [[ $ZSH_VERSION ]] && read -rk1  # Use -u0 to read from STDIN
+  # [[ $ZSH_VERSION ]] && read -rk1  # Use -u0 to read from STDIN
   # See https://unix.stackexchange.com/q/383197/143394 regarding '\n' -> ''
   [[ $BASH_VERSION ]] && </dev/tty read -rn1
   printf '%s' "$REPLY"
@@ -74,7 +74,7 @@ function confirm_yes_default_no() {
 function get_timed_keypress {
   local IFS=
   >/dev/tty printf '%s' "$*"
-  [[ $ZSH_VERSION ]] && read -rk1  # Use -u0 to read from STDIN
+  # [[ $ZSH_VERSION ]] && read -rk1  # Use -u0 to read from STDIN
   # See https://unix.stackexchange.com/q/383197/143394 regarding '\n' -> ''
   [[ $BASH_VERSION ]] && </dev/tty read -r -t7
   printf '%s' "$REPLY"

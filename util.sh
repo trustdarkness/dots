@@ -26,6 +26,8 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
+MODERN_BASH="4.3"
+
 if ! declare -F "exists" > /dev/null 2>&1; then
   source "$D/existence.sh"
 fi
@@ -123,17 +125,124 @@ function util_env_load() {
   fi
 }
 
+function symlink_verbose() {
+  se "linking target $target from link name $linkname"
+  ln -sf "$target" "$linkname"
+}
+ 
+function move_verbose() {
+  se "moving ${1:-} to ${2:-}"
+  mv "${1:-}" "${2:-}"
+} 
+
+function lns() {
+  local target="${1:-}"
+  local linkname="${2:-}"
+  if [ -h "$linkname" ]; then 
+    ln -si "$target" "$linkname"
+  elif [ -f "$linkname" ]; then
+    move_verbose "$linkname" "$linkname.bak"
+    symlink_verbose "$target" "$linkname"
+  else
+    symlink_verbose "$target" "$linkname"
+  fi  
+}
+
+function lnsdh() {
+  lns "$D/${1:-}" "$HOME/${1:-}"
+}
+
 # preferred format strings for date for storing on the filesystem
 FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
-FSTSFMT="$FSDATEFMT_%H%M%S" # our preferred ts fmt for files/folders
+printf -v FSTSFMT '%s_%%H%%M%%S' "$FSDATEFMT" # our preferred ts fmt for files/folders
 LAST_DATEFMT="%a %b %e %k:%M" # used by the "last" command
 
 function fsdate() {
   date +"${FSDATEFMT}"
 }
 
+function fsts_to_fsdate() {
+  date -d -f "$FSTSFNT" "${1:-}" "$FSDATEFMT"
+}
+
 function fsts() {
   date +"${FSTSFMT}"
+}
+
+function is_fsts() {
+  fsts_to_unixtime > /dev/null 2>&1
+  return $?
+}
+
+function is_fsdate() {
+  date "+$FSDATEFMT" -d "${1:-}" > /dev/null 2>&1
+  return $?
+}
+
+function fsts_to_unixtime() {
+  if is_mac; then
+    date -jf "$FSTSFMT" "${1:-}" +%s
+  else
+    date -d -f "$FSTSFNT" "${1:-}" +"%s"
+  fi
+  return $?
+}
+
+# I'm not trying to be lazy, I'm trying to make the code readable
+function split() {
+  to_split="${1:?'Provide a string to split and (optionally) a delimiter'}"
+  delimiter="${2:-' '}"
+  printf %s\\n "$to_split" | tr "$delimiter" '\n'
+  return 0
+}
+
+function version_ge() {
+  splitter() {
+    local to_split="${1:-}"
+    local major_minor="${2:-}"
+    local ctr=0
+    if [ -n "$to_split" ] && [[ "$to_split" == "*.*" ]]; then 
+      for part in $(split "$to_split"); do
+        case ctr in 
+          0)
+            if [[ "$major_minor" == "major" ]]; then 
+              if is_int "$part"; then 
+                echo "$part"
+                return 0 
+              fi 
+            fi
+            ((ctr++))
+            ;;
+          1)
+            if [[ "$major_minor" == "minor" ]]; then 
+              if is_int "$part"; then 
+                echo "$part"
+                return 0 
+              fi 
+            fi
+            ((ctr++))
+            ;;
+          *)
+            break
+            ;;
+        esac
+      done
+    fi
+    return 1
+  }
+  local want_greater="${1:-}"
+  local greater_than="${2:-}"
+  local want_greater_major=$(splitter $want_greater "major")
+  local want_greater_minor=$(splitter $want_greater "minor")
+  local greater_than_major=$(splitter $greater_than "major")
+  local greater_than_minor=$(splitter $greater_than "minor")
+  if [ $want_greater_major -gt $greater_than_major ]; then 
+    return 0 
+  elif [ $want_greater_major -eq $greater_than_major ] &&
+    [ $want_greater_minor -ge $greater_than_minor ]; then 
+    return 0
+  fi
+  return 1
 }
 
 # Normalize os detection for consistency, hopefully reducing the chance
@@ -152,21 +261,30 @@ function is_linux() {
   return 1
 }
 
-# Only one of these should ever return a 0 on any platform
-# shit.  i smell a unit test.
-declare -A OS_DETECT
-# Thanks Steve(s).  Thanks ATT... erm.
-OS_DETECT["MacOs"]="is_mac"
-# Thanks Richard.  Thanks Linus.
-OS_DETECT["GNU/Linux"]="is_linux"
+# Written for modern bash, adapted for the unreasonably crappy apple unix
+# experience
+# if version_ge "$BASH_VERSION" "$MODERN_BASH"; then
+#   # Only one of these should ever return a 0 on any platform
+#   # shit.  i smell a unit test.
+#   declare -A OS_DETECT
+#   # Thanks Steve(s).  Thanks ATT... erm.
+#   OS_DETECT["MacOS"]="is_mac"
+#   # Thanks Richard.  Thanks Linus.
+#   OS_DETECT['GNU/Linux']="is_linux"
 
-function what_os() {
-  for os_name in "${!OS_DETECT[@]}"; do 
-    if eval "${OS_DETECT[$os_name]}"; then 
-      echo "$os_name"
-    fi
-  done
-}
+#   function what_os() {
+#     for os_name in "${!OS_DETECT[@]}"; do 
+#       if eval "${OS_DETECT[$os_name]}"; then 
+#         echo "$os_name"
+#       fi
+#     done
+#   }
+# else 
+  function what_os() {
+    if is_mac; then echo "MacOS"; return 0; fi
+    if is_linux; then echo 'GNU/Linux'; return 0; fi
+  }
+# fi
 
 function add_permanent_alias() {
   name="${1:-}"
@@ -194,6 +312,25 @@ function is_bash_script() {
   return $?
 }
 
+function function_finder() {
+  script="${1:-}"
+  if ! is_bash_script; then
+    se "please provide a path to a bash script"
+  fi
+  if ! declare -p "VALID_DECLARE_FLAGS" > /dev/null 2>&1; then 
+    source "$D/existence.sh"
+  fi
+  declare -a _names
+  _names+=( $(grep ^function "$script" |awk '{print$2}'|awk -F'(' '{print"\x22"$1"\x22"}') )
+  if gt $? 0; then
+    se "could not find any functions in the global namespace in $script"
+    return 1
+  fi
+  for name in "${_names[@]}"; do
+    echo "$name"
+  done
+}
+
 function namerefs_bashscript_add() {
   script="${1:-}"
   if ! is_bash_script; then
@@ -206,9 +343,11 @@ function namerefs_bashscript_add() {
     source "$D/filesystemarrayutil.sh"
   fi
 
-  # case: global function names
+  # our main container for names
   declare -a _names
-  _names+=( $(grep ^function "$script" |awk '{print$2}'|awk -F'(' '{print"\x22"$1"\x22"}') )
+
+  # case: global function names
+  _names=$(function_finder)
 
   # get variables declared as local for exclusion (this may ressult in false positives)
   declare -ga localvars
@@ -392,7 +531,7 @@ function lfind_args() {
       LFIND_RUN+=( "-fstype" )
       LFIND_RUN+=( "local" )
       ;;
-    "GNU/Linux")
+    'GNU/Linux')
       LFIND_RUN+=( "-mount" )
       ;;
   esac
@@ -585,14 +724,6 @@ function path_prepend() {
   fi
 }
 
-# I'm not trying to be lazy, I'm trying to make the code readable
-function split() {
-  to_split="${1:?'Provide a string to split and (optionally) a delimiter'}"
-  delimiter="${2:-' '}"
-  printf %s\\n "$to_split" | tr "$delimiter" '\n'
-\
-  return 0
-}
 
 function printcolrange() {
   input="${1:-}"
@@ -902,7 +1033,7 @@ function is_int() {
   local string="${1:-}"
   case $string in
     ''|*[!0-9]*) return 1 ;;
-    *) return  ;;
+    *) return 0 ;;
   esac
 }
 
@@ -961,7 +1092,7 @@ function boolean_or {
 }
 
 case $(what_os) in 
-  "GNU/Linux")
+  'GNU/Linux')
     CACHE="$HOME/.local/cache"
     OSUTIL="$D/linuxutil.sh"
     alias sosutil="source $D/linuxutil.sh"

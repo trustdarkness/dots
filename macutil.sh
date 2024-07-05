@@ -3,7 +3,7 @@
 # Setting PATH for Python 3.12 and to ensure we get modern bash from brew
 # in /usr/local/bin before that MacOS crap in /bin
 if ! [[ "${PATH}" =~ .*.pathsource.* ]]; then 
-  PATH="$HOME/.pathsource:$HOME/.local/bin:/usr/local/bin:/Library/Frameworks/Python.framework/Versions/3.12/bin:${PATH}"
+  PATH="/usr/local/bin:$HOME/.pathsource:$HOME/.local/bin:/Library/Frameworks/Python.framework/Versions/3.12/bin:${PATH}"
 fi
 
 HOMEBREW_NO_INSTALL_FROM_API=1 
@@ -45,6 +45,7 @@ alias bu="bellicose unarchive"
 bRi() { bellicose -R "${1:-}" install; }
 bRu() { bellicose -R "${1:-}" unarchive; }
 bSRi() { bellicose -S -R "${1:-}" install; }
+_s="$HOME/Downloads/_staging"
 
 # its expected that all of these files will be sourced and in the env
 # ... kind of ridiculous and needs to be paired down
@@ -231,6 +232,11 @@ function pref_reset() {
       echo "${file} has been removed and services should no longer start."
     fi
   fi
+}
+
+# https://stackoverflow.com/questions/16375519/how-to-get-the-default-shell
+function getusershell() {
+  dscl . -read ~/ UserShell | sed 's/UserShell: //'
 }
 
 # an example for above, runs pres reset on finder_prefs
@@ -432,18 +438,33 @@ function sudo_only_commands  {
   done
 }
 
-
-
 # tells the finder to show hidden files and restarts it.
 # writes AppleShowAllFiles true to com.apple.finder 
 function showHidden {
-  isShown=$(defaults read com.apple.finder AppleShowAllFiles)
-  if [[ $isShown == "false" ]]; then
+  writeAndKill() {
     defaults write com.apple.finder AppleShowAllFiles true
     killall Finder
+  }
+ if isShown=$(defaults read com.apple.finder AppleShowAllFiles > /dev/null 2>&1); then
+    case "$isShown" in
+      "false"|"no"|""|0)
+        writeAndKill
+        ;;
+      "true"|"yes"|1)
+        se "Finder already set to show all files, kill anyway?"
+        if confirm_yes "(Y/n)"; then 
+          killall Finder
+        fi
+        ;;
+      *)
+        se "defaults read com.apple.finder AppleShowAllFiles returned $isShown"
+        return 1
+        ;;
+    esac
+  else
+    writeAndKill
   fi
-}
-
+} 
 
 OLDSYS="/Volumes/federation"
 OLDHOME="/Volumes/federation/Users/$(whoami)"
@@ -1015,6 +1036,11 @@ function pre_system_edit() {
 # boots to the boot disk picker
 function boottostartoptions() {
   sudo /usr/sbin/nvram manufacturing-enter-picker=true
+  sudo reboot
+}
+
+function reboot_target_disk_mode() {
+  sudo nvram target-mode=1
   sudo reboot
 }
 

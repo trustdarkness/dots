@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-if ! declare -F is_function; then
+if ! declare -F is_function > /dev/null 2>&1; then
   is_function() {
     ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
   }
@@ -8,11 +8,12 @@ fi
 if [ -z "$D" ]; then
   if is_function "detect_d"; then detect_d; else  
     if [[ "${BASH_SOURCE[0]}" == */* ]]; then 
-      if [ -f "$(dirname \"${BASH_SOURCE[0]}\")/util.sh" ]; then 
-        D="$(dirname \"${BASH_SOURCE[0]}\")"
+      dbs=$(dirname "${BASH_SOURCE[0]}")
+      if [ -n "$dbs" ] && [ -f "$dbs/util.sh" ]; then 
+        D="$dbs"
       fi
     fi
-    if [ -z "$D" ]; then if "$(pwd)/util.sh"; then D="$(pwd)"; fi; fi
+    if [ -z "$D" ]; then if [ -n "$(pwd)/util.sh" ]; then D="$(pwd)"; fi; fi
   fi
   if [ -z "$D" ]; then 
     echo "couldnt find the dots repo, please set D=path"; 
@@ -20,7 +21,7 @@ if [ -z "$D" ]; then
   fi
 fi
 
-if ! is_function "fsts"; then .  "$D/util.sh"; fi
+if ! is_function "fsts"; then source "$D/util.sh"; fi
 if ! is_function "confirm_yes" || ! is_function "exists"; then
   util_env_load -u
 fi
@@ -96,7 +97,6 @@ function brew_bootstrap() {
   fi
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   brew install jq
-  brew_update_cache
 
   local caller="$FUNCNAME"
   mb_ff "$caller"; return 0
@@ -116,8 +116,8 @@ function brew_get_newest_stable_bash() {
 }
 
 # definition of modern bash to at least include associative arrays
-# and pass by reference
-MODERN_BASH="4.3"
+# and pass by reference.  Canonical in util.sh.
+if ! declare -p MODERN_BASH > /dev/null 2>&1; then MODERN_BASH="4.3"; fi
 
 # Installs bash from brew, installing brew if it doesnt exist, 
 # on success, adds /usr/local/bin/bash to /etc/shells and runs
@@ -366,9 +366,43 @@ function completion_bootstrap() {
   fi
 }
 
+function mac_hostname() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
+  printf "Hostname for this Mac: "
+  read COMPUTER_NAME
+  echo "Setting ComputerName to $COMPUTER_NAME"
+  sudo scutil --set ComputerName $COMPUTER_NAME
+  echo "Setting HostName to $COMPUTER_NAME"
+  sudo scutil --set HostName $COMPUTER_NAME
+  echo "Setting LocalHostName to $COMPUTER_NAME"
+  sudo scutil --set LocalHostName $COMPUTER_NAME
+  echo "Setting NetBIOSName to $COMPUTER_NAME"
+  sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string $COMPUTER_NAME
+  echo 'Is there a domain for DNS? (We dont configure Active Directory)'
+  if confirm_yes '(Y/n)'; then 
+    printf "Domain for $COMPUTER_NAME to be added to /etc/hosts as $COMPTUER_NAME.domain.tld: "
+    read DOMAIN
+    if [ -n "$DOMAIN" ]; then 
+      echo "127.0.0.1\t$COMPUTER_NAME.$DOMAIN" | sudo tee -a /etc/hosts
+    fi
+  fi
+  local caller="$FUNCNAME"
+  mb_ff "$caller"; return 0
+}
+
+mkdir -p "$INSTALL_LOGS"
+log="$INSTALL_LOGS/mac_bootstrap.log"
+touch "$log"
+is_completed() {
+  gout=$(grep "$1" "$log")
+  return $?
+}
+
 function mac_bootstrap() {
   # https://apple.stackexchange.com/questions/195244/concise-compact-list-of-all-defaults-currently-configured-and-their-values
+  mkdir -p "$INSTALL_LOGS"
   log="$INSTALL_LOGS/mac_bootstrap.log"
+  touch "$log"
   is_completed() {
     gout=$(grep "$1" "$log")
     return $?
@@ -384,48 +418,32 @@ function mac_bootstrap() {
     cd $D
     report
   }
-  trap finish SIGHUP SIGQUIT SIGABRT SIGINT SIGTERM EXIT
+  trap "finish; exit 6" 0 1 2 15
+  trap "finish; exit 7" EXIT HUP INT TERM
 
-  if [ -n "$SET_HOSTNAME" ]; then 
-    printf "Hostname for this Mac: "
-    read COMPUTER_NAME
-    echo "Setting ComputerName to $OMPUTER_NAME"
-    sudo scutil --set ComputerName $COMPUTER_NAME
-    echo "Setting HostName to $COMPUTER_NAME"
-    sudo scutil --set HostName $COMPUTER_NAME
-    echo "Setting LocalHostName to $COMPUTER_NAME"
-    sudo scutil --set LocalHostName $COMPUTER_NAME
-    echo "Setting NetBIOSName to $COMPUTER_NAME"
-    sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string $COMPUTER_NAME
-    echo 'Is there a domain for DNS? (We dont configure Active Directory)'
-    if confirm_yes '(Y/n)'; then 
-      printf "Domain for $COMPUTER_NAME to be added to /etc/hosts as $COMPTUER_NAME.domain.tld: "
-      read DOMAIN
-      if [ -n "$DOMAIN" ]; then 
-        echo "127.0.0.1\t$COMPUTER_NAME.$DOMAIN" | sudo tee -a /etc/hosts
-      fi
-    fi
+
+  if ! is_completed "mac_hostname"; then mac_hostname; fi
   set -euo pipefail
   printf "Installing brew"
   if ! is_completed "brew_bootstrap"; then brew_bootstrap; fi
   echo " and modern bash"
   if ! is_completed "bash_bootstrap"; then bash_bootstrap; fi
-  fi
+
   if ! is_completed "BREW_BATCH_INSTALLS"; then
-  echo "Installing $BREW_BATCH_INSTALLS"
-  if ! brew install $BREW_BATCH_INSTALLS; then
-    se "brew install $BREW_BATCH_INSTALLS failed with $?"
-    se "please fix and try again"
-    return 1
+    echo "Installing $BREW_BATCH_INSTALLS"
+    if ! brew install $BREW_BATCH_INSTALLS; then
+      se "brew install $BREW_BATCH_INSTALLS failed with $?"
+      se "please fix and try again"
+      return 1
+    fi
   fi
-fi
   if ! is_completed "BREW_BATCH_CASKS"; then
-  echo "Installing casks $BREW_BATCH_CASKS"
-  if ! brew install --cask $BREW_BATCH_CASKS; then
-    se "exit $?: !! please  fix and try again"
-    return 1
+    echo "Installing casks $BREW_BATCH_CASKS"
+    if ! brew install --cask $BREW_BATCH_CASKS; then
+      se "exit $?: !! please  fix and try again"
+      return 1
+    fi
   fi
-fi
   if ! type -p pipx; then 
     se "no pipx, install and try again"
     return 1
@@ -865,6 +883,9 @@ function library_player_bootstrap() {
 
 function mb_ff() {
   local funcname="$1"
+  mkdir -p "$INSTALL_LOGS"
+  log="$INSTALL_LOGS/mac_bootstrap.log"
+  touch "$log"
   if [ -z $funcname ]; then 
     se "please pass \$FUNCNAME"
     return 1
