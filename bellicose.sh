@@ -604,7 +604,7 @@ function lt() {
 # Takes 3 ints as args, returns 0 if 
 # Arg2 > Arg1 > Arg3 or Arg2 < Arg1 < Arg3
 # returns 1 otherwise
-function in_between() {
+function in_between() { # TODO: make sure assumptions handle negatives
   between="${1:-}"
   t1="${2:-}"
   t2="${3:-}"
