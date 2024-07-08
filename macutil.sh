@@ -633,7 +633,12 @@ function ispackage() {
 # Args: path to application to verify it fits the definition.
 # returns 0 if app, 1 otherwise.
 function isapp() {
-  bundledir="${1:?Please provide full path to .app file}"
+  is_machO_bundle "${1:-}" # there must be a more complete heuristic than this
+  return $?
+}
+
+function is_machO_bundle() {
+  bundledir="${1:?Please provide full path to a bundle or .app file}"
   if machO=$(stat "${bundledir}/Contents/MacOS"); then
     confirmed_machO_bundle=$(codesign_get "${bundledir}" \
       |grep "Mach-O"|grep "bundle"|awk -F'=' '{print$2}')
@@ -961,12 +966,17 @@ function gatekeeper_list_rules() {
 # audio plugin (based on a regex, does not look to see if
 # its in a known location), 1 otherwise
 function is_audio_plugin() {
-  file="${1:-}"
-  if [ -d "${file}" ]; then
-    grep -E "${PLUGIN_EREGEX}" <<< "${file}" > /dev/null
+  totest="${1:-}"
+  err_machO="Audio plugins should be folders (Mach-O bundles)"
+  if [ -d "${totest}" ]; then
+    if ! is_machO_bundle "${totest}"; then 
+      se "$err_machO"
+      return 1
+    fi
+    grep -E "${PLUGIN_EREGEX}" <<< "${totest}" > /dev/null
     return $?
   else
-    echo "Audio plugins should be folders (Mach-O bundles)"
+    se "$err_machO"
     return 1
   fi
 }

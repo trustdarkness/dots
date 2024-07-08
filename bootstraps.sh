@@ -421,7 +421,8 @@ function mac_bootstrap() {
   trap "finish; exit 6" 0 1 2 15
   trap "finish; exit 7" EXIT HUP INT TERM
 
-
+  printf "enabling keyboard UI navigation\m"
+  defaults write /Volumes/Trantor/mt/Library/Preferences/.GlobalPreferences.plist AppleKeyboardUIMode -int 2
   if ! is_completed "mac_hostname"; then mac_hostname; fi
   printf "Installing brew"
   if ! is_completed "brew_bootstrap"; then brew_bootstrap; fi
