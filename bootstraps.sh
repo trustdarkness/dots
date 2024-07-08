@@ -922,6 +922,11 @@ function synergy_debian_bootstrap_from_nx() {
   return $?
 }
 
+function library_player_bootstrap() {
+  install_util_load
+  sai "smplayer mpv playerctl"
+}
+
 function mb_ff() {
   local funcname="$1"
   mkdir -p "$INSTALL_LOGS"

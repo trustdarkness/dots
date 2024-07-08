@@ -1275,6 +1275,17 @@ function bslift() {
   fi
 }
 
+# https://stackoverflow.com/questions/54995983/how-to-detect-availability-of-gui-in-bash-shell
+check_macos_gui() {
+  command -v swift >/dev/null && swift <(cat <<"EOF"
+import Security
+var attrs = SessionAttributeBits(rawValue:0)
+let result = SessionGetInfo(callerSecuritySession, nil, &attrs)
+exit((result == 0 && attrs.contains(.sessionHasGraphicAccess)) ? 0 : 1)
+EOF
+)
+}
+
 macutilsh_in_env=true
 if [[ $(uname -s) == "Darwin" ]]; then # because, who knows?
   osutil_in_env=true

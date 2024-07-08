@@ -1203,6 +1203,81 @@ case $(what_os) in
     ;;
 esac
 
+function user_feedback() {
+  local subject
+  local message
+  local detritus
+  if [[ $# -gt 1 ]]; then 
+    subject="${1:-}"
+    message="${2:-}"
+    detritus="${@: 2}"
+  else
+    # https://askubuntu.com/questions/543553/write-to-syslog-from-the-command-line
+    subject="${0##*/}[$$]"
+    message="${1:-}"
+  fi
+  log_message() {
+    if [[ "$subject" != "${0##*/}[$$]" ]]; then 
+      printf -v log "%s %s %s" "${0##*/}[$$]" "$subject" "$message"
+    else 
+      printf -v log "%s %s" "$subject" "$message"
+    fi
+  }
+  nix_notify() {
+    if [[ $DISPLAY ]]; then
+      if notify-send "$subject" "$messsage"; then 
+        return 0
+      else
+        errors+=("notify-send: $?")
+      fi
+    else
+      log_message
+      if $logger "$log"; then 
+        return 0
+      else
+        errors+=("$logger: $?")
+      fi
+    fi
+  }
+  bold=$(tput bold)
+  normal=$(tput sgr0)
+  declare -a errors
+  case $- in
+    *i*)
+      printf "${bold}$subject${normal} -- $message"
+      if [ -n "$detritus" ]; then printf "$detritus"; fi
+      printf "\n"
+      return 0
+      ;;    
+    *)
+      case $($what_os) in
+        "GNU/Linux")
+          logger=logger
+          nix_notify
+          ;;
+        "MacOS")
+          if [[ $(check_macos_gui) ]]; then
+            printf -v applescripttext 'display notification %s with title %s' "$message" "$subject"
+            if osascript -e "$applescripttext"; then 
+              return 0
+            else
+              errors+=("osascript: $?")
+            fi
+          else
+            logger="syslog -s -l INFO"
+            nix_notify
+          fi
+          ;;
+      esac
+      ;;
+  esac
+  declare -a meta_message
+  meta_message+=("some attempts to notify the user may have failed")
+  meta_message+=("original subject: $subject original message: $message errors: ${errors[@]}")
+  se "${meta_message[@]}"
+  $logger "${meta_message[@]}"
+}
+
 function osutil_load() {
   if [ -z "$osutil_in_env" ] || $osutil_in_env; then
     if [ -f "$OSUTIL" ]; then
