@@ -783,7 +783,7 @@ function gatekeeper_disable_app() {
 # args: App name
 # returns retcode from spctl
 function gatekeeper_disable_known_app() {
-  sudo spctl --add --label 'DeniedApps' ""${1:-}""
+  sudo spctl --add --label 'DeniedApps' "${1:-}"
 }
 
 # Removes the DeniedApps label from a given app, such that when gatekeeper 
@@ -791,7 +791,7 @@ function gatekeeper_disable_known_app() {
 # args: App name
 # returns retcode from spctl
 function gatekeeper_enable_known_app() {
-  sudo spctl --remove label 'DeniedApps' '"${1:-}"'
+  sudo spctl --remove label 'DeniedApps' "${1:-}"
 }
 
 # Attempts using gatekeeper against a list of services to add the DeniedApps
@@ -1268,6 +1268,32 @@ function mount_efi() {
   fi
   "$mefi/MountEFI.command"
   return $?
+}
+
+# bslift, like lift yourself up by your own bootstraps
+function bslift() {
+  if undefined "mac_bootstrap"; then 
+    source "$D/bootstraps.sh"
+  else
+    # if we've sourced bootstraps already and are calling this, lets clear 
+    # function definitions explicitly from the namespace so we're sure 
+    # we're getting the updated code
+    for name in $(function_finder "$D/bootstraps.sh"); do 
+      unset -f "$name"
+    done
+    source "$D/bootstraps.sh"
+  fi
+}
+
+# https://stackoverflow.com/questions/54995983/how-to-detect-availability-of-gui-in-bash-shell
+check_macos_gui() {
+  command -v swift >/dev/null && swift <(cat <<"EOF"
+import Security
+var attrs = SessionAttributeBits(rawValue:0)
+let result = SessionGetInfo(callerSecuritySession, nil, &attrs)
+exit((result == 0 && attrs.contains(.sessionHasGraphicAccess)) ? 0 : 1)
+EOF
+)
 }
 
 macutilsh_in_env=true

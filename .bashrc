@@ -5,6 +5,9 @@ if ! declare -F is_function > /dev/null 2>&1; then
   }
 fi
 
+shopt -s direxpand
+shopt -s cdable_vars
+
 if [ -z "${D}" ]; then
   export D="$HOME/src/github/dots"
 fi
@@ -155,6 +158,38 @@ if [ -x /usr/bin/dircolors ]; then
     alias fgrep='fgrep --color=auto'
     alias egrep='egrep --color=auto'
 fi
+
+function fnegrep() {
+  sterm="${1:-}"
+  filename="${2:-}"
+  if [ -n "$sterm" ] && [ -f "$filename" ]; then 
+    out=$(egrep -n "$sterm" "$filename" 2> /dev/null)
+    if [ $? -eq 0 ]; then 
+      split -a -F'\n' "$out"
+      grep_lines=( "${split_array[@]}" )
+      failures=0 # seems unnecessary, but just in case
+      for line in "${grep_lines[@]}"; do 
+        printf "%20s %s\n" "$filename" "$line"
+        if [ $? -gt 0 ]; then 
+          ((failures++))
+        fi
+      done 
+      return $failures
+    else  # if grep $? -eq 0
+      return $?
+    fi # endif grep ?$
+  fi # endif -n sterm -f filename
+  return 1
+}
+export -f fnegrep
+
+function dgrep() {
+  find "$D" -maxdepth 1 -exec bash -c "fnegrep ${1:-} {}" \;
+  if gt $? 0; then 
+    return 1
+  fi
+  return 0
+}
 
 # colored GCC warnings and errors
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
@@ -329,3 +364,7 @@ alias vex="vim $D/existence && sex"
 
 # convenient regex to use with -v when grepping across many files
 export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
+
+if [ -f "$HOME/.localrc" ]; then 
+  source "$HOME/.localrc"
+fi

@@ -144,6 +144,27 @@ function exists() {
   return 1
 }
 
+function isset() {
+  var="${1:-}"
+  if [ ${#var} -eq 0 ]; then 
+    return 1
+  elif [ -n "${1:-}" ]; then 
+    return 0
+  fi
+  return 1
+}
+
+function isntset() {
+  if [ -z "${1:-}" ]; then 
+    return 0
+  fi
+  return 1
+}
+
+function empty() { # for all you androids who can't use contractions
+  isntset "${1:-}"
+}
+
 # excessive use of negations makes code messy and readability 
 # more difficult. hence the convenience wrapper.
 # Args: name to check if exists in the namespace
