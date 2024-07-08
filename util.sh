@@ -188,12 +188,109 @@ function fsts_to_unixtime() {
   return $?
 }
 
+function colnum() {
+  help() {
+    echo "echos the column number of substring in string if found"
+    echo "returns 0 if successful, 255 if substring not found, 1 otherwise"
+    return ${1:-0}
+  }
+  to_split="${@:$OPTIND:1}"
+  substring="${1:-}"
+  string="${2:-}"
+  if empty "$substring" || empty "$string"; then 
+    help 1
+  fi
+  # found=$(grep "$substring" <<< "$string")
+  # if [ $? -gt 0 ]; then
+  #   return 255
+  # fi
+  rest=${string#*$substring}
+  se "$rest"
+  c=$(( ${#string} - ${#rest} - ${#substring} ))
+  if gt $c 0; then
+    echo $C
+    return 0
+  else
+    return 255
+  fi
+  return 1
+}
+
 # I'm not trying to be lazy, I'm trying to make the code readable
 function split() {
-  to_split="${1:?'Provide a string to split and (optionally) a delimiter'}"
-  delimiter="${2:-' '}"
-  printf %s\\n "$to_split" | tr "$delimiter" '\n'
-  return 0
+  usage() {
+    echo "meant for use primarily with looping over strings to avoid needing"
+    echo "to muck with IFS, basically puts a newline in place of the field"
+    echo "separator, specified with -F and defaulting to a single space"
+    echo ""
+    echo "Args: "
+    echo "  -a   | instead of printing to the console with \n separators."
+    echo "       | split the string on the separator and populate a global"
+    echo "       | array \"split_array\" with the result."
+    echo "  -F   | specify a field separator, similar to awk"
+    echo "  -h|q | print this text"
+    return "${1:-0}"
+  }
+  to_array=false
+  field_separator=" "
+  
+  while getopts 'AF:h' optchar; do
+  local OPTIND
+    case $optchar in
+
+      F)
+      echo "minus F ${OPTARG}"
+        field_separator="${OPTARG}"
+        ;;
+      A)
+        echo "minus a"
+        to_array=true
+        ;;
+      h)
+        usage 
+        ;;
+      *)
+        usage 1 
+        ;;
+    esac
+  done
+  to_split="${@:$OPTIND:1}"
+  declare -ga split_array
+
+  if [ -n "$to_split" ]; then 
+    if tru $to_array; then
+      while true; do
+        if [[ "$field_separator" =~ ^\\[an] ]]; then # TODO: get list of awk exceptions
+          printf -v field_separator %b "${field_separator@E}"
+          se "set field_separator to $(declare -p field_separator)"
+        fi
+        next=$(echo "$to_split" |awk -F$field_separator '{print$1}')
+        prev_to_split="$to_split"
+        l=${#field_separator}
+        i=$(colnum "$field_separator" "$to_split")
+        if [ $? -eq 255 ]; then
+          split_array+=( $(echo "$to_split"|awk -F"$field_separator" '{print$NF}') )
+          break
+        fi
+        split_array+=( "$next" )
+        to_split="${to_split:$((i+l))}"
+        if [[ $prev_to_split == $to_split ]]; then 
+          break
+        fi
+        se "s: $to_split"
+        se "a: ${split_array[@]}"
+      done
+      if isset "${split_array[*]}"; then 
+        return 0
+      else
+        return 2
+      fi
+    else
+      printf %s\\n "$to_split" | tr "$field_separator" '\n'
+      return 0
+    fi
+  fi
+  help 1
 }
 
 function version_ge() {
