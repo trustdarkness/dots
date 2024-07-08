@@ -25,3 +25,6 @@ if [ -z $accelkilled ]; then
     export accelkilled=1
   fi
 fi
+
+defaults write com.apple.loginwindow LoginwindowLaunchesRelaunchApps -bool false
+  
