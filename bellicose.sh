@@ -644,10 +644,15 @@ function lt() {
 # Takes 3 ints as args, returns 0 if 
 # Arg2 > Arg1 > Arg3 or Arg2 < Arg1 < Arg3
 # returns 1 otherwise
-function in_between() {
+function in_between() { # TODO: make sure assumptions handle negatives
   between="${1:-}"
   t1="${2:-}"
   t2="${3:-}"
+  if  [[ "$t1" == "-1" ]]; then 
+    ((between++))
+    t1=0
+    ((t2++))
+  fi
   if gt ${between} ${t1}; then
     if lt ${between} ${t2}; then
       return 0
@@ -1049,6 +1054,7 @@ function overwrite() {
       ;;
     3)
       process_pkgs
+      return $?
       ;;
     4)
       process_plugins
@@ -1170,13 +1176,19 @@ function actions() {
 # necessary, counting how many of each type have and have not been processed in 
 # the work queue (normally the list of files covered by our extensions in the cwd
 # and all its children)
-function handle_cache_by_type() {
+function init_mode() {
+  if ! in_between ${1:-} -1 5; then 
+    fatal_error "bad mode selection: ${1:-}"
+    goodbye 10
+  fi
   verbose "func ${FUNCNAME[1]} $@"
   local type="${1:-}"
   if tru ${PROMPT_FOR_ACTIONS} > /dev/null; then 
     local prompt=$(printf "${PROMPT_PROCESS_CALL_EXPECTS_TYPE_EXTS_AND_WD}" \
       "${TYPE_DESCS[${type}]}" "${EXTS[${type}]}" "${WD}")
-    confirm_yes "Welcome: ${prompt}"
+    if ! confirm_yes "Welcome: ${prompt}"; then
+      return 11 # abort per user 
+    fi
   fi
   if [[ "${hcompleted}" != *"${type}"* ]]; then
     cached_count=0
@@ -1201,6 +1213,7 @@ function handle_cache_by_type() {
       elif gt ${total_count} 0; then
         verbose "c:${total_count}"
         overwrite ${type}
+        return $?
       fi
       if uncompleted_larger "${EXTS[${type}]}"; then
         ui $(printf "${MORE_FILES_EXPECTS_2TYPE}" "${TYPE_DESCS[${type}]}" \
@@ -1223,17 +1236,30 @@ function handle_cache_by_type() {
           done
         done
         if confirm_yes "run again?"; then
-          handle_cache_by_type ${type}
+          init_mode ${type}
+          return $?
         else
-          handle_cache_by_type $((type+1))
+          init_mode $((type+1))
+          return $?
         fi
       fi
     else
       overwrite ${type}
+      return $?
     fi
   fi  
 
 }
+
+function safe_basename() {
+  in="${1:-}"
+  match='^.*.[A-z]*[0-9]*'                      
+  if [[ "$in" == "*/*" ]]; then 
+    in="$(basename \"$in\")"
+  fi
+  grep "$match" "$in"
+  echo "$i"
+}                                                                        
 
 
 # Args: dir to search from/under
@@ -1455,7 +1481,7 @@ function record_install_history() {
 # depending on whether bellicose is running as a script
 # or was sourced and individual functions are being run 
 # separately.  Highly recommend not doing the latter.
-function endprog() {
+function goodbye() {
   exitcode=${1:-}
   if [[ $BASH_KIND_ENV == "own" ]]; then 
     exit ${exitcode}
@@ -1517,7 +1543,7 @@ function archive_ext_tools() {
       if tru ${UNARCHIVE}; then
         if ! $(type -p unrar); then 
           err "Please install unrar before proceeding.  brew install rar works fine."
-          endprog 1
+          goodbye 1
         fi
         if unrar e -inul -p- -y -o+ -c- "${filepath}" -op "${extract_path}" 2> /dev/null  2>&1; then 
           exsuccess=true
@@ -1552,7 +1578,7 @@ function archive_ext_tools() {
         # ui "exploring what we just unarchiived"
         # export sa=$(pwd)
         # cd "${extract_path}"
-        # eat_the_world_starting_at 0
+        # init_mode 0
         # cd "${sa}"
       fi
       return 0
@@ -1934,9 +1960,9 @@ function process_pkg() {
   fi
   if tru ${INSTALL}; then
     verbose "getting showChoiceChangesXML"
+    bn=$(safe_basename "${pkg}")
     # since some packages dont have any names or real info in 
     # showChoiceChanges, we're just going to turn all the options on
-    bn=$(basename "${pkg}")
     installer -pkg "${pkg}" -showChoiceChangesXML |sed 's/0/1/g' > "$TMPDIR/${bn}.xml"
     verbose "calling $(type -p installer) on ${pkg}"
     if tru ${PROMPT_FOR_ACTIONS}; then 
@@ -1975,10 +2001,9 @@ function process_pkgs {
 
 function install_pkg() {
   flags=( "${INSTALL_BASE_FLAGS[@]}" "/" )
-  bn=$(basename "${pkg}")
+  local bn=$(safe_basename "${pkg}")
   if dump=$(sudo installer "${flags[@]}" -applyChoiceChangesXML "$TMPDIR/${bn}.xml"); then 
     local pkg="${flags[2]}" # See INSTALL_BASE_FLAGS
-    local bn=$(basename "${pkg}")
     ui "recording an install history for ${bn} from $(pwd)"
     $(record_install_history "install" "package" "${pkg}")
     return 0
@@ -2384,7 +2409,7 @@ function bellibackup {
   verbose "asking for user confirmation on backup to ${dir_to_back}"
   status=$(timed_confirm_yes "Backing up ${dir_to_back}")
   if [ $? == 255 ]; then 
-    rreturn 2
+    return 2
   fi
   verbose "proceeding with backup, $? status, ${status} from timed_confirm_yes"
   secondaries=$(find ~+ -type f -iname "${SECONDARY_CRITERIA}" 2> /dev/null)
@@ -2415,17 +2440,17 @@ function help() {
 }
 
 # This looks like a particularly silly wrapper function that does... basically
-# nothing except let me call a function "eat_the_world_starting_at" which 
-# looks much cooler than "handle_cache_by_type"
-function eat_the_world_starting_at() {
-  local start="${1:-0}"
-  if lt ${start} 5; then
-    local IFS=$'\n'
-    for i in $(seq ${start} 4); do 
-      handle_cache_by_type ${i}
-    done
-  fi
-}
+# nothing except let me call a function "init_mode" which 
+# looks much cooler than "init_mode"
+# function init_mode() {
+#   local start="${1:-0}"
+#   if lt ${start} 5; then
+#     local IFS=$'\n'
+#     for i in $(seq ${start} 4); do 
+#       init_mode ${i}
+#     done
+#   fi
+# }
 
 # Run bellicose in single file mode, after which if we think we succeeded, 
 # we thank you.  Because you're WORTHY of it.
@@ -2435,7 +2460,7 @@ function process_single() {
     err "could not find a file at ${file}, please try again."
     exit 1
   fi
-  if process_file "${file}"; then 
+  if process_file "${file}"; then
     ui ""
     ui "Success! Thanks for trying bellicose --"
     ui "if you liked it drop me a note and say hello,"
@@ -2594,20 +2619,19 @@ function main() {
   case ${chosen_mode} in
     "list")
       LIST=true
-      eat_the_world_starting_at 0
+      init_mode 0
       ;;
     "contents")
       LIST=true
       CONTENTS=true
-      eat_the_world_starting_at 0
+      init_mode 0
       return 0
       ;;
     "unarchive")
       if ! ${SKIPUNARCHIVE} > /dev/null; then
         UNARCHIVE=true
-        eat_the_world_starting_at 0
-         
-        return 0
+        init_mode 0
+        return $?
       fi
       ;;
     "install")
@@ -2615,8 +2639,8 @@ function main() {
         UNARCHIVE=true
       fi
       INSTALL=true
-      eat_the_world_starting_at 0
-      return 0
+      init_mode 0
+      return $?
       ;;
     "installed")
       cat "${history}"
