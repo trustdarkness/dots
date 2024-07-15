@@ -39,8 +39,8 @@ MACBASHUPA+="bootstrap_modern_bash -s -d -p\0"
 MACBASHUPA+="bootstrap_modern_bash -s -p\0"
 MACBASHUPA+="Abort and exit"
 
-BREW_BATCH_INSTALLS="python3 sshfs iterm2 raycast wget rar 7-zip gpg pipx vscodium lynx screen tac find-any-file fzf macfuse"
-BREW_BATCH_CASKS="transmit sublime-text sublime-merge lynx pacifist sloth protonmail-bridge"
+BREW_BATCH_INSTALLS="python3 sshfs iterm2 raycast wget rar 7-zip gpg pipx vscodium lynx screen tac find-any-file fzf macfuse librewolf scrcpy"
+BREW_BATCH_CASKS="transmit sublime-text sublime-merge lynx pacifist sloth protonmail-bridge transmission android-platform-tools"
 
 PATH_SOURCES='.bashrc .bash_profile .profile'
 
@@ -398,7 +398,8 @@ is_completed() {
   return $?
 }
 
-function mac_bootstrap() {
+function new_mac_bootstrap() {
+  export NEWMACBOOTSTRAP=true
   # https://apple.stackexchange.com/questions/195244/concise-compact-list-of-all-defaults-currently-configured-and-their-values
   mkdir -p "$INSTALL_LOGS"
   log="$INSTALL_LOGS/mac_bootstrap.log"
@@ -831,7 +832,76 @@ function dphelpers_bootstrap() {
 }
 
 function locate_mac_updatedb_bootstrap() {
-  sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.locate.plist
+  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+    if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
+  fi
+  sudo launchctl bootstrap /System/Library/LaunchDaemons/com.apple.locate.plist
+  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+    local caller="$FUNCNAME"
+    mb_ff "$caller"; return 0
+  else
+    return 0
+  fi
+}
+
+# https://www.jeffgeerling.com/blog/2024/mounting-ext4-linux-usb-drive-on-macos-2024
+function mac_ext4_bootstrap() {
+  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+    if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
+  fi
+  local brew=$(type -p brew)
+  if [ $? -gt 0 ]; then
+    if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+      if ! is_completed "brew_bootstrap"; then brew_bootstrap; fi
+    else
+      brew_bootstrap
+    fi
+  fi 
+  if ! brew install macfuse; then 
+    se "Err $? brew install macfuse.  Cannot continue."
+    return 1
+  fi
+  if ! is_function "ghc"; then 
+    source "$D/util.sh"
+  fi
+  local swd=$(pwd)
+  if ! ghc https://github.com/gerard/ext4fuse.git; then 
+    se "Err $? ghc https://github.com/gerard/ext4fuse.git Cannot continue."
+    return 1
+  fi
+  err_cd="Could not cd into ext4fuse.  Cannot continue."
+  if [[ $(pwd) != "$HOME/src/github/ext4fuse" ]]; then 
+    if [ -d "$HOME/src/github/ext4fuse" ]; then 
+      cd "$HOME/src/github/ext4fuse"
+    elif [[ $(basename $(pwd)) != "ext4fuse" ]]; then 
+      if [ -d "ext4fuse" ]; then 
+        cd "ext4fuse"
+      else
+        se $err_cd
+        return 1
+      fi
+    else 
+      se $err_cd
+      return 1
+    fi
+  fi
+  if ! Make; then 
+    se "Err $? Make.  Cannot Continue."
+    return 1
+  fi
+  binpath="$(pwd)/ext4fuse"
+  if [ -f "$binpath" ]; then 
+    ln -sf "$binpath" ".local/bin/"
+  else 
+    se "Could not find ext4fuse binary in $(pwd) so not symlinking in \$PATH"
+    return 1
+  fi
+  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+    local caller="$FUNCNAME"
+    mb_ff "$caller"; return 0
+  else
+    return 0
+  fi
 }
 
 function newaudiomac_bundle() {
