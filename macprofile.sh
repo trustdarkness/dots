@@ -26,5 +26,10 @@ if [ -z $accelkilled ]; then
   fi
 fi
 
+if [ -z "${APPFOLDERS[*]}" ]; then
+  se "Initializing app folder cache, please hold..." 
+  cache_init_application_folders
+fi
+
 defaults write com.apple.loginwindow LoginwindowLaunchesRelaunchApps -bool false
   
