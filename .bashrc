@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-if ! declare -F is_function; then
+if ! declare -F is_function > /dev/null 2>&1; then
   is_function() {
     ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
   }
 fi
+
+shopt -s direxpand
+shopt -s cdable_vars
 
 if [ -z "${D}" ]; then
   export D="$HOME/src/github/dots"
@@ -43,7 +46,7 @@ function detect_d() {
 # is caught before the system bash in /bin
 if [[ "${PATH}" != "*.local/sourced*" ]]; then
   PATHRC="$PATH"
-  PATH="$HOME/bin:$HOME/.local/bin:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin$HOME/Applications:/usr/sbin:$PATH:$HOME/.local/sourced"
+  PATH="$HOME/bin:$HOME/.local/bin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin$HOME/Applications:/usr/sbin:$PATH:$HOME/.local/sourced"
   export PATH
 fi
 
@@ -86,6 +89,12 @@ function requires_modern_bash() {
 # The goal is to use this almost like a decorator in python so as to
 # demarcate things that won't work by default on MacOS (or other ancient bash)
 alias rmb="requires_modern_bash"
+
+function vimc() { # TODO: input validation
+  if command=$(type -p "${1:-}"); then 
+    vim "$command"
+  fi
+}
 
 # https://stackoverflow.com/questions/7665/how-to-resolve-symbolic-links-in-a-shell-script
 function resolve_symlink() {
@@ -155,6 +164,38 @@ if [ -x /usr/bin/dircolors ]; then
     alias fgrep='fgrep --color=auto'
     alias egrep='egrep --color=auto'
 fi
+
+function fnegrep() {
+  sterm="${1:-}"
+  filename="${2:-}"
+  if [ -n "$sterm" ] && [ -f "$filename" ]; then 
+    out=$(egrep -n "$sterm" "$filename" 2> /dev/null)
+    if [ $? -eq 0 ]; then 
+      split -a -F'\n' "$out"
+      grep_lines=( "${split_array[@]}" )
+      failures=0 # seems unnecessary, but just in case
+      for line in "${grep_lines[@]}"; do 
+        printf "%20s %s\n" "$filename" "$line"
+        if [ $? -gt 0 ]; then 
+          ((failures++))
+        fi
+      done 
+      return $failures
+    else  # if grep $? -eq 0
+      return $?
+    fi # endif grep ?$
+  fi # endif -n sterm -f filename
+  return 1
+}
+export -f fnegrep
+
+function dgrep() {
+  find "$D" -maxdepth 1 -exec bash -c "fnegrep ${1:-} {}" \;
+  if gt $? 0; then 
+    return 1
+  fi
+  return 0
+}
 
 # colored GCC warnings and errors
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
@@ -251,6 +292,23 @@ function unsetxdebug() {
   powerline_init
 }
 
+function history_rm_range() {
+    start=$1
+    end=$2
+    count=$(( end - start ))
+    while [ $count -ge 0 ] ; do
+        history -d $start
+        ((count--))
+    done
+}
+
+function history_rm_last() {
+  if history_rm_range -2 -1; then 
+    return 0
+  fi
+  return 1
+}
+
 if [ -z "${DEBUG}" ] || ! $DEBUG; then
   if declare -f powerline_init > /dev/null; then
     powerline_init
@@ -312,3 +370,7 @@ alias vex="vim $D/existence && sex"
 
 # convenient regex to use with -v when grepping across many files
 export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
+
+if [ -f "$HOME/.localrc" ]; then 
+  source "$HOME/.localrc"
+fi

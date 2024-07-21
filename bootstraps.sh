@@ -39,8 +39,8 @@ MACBASHUPA+="bootstrap_modern_bash -s -d -p\0"
 MACBASHUPA+="bootstrap_modern_bash -s -p\0"
 MACBASHUPA+="Abort and exit"
 
-BREW_BATCH_INSTALLS="python3 sshfs iterm2 raycast wget rar 7-zip gpg pipx vscodium lynx screen"
-BREW_BATCH_CASKS="transmit sublime-text sublime-merge lynx"
+BREW_BATCH_INSTALLS="python3 sshfs iterm2 raycast wget rar 7-zip gpg pipx vscodium lynx screen tac find-any-file fzf macfuse librewolf scrcpy"
+BREW_BATCH_CASKS="transmit sublime-text sublime-merge lynx pacifist sloth protonmail-bridge transmission android-platform-tools"
 
 PATH_SOURCES='.bashrc .bash_profile .profile'
 
@@ -398,7 +398,8 @@ is_completed() {
   return $?
 }
 
-function mac_bootstrap() {
+function new_mac_bootstrap() {
+  export NEWMACBOOTSTRAP=true
   # https://apple.stackexchange.com/questions/195244/concise-compact-list-of-all-defaults-currently-configured-and-their-values
   mkdir -p "$INSTALL_LOGS"
   log="$INSTALL_LOGS/mac_bootstrap.log"
@@ -421,9 +422,9 @@ function mac_bootstrap() {
   trap "finish; exit 6" 0 1 2 15
   trap "finish; exit 7" EXIT HUP INT TERM
 
-
+  printf "enabling keyboard UI navigation\m"
+  defaults write /Volumes/Trantor/mt/Library/Preferences/.GlobalPreferences.plist AppleKeyboardUIMode -int 2
   if ! is_completed "mac_hostname"; then mac_hostname; fi
-  set -euo pipefail
   printf "Installing brew"
   if ! is_completed "brew_bootstrap"; then brew_bootstrap; fi
   echo " and modern bash"
@@ -451,6 +452,8 @@ function mac_bootstrap() {
 
   echo "Setting up powerline-status"
   if ! is_completed "powerline_bootstrap"; then powerline_bootstrap; fi
+  echo "vscodium as git mergetool"
+  if ! is_completed "vscodium_as_git_mergetool"; then vscodium_as_git_mergetool; fi
   echo "Setting up fonts and color schemes for iTerm"
   if ! is_completed "term_bootstrap"; then term_bootstrap; fi
   echo "Disabling springloaded folders"
@@ -557,6 +560,16 @@ EOF
     mv "$conf" "$conf.$ts.added_blur.bak"
     mv "/tmp/$(basename $conf)" "$conf"
   fi
+}
+
+function sudo_add_touchid() {  
+  ts=fsts    
+  se "existing /etc/pam.d/sudo backed up to $HOME/.local/bak/etc.pam.d.sudo.$ts.touchid"
+  # https://stackoverflow.com/questions/5573683/adding-alias-to-end-of-alias-list-in-bashrc-file-using-sed
+  tac /etc/pam.d/sudo |        
+  awk "FNR==NR&&/auth/{s=FNR;next}FNR==s{ \$0=\$0\"\auth \t sufficint \t pam_tid.so\n\"}NR>FNR" /etc/pam.d/sudo /etc/pam.d/sudo > /tmp/sudo.new 
+  sudo mv "/etc/pam.d/sudo" "$HOME/.local/bak/etc.pam.d.sudo.$ts.touchid" && mv /tmp/sudo.new /etc/pam.d/sudo
+  return $?                                                                     
 }
 
 function rcdefaultapp_bootstrap() {
@@ -674,68 +687,96 @@ function term_bootstrap() {
   mb_ff "$caller"; return 0
 }
 
+function vscodium_as_git_mergetool() {
+  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
+  grep codium "$HOME/.gitconfig" > /dev/null 2>&1
+  if [ $? -eq 0 ] || [[ "${1:-}" != "-f" ]]; then 
+    echo ".gitconfig already references codium. skipping without -f."
+    return 0
+  fi
+  git config --global merge.tool vscodium
+  git config --global mergetool.vscodium.cmd 'codium --wait --merge $REMOTE $LOCAL $BASE $MERGED'
+  git config --global diff.tool vscodium
+  git config --global difftool.vscodium.cmd 'codium --wait --diff $LOCAL $REMOTE'
+  echo ".gitconfig now looks like:"
+  cat "$HOME/.gitconfig"
+  local caller="$FUNCNAME"
+  mb_ff "$caller"; return 0
+}
+
 function mullvad_bootstrap() {
   if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
-  if [[ uname == "Darwin" ]]; then
-    if ! type -p brew > /dev/null 2>&1; then
-      se "please make sure brew_bootstrap has run."
-      return 1
-    fi
-    swd=$(pwd)
-    mkdir -p "$INSTALL_STAGING"
-    cd "$INSTALL_STAGING"
-    wget https://mullvad.net/en/download/app/pkg/latest
-    wget https://mullvad.net/en/download/app/pkg/latest/signature
-    wget https://mullvad.net/media/mullvad-code-signing.asc
-    gpg --import mullvad-code-signing.asc
-    verify=$(gpg --verify Mullvad*.asc)
-    if [ $? -ne 0 ]; then 
-      se "Mullvad gpg verification failed."
-      cd "$swd"
-      return 1
-    fi
-    if ! sudo installer -pkg Mullvad*.pkg -target /; then 
-      se "installer failed with code $?"
-      cd "$swd"
-      return 1
-    else 
-      cd "$swd"
-
-      local caller="$FUNCNAME"
-      mb_ff "$caller"; return 0
-    fi
-  elif [[ uname == "linux" ]]; then 
-    distro="$(lsb_release -d 2>&1|grep Desc|awk -F':' '{print$2}'|xargs)"
-    if string_contains "(fedora|nobara)" "$distro"; then
-      # Add the Mullvad repository server to dnf
-      sudo dnf config-manager --add-repo https://repository.mullvad.net/rpm/stable/mullvad.repo
-
-      # Install the package
-      if sudo dnf install mullvad-vpn; then
+  case $(what_os) in 
+    "MacOS")
+      if ! type -p brew > /dev/null 2>&1; then
+        se "please make sure brew_bootstrap has run."
+        return 1
+      fi
+      swd=$(pwd)
+      mkdir -p "$INSTALL_STAGING"
+      cd "$INSTALL_STAGING"
+      if ! [ -f "Mullvad.pkg" ] || ! [ -f "Mullvad.asc" ]; then 
+        wget https://mullvad.net/en/download/app/pkg/latest
+        wget https://mullvad.net/en/download/app/pkg/latest/signature
+        wget https://mullvad.net/media/mullvad-code-signing.asc
+        gpg --import mullvad-code-signing.asc
+        mv latest Mullvad.pkg
+        mv signature Mullvad.asc
+      fi
+      verify=$(gpg --verify Mullvad.asc Mullvad.pkg)
+      if [ $? -ne 0 ]; then 
+        se "Mullvad gpg verification failed."
+        cd "$swd"
+        return 1
+      fi
+      if ! sudo installer -pkg Mullvad*.pkg -target /; then 
+        se "installer failed with code $?"
+        cd "$swd"
+        return 1
+      else 
+        cd "$swd"
 
         local caller="$FUNCNAME"
         mb_ff "$caller"; return 0
       fi
-    elif string_contains "(Debian|Ubuntu)" "$distro"; then
-      # Download the Mullvad signing key
-      sudo curl -fsSLo /usr/share/keyrings/mullvad-keyring.asc https://repository.mullvad.net/deb/mullvad-keyring.asc
+      ;;
+    'GNU/Linux')
+      distro="$(lsb_release -d 2>&1|grep Desc|awk -F':' '{print$2}'|xargs)"
+      if string_contains "(fedora|nobara)" "$distro"; then
+        # Add the Mullvad repository server to dnf
+        sudo dnf config-manager --add-repo https://repository.mullvad.net/rpm/stable/mullvad.repo
 
-      # Add the Mullvad repository server to apt
-      echo "deb [signed-by=/usr/share/keyrings/mullvad-keyring.asc arch=$( dpkg --print-architecture )] https://repository.mullvad.net/deb/stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/mullvad.list
+        # Install the package
+        if sudo dnf install mullvad-vpn; then
 
-      # Install the package
-      sudo apt update
-      if sudo apt install mullvad-vpn; then 
+          local caller="$FUNCNAME"
+          mb_ff "$caller"; return 0
+        fi
+      elif string_contains "(Debian|Ubuntu)" "$distro"; then
+        # Download the Mullvad signing key
+        sudo curl -fsSLo /usr/share/keyrings/mullvad-keyring.asc https://repository.mullvad.net/deb/mullvad-keyring.asc
 
-        local caller="$FUNCNAME"
-        mb_ff "$caller"; return 0
-      fi 
-    else 
-      se "couldnt parse distro from $distro, or we dont have setup"
-      se "code that is distro specific.  exiting."
+        # Add the Mullvad repository server to apt
+        echo "deb [signed-by=/usr/share/keyrings/mullvad-keyring.asc arch=$( dpkg --print-architecture )] https://repository.mullvad.net/deb/stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/mullvad.list
+
+        # Install the package
+        sudo apt update
+        if sudo apt install mullvad-vpn; then 
+
+          local caller="$FUNCNAME"
+          mb_ff "$caller"; return 0
+        fi 
+      else 
+        se "couldnt parse distro from $distro, or we dont have setup"
+        se "code that is distro specific.  exiting."
+        return 1
+      fi
+      ;;
+    *)
+      se "Couldn't os detect.  what_os: $(what_os)"
       return 1
-    fi
-  fi
+      ;;
+  esac
 }
 
 function disarm_bootstrap() {
@@ -785,15 +826,17 @@ function digitalperformer_bootstrap() {
   if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   local swd=$(pwd)
   cd "$INSTALL_STAGING"
-  lynx -dump https://motu.com/en-us/download/product/489/ > /tmp/dp.txt
-  link_number=$(cat /tmp/dp.txt | grep -A11 "Latest Downloads"| grep -A1 "Mac" |tail -n 1|awk -F'(' '{print$1}'|tr '[' ' '|tr ']' ' '|xargs)
-  link=$(cat /tmp/dp.txt | grep "^ $link_number"| awk '{print$2}')
-  se "Downloading $link"
-  curl -L -o dp.pkg "$link" 
+  if ! [ -f "dp.pkg" ] || [[ "${1:-}" =~ \-r ]]; then 
+    lynx -dump https://motu.com/en-us/download/product/489/ > /tmp/dp.txt
+    link_number=$(cat /tmp/dp.txt | grep -A11 "Latest Downloads"| grep -A1 "Mac" |tail -n 1|awk -F'(' '{print$1}'|tr '[' ' '|tr ']' ' '|xargs)
+    link=$(cat /tmp/dp.txt | grep "^ $link_number"| awk '{print$2}')
+    se "Downloading $link"
+    curl -L -o dp.pkg -O -C - "$link" 
+  fi
   local ts=$(fsts)
   local install_log="$INSTALL_LOGS/$filename.$ts.log"
-  if bellicose -v -R "$install_log" install "$INSTALL_STAGING/dp.pkg"; then 
-    se "bellicose reports successful install"
+  if sudo installer -pkg "$INSTALL_STAGING/dp.pkg" -target / -verboseR -allowUntrusted > "$install_log"; then 
+    se "installer reports successful install"
   fi
   # lets double check 
   gout=$(grep "Digital Performer" <(ls /Applications))
@@ -804,8 +847,9 @@ function digitalperformer_bootstrap() {
     local caller="$FUNCNAME"
     mb_ff "$caller"; return 0
   fi
-  echo "bellicose failed to install Digital Performer"
-  echo "the logs for the failed attempt can be found at $install_log"
+  echo "failed to install Digital Performer"
+  echo "the logs for the failed attempt found at $install_log show (tail -n20):"
+  tail -n20 $install_log
   cd "$swd"
   return 1
 }
@@ -824,6 +868,79 @@ function dphelpers_bootstrap() {
 
   local caller="$FUNCNAME"
   mb_ff "$caller"; return 0
+}
+
+function locate_mac_updatedb_bootstrap() {
+  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+    if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
+  fi
+  sudo launchctl bootstrap /System/Library/LaunchDaemons/com.apple.locate.plist
+  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+    local caller="$FUNCNAME"
+    mb_ff "$caller"; return 0
+  else
+    return 0
+  fi
+}
+
+# https://www.jeffgeerling.com/blog/2024/mounting-ext4-linux-usb-drive-on-macos-2024
+function mac_ext4_bootstrap() {
+  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+    if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
+  fi
+  local brew=$(type -p brew)
+  if [ $? -gt 0 ]; then
+    if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+      if ! is_completed "brew_bootstrap"; then brew_bootstrap; fi
+    else
+      brew_bootstrap
+    fi
+  fi 
+  if ! brew install macfuse; then 
+    se "Err $? brew install macfuse.  Cannot continue."
+    return 1
+  fi
+  if ! is_function "ghc"; then 
+    source "$D/util.sh"
+  fi
+  local swd=$(pwd)
+  if ! ghc https://github.com/gerard/ext4fuse.git; then 
+    se "Err $? ghc https://github.com/gerard/ext4fuse.git Cannot continue."
+    return 1
+  fi
+  err_cd="Could not cd into ext4fuse.  Cannot continue."
+  if [[ $(pwd) != "$HOME/src/github/ext4fuse" ]]; then 
+    if [ -d "$HOME/src/github/ext4fuse" ]; then 
+      cd "$HOME/src/github/ext4fuse"
+    elif [[ $(basename $(pwd)) != "ext4fuse" ]]; then 
+      if [ -d "ext4fuse" ]; then 
+        cd "ext4fuse"
+      else
+        se $err_cd
+        return 1
+      fi
+    else 
+      se $err_cd
+      return 1
+    fi
+  fi
+  if ! Make; then 
+    se "Err $? Make.  Cannot Continue."
+    return 1
+  fi
+  binpath="$(pwd)/ext4fuse"
+  if [ -f "$binpath" ]; then 
+    ln -sf "$binpath" ".local/bin/"
+  else 
+    se "Could not find ext4fuse binary in $(pwd) so not symlinking in \$PATH"
+    return 1
+  fi
+  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+    local caller="$FUNCNAME"
+    mb_ff "$caller"; return 0
+  else
+    return 0
+  fi
 }
 
 function newaudiomac_bundle() {
@@ -913,6 +1030,11 @@ function synergy_debian_bootstrap_from_nx() {
   di "$HOME/Downloads/synergy_1.14.6-stable.06a860d9_debian10_amd64.deb"
   add_permanent_alias "synergy" "LD_LIBRARY_PATH=$slib/ synergy" "add_synergy_alias"
   return $?
+}
+
+function library_player_bootstrap() {
+  install_util_load
+  sai "smplayer mpv playerctl"
 }
 
 function mb_ff() {

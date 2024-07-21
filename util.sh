@@ -125,6 +125,33 @@ function util_env_load() {
   fi
 }
 
+function symlink_verbose() {
+  se "linking target $target from link name $linkname"
+  ln -sf "$target" "$linkname"
+}
+ 
+function move_verbose() {
+  se "moving ${1:-} to ${2:-}"
+  mv "${1:-}" "${2:-}"
+} 
+
+function lns() {
+  local target="${1:-}"
+  local linkname="${2:-}"
+  if [ -h "$linkname" ]; then 
+    ln -si "$target" "$linkname"
+  elif [ -f "$linkname" ]; then
+    move_verbose "$linkname" "$linkname.bak"
+    symlink_verbose "$target" "$linkname"
+  else
+    symlink_verbose "$target" "$linkname"
+  fi  
+}
+
+function lnsdh() {
+  lns "$D/${1:-}" "$HOME/${1:-}"
+}
+
 # preferred format strings for date for storing on the filesystem
 FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
 printf -v FSTSFMT '%s_%%H%%M%%S' "$FSDATEFMT" # our preferred ts fmt for files/folders
@@ -161,12 +188,109 @@ function fsts_to_unixtime() {
   return $?
 }
 
+function colnum() {
+  help() {
+    echo "echos the column number of substring in string if found"
+    echo "returns 0 if successful, 255 if substring not found, 1 otherwise"
+    return ${1:-0}
+  }
+  to_split="${@:$OPTIND:1}"
+  substring="${1:-}"
+  string="${2:-}"
+  if empty "$substring" || empty "$string"; then 
+    help 1
+  fi
+  # found=$(grep "$substring" <<< "$string")
+  # if [ $? -gt 0 ]; then
+  #   return 255
+  # fi
+  rest=${string#*$substring}
+  se "$rest"
+  c=$(( ${#string} - ${#rest} - ${#substring} ))
+  if gt $c 0; then
+    echo $C
+    return 0
+  else
+    return 255
+  fi
+  return 1
+}
+
 # I'm not trying to be lazy, I'm trying to make the code readable
 function split() {
-  to_split="${1:?'Provide a string to split and (optionally) a delimiter'}"
-  delimiter="${2:-' '}"
-  printf %s\\n "$to_split" | tr "$delimiter" '\n'
-  return 0
+  usage() {
+    echo "meant for use primarily with looping over strings to avoid needing"
+    echo "to muck with IFS, basically puts a newline in place of the field"
+    echo "separator, specified with -F and defaulting to a single space"
+    echo ""
+    echo "Args: "
+    echo "  -a   | instead of printing to the console with \n separators."
+    echo "       | split the string on the separator and populate a global"
+    echo "       | array \"split_array\" with the result."
+    echo "  -F   | specify a field separator, similar to awk"
+    echo "  -h|q | print this text"
+    return "${1:-0}"
+  }
+  to_array=false
+  field_separator=" "
+  
+  while getopts 'AF:h' optchar; do
+    local OPTIND
+    case $optchar in
+
+      F)
+      echo "minus F ${OPTARG}"
+        field_separator="${OPTARG}"
+        ;;
+      A)
+        echo "minus a"
+        to_array=true
+        ;;
+      h)
+        usage 
+        ;;
+      *)
+        usage 1 
+        ;;
+    esac
+  done
+  to_split="${@:$OPTIND:1}"
+  declare -ga split_array
+
+  if [ -n "$to_split" ]; then 
+    if tru $to_array; then
+      while true; do
+        if [[ "$field_separator" =~ ^\\[an] ]]; then # TODO: get list of awk exceptions
+          printf -v field_separator %b "${field_separator@E}"
+          se "set field_separator to $(declare -p field_separator)"
+        fi
+        next=$(echo "$to_split" |awk -F"$field_separator" '{print$1}')
+        prev_to_split="$to_split"
+        l=${#field_separator}
+        i=$(colnum "$field_separator" "$to_split")
+        if [ $? -eq 255 ]; then
+          split_array+=( $(echo "$to_split"|awk -F"$field_separator" '{print$NF}') )
+          break
+        fi
+        split_array+=( "$next" )
+        to_split="${to_split:$((i+l))}"
+        if [[ $prev_to_split == $to_split ]]; then 
+          break
+        fi
+        se "s: $to_split"
+        se "a: ${split_array[@]}"
+      done
+      if isset "${split_array[*]}"; then 
+        return 0
+      else
+        return 2
+      fi
+    else
+      printf %s\\n "$to_split" | tr "$field_separator" '\n'
+      return 0
+    fi
+  fi
+  help 1
 }
 
 function version_ge() {
@@ -259,6 +383,24 @@ function is_linux() {
   }
 # fi
 
+function pidinfo() {
+  local line="$(ps awux | grep ${1:-})"
+  local dirtyname="$(echo \"$line\" | awk -F':' '{print$NF}')"
+  echo $dirtyname
+  local name="${dirtyname:6}"
+  local cpu="$(echo \"$line\"|awk '{print$3}')"
+  local mem="$(echo \"$line\"|awk '{print$4}')"
+  local started="$(echo \"$line\"|awk '{print$9}')"
+  IFS='' read -r -d '' pidinfo <<"EOF"
+ Process: %s
+   PID: %s
+   Current CPU: %s %%
+   Current RAM: %s %%
+   Started at: %s
+EOF
+  printf "$pidinfo" "$name" "$cpu" "$mem" "$started"
+}
+
 function add_permanent_alias() {
   name="${1:-}"
   to="${2:-}"
@@ -285,6 +427,25 @@ function is_bash_script() {
   return $?
 }
 
+function function_finder() {
+  script="${1:-}"
+  if ! is_bash_script; then
+    se "please provide a path to a bash script"
+  fi
+  if ! declare -p "VALID_DECLARE_FLAGS" > /dev/null 2>&1; then 
+    source "$D/existence.sh"
+  fi
+  declare -a _names
+  _names+=( $(grep ^function "$script" |awk '{print$2}'|awk -F'(' '{print"\x22"$1"\x22"}') )
+  if gt $? 0; then
+    se "could not find any functions in the global namespace in $script"
+    return 1
+  fi
+  for name in "${_names[@]}"; do
+    echo "$name"
+  done
+}
+
 function namerefs_bashscript_add() {
   script="${1:-}"
   if ! is_bash_script; then
@@ -297,9 +458,11 @@ function namerefs_bashscript_add() {
     source "$D/filesystemarrayutil.sh"
   fi
 
-  # case: global function names
+  # our main container for names
   declare -a _names
-  _names+=( $(grep ^function "$script" |awk '{print$2}'|awk -F'(' '{print"\x22"$1"\x22"}') )
+
+  # case: global function names
+  _names=$(function_finder)
 
   # get variables declared as local for exclusion (this may ressult in false positives)
   declare -ga localvars
@@ -923,9 +1086,9 @@ function most_recent() {
   local sterm="${2:-}"
   local files
   if [ -n "$sterm" ]; then 
-    files="$(find ${dir} -name "*$sterm*" -maxdepth 1 -print0 2> /dev/null|tr '\0' '|'|tr ' ' '+')"
+    files="$(find ${dir} -name "*$sterm*" -maxdepth 1 -mindepth 1 -print0 2> /dev/null|tr '\0' '|'|tr ' ' '+')"
   else 
-    files="$(find ${dir} -maxdepth 1 -print0 2> /dev/null|tr '\0' '|'|tr ' ' '+')"
+    files="$(find ${dir} -maxdepth 1 -mindepth 1 -print0 2> /dev/null|tr '\0' '|'|tr ' ' '+')"
   fi
   #echo "$files"
   local most_recent_crash=$(most_recent "${files}")
@@ -935,9 +1098,9 @@ function most_recent() {
   # like with args 2 and 3
   local default_filename_separator="|"
   local default_space_replacer="+"
-  local char_replaced_separated_files="${1:-}"
-  local filename_separator="${2:-$default_filename_separator}"
-  local space_replacer="${3:-$default_space_replacer}"
+  local char_replaced_separated_files=("${files[@]}")
+  local filename_separator="|"
+  local space_replacer="+"
   readarray -d"$filename_separator" files < <(echo "${char_replaced_separated_files}")
 
   # https://stackoverflow.com/questions/5885934/bash-function-to-find-newest-file-matching-pattern
@@ -969,6 +1132,20 @@ function ghc () {
     f="${f%.*}"
   fi
   cd $f
+}
+
+function is_my_git_repo() {
+  local dir="${1:-}"
+  if [ -d "$(pwd)/${dir}" ]; then 
+    user=$(grep -A1 'remote "origin"' "$(pwd)/${dir}/.git/config" |\
+      tail -n1| \
+      awk -F':' '{print$2}'| \
+      awk -F'/' '{print$1}')
+    if [[ "$user" == "trustdarkness" ]]; then 
+      return 0
+    fi
+  fi
+  return 1
 }
 
  # super sudo, enables sudo like behavior with bash functions
@@ -1043,20 +1220,99 @@ function boolean_or {
   return 1
 }
 
-case $(what_os) in 
-  'GNU/Linux')
-    CACHE="$HOME/.local/cache"
-    OSUTIL="$D/linuxutil.sh"
-    alias sosutil="source $D/linuxutil.sh"
-    alias vosutil="vim $D/linuxutil.sh && sosutil"
-    ;;
-  "MacOS")
-    CACHE="$HOME/Library/Application Support/Caches"
-    OSUTIL="$D/macutil.sh"
-    alias sosutil="source $D/macutil.sh"
-    alias vosutil="vim $D/macutil.sh && vosutil"
-    ;;
-esac
+function get_cache_for_OS () {
+  case $(what_os) in 
+    'GNU/Linux')
+      CACHE="$HOME/.local/cache"
+      OSUTIL="$D/linuxutil.sh"
+      alias sosutil="source $D/linuxutil.sh"
+      alias vosutil="vim $D/linuxutil.sh && sosutil"
+      ;;
+    "MacOS")
+      CACHE="$HOME/Library/Application Support/Caches"
+      OSUTIL="$D/macutil.sh"
+      alias sosutil="source $D/macutil.sh"
+      alias vosutil="vim $D/macutil.sh && vosutil"
+      ;;
+  esac
+  export cache
+}
+get_cache_for_OS
+
+function user_feedback() {
+  local subject
+  local message
+  local detritus
+  if [[ $# -gt 1 ]]; then 
+    subject="${1:-}"
+    message="${2:-}"
+    detritus="${@: 2}"
+  else
+    # https://askubuntu.com/questions/543553/write-to-syslog-from-the-command-line
+    subject="${0##*/}[$$]"
+    message="${1:-}"
+  fi
+  log_message() {
+    if [[ "$subject" != "${0##*/}[$$]" ]]; then 
+      printf -v log "%s %s %s" "${0##*/}[$$]" "$subject" "$message"
+    else 
+      printf -v log "%s %s" "$subject" "$message"
+    fi
+  }
+  nix_notify() {
+    if [[ $DISPLAY ]]; then
+      if notify-send "$subject" "$messsage"; then 
+        return 0
+      else
+        errors+=("notify-send: $?")
+      fi
+    else
+      log_message
+      if $logger "$log"; then 
+        return 0
+      else
+        errors+=("$logger: $?")
+      fi
+    fi
+  }
+  bold=$(tput bold)
+  normal=$(tput sgr0)
+  declare -a errors
+  case $- in
+    *i*)
+      printf "${bold}$subject${normal} -- $message"
+      if [ -n "$detritus" ]; then printf "$detritus"; fi
+      printf "\n"
+      return 0
+      ;;    
+    *)
+      case $($what_os) in
+        "GNU/Linux")
+          logger=logger
+          nix_notify
+          ;;
+        "MacOS")
+          if [[ $(check_macos_gui) ]]; then
+            printf -v applescripttext 'display notification %s with title %s' "$message" "$subject"
+            if osascript -e "$applescripttext"; then 
+              return 0
+            else
+              errors+=("osascript: $?")
+            fi
+          else
+            logger="syslog -s -l INFO"
+            nix_notify
+          fi
+          ;;
+      esac
+      ;;
+  esac
+  declare -a meta_message
+  meta_message+=("some attempts to notify the user may have failed")
+  meta_message+=("original subject: $subject original message: $message errors: ${errors[@]}")
+  se "${meta_message[@]}"
+  $logger "${meta_message[@]}"
+}
 
 function osutil_load() {
   if [ -z "$osutil_in_env" ] || $osutil_in_env; then
