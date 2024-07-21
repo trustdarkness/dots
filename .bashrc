@@ -90,6 +90,12 @@ function requires_modern_bash() {
 # demarcate things that won't work by default on MacOS (or other ancient bash)
 alias rmb="requires_modern_bash"
 
+function vimc() { # TODO: input validation
+  if command=$(type -p "${1:-}"); then 
+    vim "$command"
+  fi
+}
+
 # https://stackoverflow.com/questions/7665/how-to-resolve-symbolic-links-in-a-shell-script
 function resolve_symlink() {
   test -L "$1" && ls -l "$1" | awk -v SYMLINK="$1" '{ SL=(SYMLINK)" -> "; i=index($0, SL); s=substr($0, i+length(SL)); print s }'
