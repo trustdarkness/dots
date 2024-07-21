@@ -45,10 +45,14 @@ fi
 if string_contains "(Debian|Ubuntu)" "$distro"; then
   alias di="sudo dpkg -i"
   function sai() {
-    sudo aptitude install $@
+    sudo aptitude install -y $@
+  }
+  # aptitude sometimes wants to force uninstall no longer required depends
+  function sapti() {
+    sudo apt install -y $@
   }
   function sau() {
-    aptitude update 
+    sudo aptitude update 
   }
   function sauu() {
     sudo aptitude update && sudo aptitude upgrade
@@ -60,25 +64,32 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
     sudo aptitude search $@
   }
   function sar() {
-    aptitude remove #@
+    sudo aptitude remove $@
+  }
+  # sometimes aptitude trying to be "smart" means it doesn't do what we tell it
+  function saptr() {
+    sudo apt remove $@
   }
   function sap() {
-    aptitude purge $@
+    sudo aptitude purge $@
   }
   function saar() {
-    apt-add-repository $@
+    sudo apt-add-repository $@
   }
   function sAAR() {
-    apt auto-remove $@
+    sudo apt auto-remove $@
+  }
+  function sacfs() {
+    sudo apt-cache search $@
   }
   function vasl() {
-    vim /etc/apt/sources.list 
+    sudo vim /etc/apt/sources.list 
   }
   function asl() {
     echo /etc/apt/sources.list
   }
   function vasld() {
-     vim /etc/apt/sources.list.d
+     sudo vim /etc/apt/sources.list.d
   }
   function saig() {
     pattern=$1
@@ -104,7 +115,7 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
   function sasg() {
     aptpattern="${1:-}"
     egreppattern="${2:-}"
-    aptitude search "$aptpattern" | egrep "$greppattern"
+    sudo aptitude search "$aptpattern" | egrep "$greppattern"
   }
   function sas-oldskool {
     pattern=$1
@@ -160,4 +171,3 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
     sau
   }
 fi
-
