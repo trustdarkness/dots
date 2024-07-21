@@ -177,6 +177,17 @@ function stringify() {
   echo "${array[*]// /${separator}}"
 }
 
+function quoted_stringify() {
+  name=$1[@]
+  array=("${!name}")
+  out=""
+  for el in "${array[@]}"; do 
+    printf -v out '%s "%s"' "$out" "$el"
+  done
+  echo "$out"
+  return 0
+}
+
 most_recent_in_dir() {
   local dir="${1:-.}"
   # where field is any 1 indexed numbered column returned by ls -l
