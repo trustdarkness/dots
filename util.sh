@@ -1088,6 +1088,8 @@ function install_util_load() {
   i
   return $?
 }
+alias siu="source $D/installutil.sh"
+alias viu="vim $D/installutil.sh && siu"
 
 # so we dont load all that nonsense into the env, but the super
 # frequently used ones remain readily available
