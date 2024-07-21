@@ -520,6 +520,45 @@ function yabridge_bootstrap() {
   fi
 }
 
+function yakuake_blur() {
+  local conf="$HOME/.config/yakuakerc"
+  if ! [ -f "$conf" ]; then 
+    se "expecting yakuake conf in $conf"
+    se "but it is not there, should I create it?"
+    if confirm_yes; then 
+      dn="$(dirname $conf)"
+      mkdir -p "$dn"
+      if ! touch "$conf"; then 
+        ret=$?
+        se "could not create $conf. exiting."
+        return $ret
+      fi
+    else
+      se exiting
+      return 1
+    fi
+  fi
+  grep "Blur=true" "$conf" "$conf" > /dev/null 2>&1
+  if [ $? -eq 0 ]; then 
+    se "yakuake seems to be blur enabled already. exiting."
+    return 1
+  fi
+  local ts=$(fsdate)
+IFS='' read -r -d '' directive <<'EOF'
+[Appearance]
+Blur=true
+Translucency=true
+EOF
+  grep '[Appearance]' "$conf" > /dev/null 2>&1
+  if [ $? -gt 0 ]; then 
+    echo "$directive" >> "$conf"
+  else 
+    cat "$conf" | sed "s/[Appearance]/$directive/g" >> "/tmp/$(basename $conf)"
+    mv "$conf" "$conf.$ts.added_blur.bak"
+    mv "/tmp/$(basename $conf)" "$conf"
+  fi
+}
+
 function rcdefaultapp_bootstrap() {
   if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   mkdir -p "$INSTALL_STAGING"
