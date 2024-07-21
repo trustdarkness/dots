@@ -53,6 +53,8 @@ fi
 # see requires_modern_bash below
 NO_BASH_VERSION_WARNING=false
 
+export EDITOR=vim
+
 # Detects the bash version and if < 4.2, prints a warning for the user
 # this warning can be supressed by setting the environment variable
 # NO_BASH_VERSION_WARNING=true

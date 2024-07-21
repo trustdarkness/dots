@@ -7,7 +7,6 @@ if ! [[ "${PATH}" =~ .*.pathsource.* ]]; then
 fi
 
 HOMEBREW_NO_INSTALL_FROM_API=1 
-export EDITOR=vim
 
 # D is the path to this directory, usually on my systems, should be
 # $HOME/src/github/dots, but if not set, some things not happy
