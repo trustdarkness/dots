@@ -93,18 +93,17 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
   }
   function saig() {
     pattern=$1
-    sudo apt install *$pattern*
+    sudo apt install $(printf '*%s*' "$pattern")
   }
   export -f saig
   function sarg() {
     pattern=$1
-    sudo apt remove *$pattern*
+    sudo apt remove $(printf '*%s*' "$pattern")
   }
 
   function sapg {
     for term in $@; do
-      pattern="*$term*"
-      sudo apt purge $pattern
+      sudo apt purge $(printf '*%s*' "$term")
     done
   }
   export -f sapg
@@ -137,12 +136,25 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
 
   function sas-unstable {
     pattern=$1
-    sudo sed -i.bak 's@#deb\ https://deb.debian.org/debian/\ sid@deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
+    # a working sid line must be present as a comment in /etc/apt/sources.list
+    # we use @ as seds field separator and just remove, then replace the # comment
+    sudo sed -E -i.bak 's@#deb(.*)sid@deb\1sid@g' /etc/apt/sources.list
     sau
     sas $pattern
-    sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ sid@#deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
+    sudo sed -E -i.bak 's@deb(.*)sid@#deb\1sid@g' /etc/apt/sources.list
     sau
   }
+  alias sas-sid="sas-unstable"
+
+  function sas-testing {
+    pattern=$1
+    sudo sed -E -i.bak 's@#deb(.*)testing@deb\1testing@g' /etc/apt/sources.list
+    sau
+    sas $pattern
+    sudo sed -E -i.bak 's@deb(.*)testing@#deb\1testing@g' /etc/apt/sources.list
+    sau
+  }
+
 
   function sai-oldskool {
     pattern=$1
@@ -161,13 +173,26 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
     sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ oldstable@#deb\ https://deb.debian.org/debian/\ oldstable@g' /etc/apt/sources.list
     sau
   }
-  export -f sai-oldstable
+  
   function sai-unstable {
     pattern=$1
-    sudo sed -i.bak 's@#deb\ https://deb.debian.org/debian/\ sid@deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
+    sudo sed -E -i.bak 's@#deb(.*)sid@deb\1sid@g' /etc/apt/sources.list
     sau
     sai $pattern
-    sudo sed -i.bak 's@deb\ https://deb.debian.org/debian/\ sid@#deb\ https://deb.debian.org/debian/\ sid@g' /etc/apt/sources.list
+    sudo sed -E -i.bak 's@deb(.*)sid@#deb\1sid@g' /etc/apt/sources.list
     sau
   }
+  alias sai-sid="sai-unstable"
+
+  function sai-testing {
+    pattern=$1
+    sudo sed -E -i.bak 's@#deb(.*)testing@deb\1testing@g' /etc/apt/sources.list
+    sau
+    sai $pattern
+    sudo sed -E -i.bak 's@deb(.*)testing@#deb\1testing@g' /etc/apt/sources.list
+    sau
+  }
+
+
+
 fi
