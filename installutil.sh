@@ -4,6 +4,29 @@ if [[ $(uname) == "Linux" ]]; then
   distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
 elif [[ $(uname) == "Darwin" ]]; then
   source $D/macutil.sh
+  function sai() {
+    brew install $@
+  }
+  function sas() {
+    brew search $@
+  }
+  function sau() {
+    brew update
+  }
+  function sauu() {
+    brew update && brew upgrade
+  }
+  function salu() {} {
+    sudo softwareupdate --list
+  }
+  function salu_macos() {
+    if mist=$(type -p mist); then 
+      $mist list installer
+    else
+      sudo softwareupdate --list-full-installers
+    fi
+  }
+
 fi
 
 if string_contains "arch" "$distro"; then
