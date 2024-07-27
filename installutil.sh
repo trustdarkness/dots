@@ -16,7 +16,7 @@ elif [[ $(uname) == "Darwin" ]]; then
   function sauu() {
     brew update && brew upgrade
   }
-  function salu() {} {
+  function salu() {
     sudo softwareupdate --list
   }
   function salu_macos() {
