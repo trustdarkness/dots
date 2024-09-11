@@ -94,35 +94,83 @@ function service_list() {
 #  fi 
 }
 
+function _service_arguments_validate() {
+  if [ $# -ne 2 ]; then 
+    _service_usage 
+    return 1
+  fi
+  actions=( "start" "stop" "restart" )
+  if [[ "${actions[*]}" != *"${1:-}"* ]]; then 
+    _service_usage 
+    return 2
+  fi  
+  services=$(service_list)
+  if ! string_contains "${2:-}" "$services"; then 
+     _service_usage 
+    return 3
+  fi
+  return 0   
+}
+
+function _service_usage() {
+  cat < 'EOF'
+service is meant to be used in the fashion of the old redhat 
+system administration tool.  The syntax is:
+
+  service <service name> <action>
+
+Where action is (currently) one of start, stop, restart.
+And service name should be a service as represented in the final column
+of launchctl list.
+EOF
+}
+
 # simulates the linux service command, handling only three verbs:
 # service $1 start
 # service $1 stop
 # service $1 restart
 function service () {
-  name="${1:-}"
-  action="${2:-}"
-  supported_actions=("start" "stop" "restart")
-  realname=$(service_list "${name}")
-  case "${action}" in
-    start)
-      se "starting ${realname}"
-      if ! service_start "${realname}"; then
-        se "could not start ${realname}"
-        return 1
-      fi
-      ;;
-    stop)
-      se "stopping ${realname}"
-      if ! service_stop "${realname}"; then
-        se "could not stop ${realname}";
-        return 1
-      fi
-      ;;
-    restart)
-      service "${realname}" stop
-      service "${realname}" start
-      ;;
-  esac
+  if ret=$(_service_arguments_validate $@); then 
+    name="${1:-}"
+    action="${2:-}"
+    supported_actions=("start" "stop" "restart")
+    realname=$(service_list "${name}")
+    case "${action}" in
+      start)
+        se "starting ${realname}"
+        if ! service_start "${realname}"; then
+          se "could not start ${realname}"
+          return 1
+        fi
+        return 0
+        ;;
+      stop)
+        se "stopping ${realname}"
+        if ! service_stop "${realname}"; then
+          se "could not stop ${realname}";
+          return 1
+        fi
+        return 0
+        ;;
+      restart)
+        failures=0
+        if ! service_stop "${realname}"; then
+          se "could not stop ${realname}";
+          ((failures++))
+        fi
+        if ! service_start "${realname}"; then
+          se "could not start ${realname}"
+          ((failures++))
+        fi
+        return $failures
+        ;;
+        
+    esac
+  else
+    # should have already gotten usage from args_validate
+    # for a in $@; do if [[ a == "-h" ]]||[[ a == "-?" ]]; then _service_usage; fi; done
+    return $ret
+  fi
 }
 
 # same semamtics as sudo systemctl restart $1 on linux

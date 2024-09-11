@@ -1,9 +1,12 @@
-#!/usr/bin/env bash
-if ! declare -F is_function; then
+#e!/usr/bin/env bash
+if ! declare -F is_function > /dev/null 2>&1; then
   is_function() {
     ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
   }
 fi
+
+shopt -s direxpand
+shopt -s cdable_vars
 
 if [ -z "${D}" ]; then
   export D="$HOME/src/github/dots"
@@ -12,7 +15,7 @@ fi
 case $- in
     *i*)
       SBRC=true
-      source $D/util.sh
+      #set -x
       ;;
   *)
   return
@@ -43,12 +46,15 @@ function detect_d() {
 # is caught before the system bash in /bin
 if [[ "${PATH}" != "*.local/sourced*" ]]; then
   PATHRC="$PATH"
-  PATH="$HOME/bin:$HOME/.local/bin:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin$HOME/Applications:/usr/sbin:$PATH:$HOME/.local/sourced"
+  PATH="$HOME/bin:$HOME/.local/bin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin$HOME/Applications:/usr/sbin:$PATH:$HOME/.local/sourced"
   export PATH
 fi
 
 # see requires_modern_bash below
 NO_BASH_VERSION_WARNING=false
+
+export EDITOR=vim
+RSYNCOPTS="-rlutUPv"
 
 # Detects the bash version and if < 4.2, prints a warning for the user
 # this warning can be supressed by setting the environment variable
@@ -86,6 +92,12 @@ function requires_modern_bash() {
 # The goal is to use this almost like a decorator in python so as to
 # demarcate things that won't work by default on MacOS (or other ancient bash)
 alias rmb="requires_modern_bash"
+
+function vimc() { # TODO: input validation
+  if command=$(type -p "${1:-}"); then 
+    vim "$command"
+  fi
+}
 
 # https://stackoverflow.com/questions/7665/how-to-resolve-symbolic-links-in-a-shell-script
 function resolve_symlink() {
@@ -156,6 +168,37 @@ if [ -x /usr/bin/dircolors ]; then
     alias egrep='egrep --color=auto'
 fi
 
+function fnegrep() {
+  sterm="${1:-}"
+  filename="${2:-}"
+  if [ -n "$sterm" ] && [ -f "$filename" ]; then 
+    out=$(egrep -n "$sterm" "$filename" 2> /dev/null)
+    if [ $? -eq 0 ]; then 
+      split -a -F'\n' "$out"
+      grep_lines=( "${split_array[@]}" )
+      failures=0 # seems unnecessary, but just in case
+      for line in "${grep_lines[@]}"; do 
+        printf "%20s %s\n" "$filename" "$line"
+        if [ $? -gt 0 ]; then 
+          ((failures++))
+        fi
+      done 
+      return $failures
+    else  # if grep $? -eq 0
+      return $?
+    fi # endif grep ?$
+  fi # endif -n sterm -f filename
+  return 1
+}
+
+function dgrep() {
+  find "$D" -maxdepth 1 -exec bash -c "fnegrep ${1:-} {}" \;
+  if gt $? 0; then 
+    return 1
+  fi
+  return 0
+}
+
 # colored GCC warnings and errors
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
@@ -175,49 +218,20 @@ alias l='ls -CF'
 # problem it's intended to solve, so it's mostly here as a reminder.
 PRINTFDASH='\x2D'
 
-# breadcrumbs... for (relatively?) tearfree cross platform setup:
-function powerline_bootstrap() {
-  if ! type pipx >/dev/null 2>&1; then
-    if ! [ -n "${p3}" ]; then
-      if ! p3=$(type -p python3); then
-        echo "python3 doesn't seem to be in \$PATH..."
-        # TODO: finish
-      fi
-    fi
-    pipx install powerline-status
-    mkdir -p .local/share/powerline
-		if [ -z "${psh}" ]; then
-      if ! psh=$(find $(pipx list |head -n1 |awk '{print$NF}') -name "powerline.sh" 2> /dev/null |grep "bash"); then
-			  se "can't find powerline.sh, assign psh= and run again"
-        return 1
-			fi
-		fi
-
-    ln -is "${psh}"	$HOME/.local/share/powerline/
-  else
-    >&2 printf "Would be less painful with pipx."
-    >&2 printf "  on debian based systems, try sudo apt install pipx"
-    >&2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
-    >&2 printf "Or something, you know the deal."
-  fi
-}
-
 # Powerline
 function powerline_init() {
-  powerline-daemon -q
-  declare -x POWERLINE_BASH_CONTINUATION=1
-  declare -x POWERLINE_BASH_SELECT=1
-  declare -x POWERLINE_PROMPT="user_info last_status scm python_venv ruby cwd"
-  declare -x POWERLINE_PADDING=1
-  declare -x POWERLINE_COMPACT=0
-  declare -x PS1="$(powerline shell left)"
-  source $HOME/.local/share/powerline/powerline.sh
+  export PRE_POWERLINE="$PS1"
+  if pld=$(type -p powerline-daemon); then 
+    $pld -q
+    declare -x POWERLINE_BASH_CONTINUATION=1
+    declare -x POWERLINE_BASH_SELECT=1
+    declare -x POWERLINE_PROMPT="user_info last_status scm python_venv ruby cwd"
+    declare -x POWERLINE_PADDING=1
+    declare -x POWERLINE_COMPACT=0
+    declare -x PS1="$(powerline shell left)"
+    source $HOME/.local/share/powerline/powerline.sh
+  fi
 }
-
-function _update_ps1() {
-   export orig_ps1="$(~/powerline-shell.py $? 2> /dev/null)"
-}
-export PROMPT_COMMAND="_update_ps1"
 
 function powerline_disable() {
   export USE_POWERLINE=false
@@ -251,10 +265,27 @@ function unsetxdebug() {
   powerline_init
 }
 
-if [ -z "${DEBUG}" ] || ! $DEBUG; then
-  if declare -f powerline_init > /dev/null; then
-    powerline_init
+function history_rm_range() {
+    start=$1
+    end=$2
+    count=$(( end - start ))
+    while [ $count -ge 0 ] ; do
+        history -d $start
+        ((count--))
+    done
+}
+
+function history_rm_last() {
+  if history_rm_range -2 -1; then 
+    return 0
   fi
+  return 1
+}
+
+if [ -z "${DEBUG}" ] || ! $DEBUG; then
+ if declare -f powerline_init > /dev/null; then
+   powerline_init
+ fi
 fi
 
 function setcompletion() {
@@ -309,6 +340,15 @@ alias sutil="source $D/util.sh"
 alias vutil="vim $D/util.sh && sutil"
 alias sex="source $D/existence.sh" # heh
 alias vex="vim $D/existence && sex"
+alias mrsync="rsync $RSYNCOPTS"
 
-# convenient regex to use with -v when grepping across many files
+## convenient regex to use with -v when grepping across many files
 export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
+
+if [ -f "$HOME/.localrc" ]; then 
+  source "$HOME/.localrc"
+fi
+
+if ! is_function "util_env_load"; then
+  source $D/util.sh
+fi

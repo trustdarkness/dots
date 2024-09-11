@@ -25,4 +25,6 @@ fi
 
 if [[ $(uname) == "Darwin" ]]; then 
   source "$D/macprofile.sh"
+elif [[ "$DESKTOP_SESSION" == "plasma" ]]; then 
+  source "$D/kutil.sh"
 fi

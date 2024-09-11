@@ -7,7 +7,6 @@ if ! [[ "${PATH}" =~ .*.pathsource.* ]]; then
 fi
 
 HOMEBREW_NO_INSTALL_FROM_API=1 
-export EDITOR=vim
 
 # D is the path to this directory, usually on my systems, should be
 # $HOME/src/github/dots, but if not set, some things not happy
@@ -26,21 +25,26 @@ MODERN_BASH="4.3"
 # more date formats that don't seem to be mac specific in util.sh
 MACFILEINFODATEFMT="%m/%d/%Y %T"
 MACOS_LOG_DATEFMT="%Y-%m-%d" # used by the "log" command
+MACOS_LOG_TSFMT="$MACOS_LOG_DATEFMT %H:%M:%S"
+
+APP_REGEX='.*.app'
+APP_IN_APPLICATIONS_FOLDER_REGEX='^/Applications/.*.app'
 
 # FSDATEFMT and FSTSFMT in util.sh
 function fsdate_to_logfmt {
   to_convert="${1:-}"
-  date -f "${FSDATEFMT}" "${to_convert}" +"${MACOS_LOG_DATEFMT}"
+  date -jf "${FSDATEFMT}" "${to_convert}" +"${MACOS_LOG_DATEFMT}"
 }
 
 function fsts_to_logfmt {
   to_convert="${1:-}"
-  date -f "${FSTSFMT}" "${to_convert}" +"${MACOS_LOG_DATEFMT}"
+  date -jf "${FSTSFMT}" "${to_convert}" +"${MACOS_LOG_TSFMT}"
 }
 
 alias bi="bellicose install"
 alias bvi="bellicose -v install"
 alias bSi="bellicose -S install"
+alias bSvi="bellicose -Sv install"
 alias bu="bellicose unarchive"
 bRi() { bellicose -R "${1:-}" install; }
 bRu() { bellicose -R "${1:-}" unarchive; }
@@ -102,7 +106,7 @@ alias du1="du -h -d 1"
 alias reboot_recovery="sudo /usr/sbin/nvram internet-recovery-mode=RecoveryModeDisk && sudo reboot"
 alias reboot_recoveryi="sudo nvram internet-recovery-mode=RecoveryModeNetwork && sudo reboot"
 # untested; https://apple.stackexchange.com/questions/367336/can-i-initiate-a-macos-restart-to-recovery-mode-solely-from-the-command-line
-alias reboot_recovery="sudo nvram 'recovery-boot-mode=unused' && sudo reboot"
+# alias reboot_recovery="sudo nvram 'recovery-boot-mode=unused' && sudo reboot"
 
 # use at your own risk
 alias uncodesign="codesign -f -s -"
@@ -139,15 +143,10 @@ function cddph() {
   cd "$DPHELPERS" 
   source "$DPHELPERS/lib/bash/lib_dphelpers.sh" 
   source "$DPHELPERS/lib/bash/lib_plugins.sh"
+  source "venv/bin/activate"
+  return 0
 }
 export -f cddph
-
-APP_FOLDERS=( 
-  "/Applications" 
-  "/Volumes/Trantor/Applications" 
-  "/System/Applications"
-  "$HOME/Applications"
-)
 
 # for functions that need to operate on the root filesystem when
 # its not root (such as when working under the conditions of 
@@ -367,6 +366,33 @@ function can_i_write() {
   return 1
 }
 
+function trashZeros() {
+  files="$(ls -alh . )"
+  ctr=0
+  declare -a to_trash
+  for fileln in $(echo "$files"); do 
+    echo "$fileln" | awk '{print$5}' | grep 0B > /dev/null 2>&1
+    if [ $? -eq 0 ]; then 
+      to_trash+=( $ctr )
+    fi
+    ((ctr++))
+  done
+  ctr=0
+  for fileln in $(echo "$files"); do
+    if ! is_function "in_array"; then 
+      util_env_load -f 
+    fi 
+    if in_array "$ctr" "to_trash"; then 
+      filename="$(echo \"$fileln\" |awk '{print$9}')"
+      if [ -f "$filename" ] && ! [ -L "$filename" ]; then 
+        se "$filename is zero bytes, trashing"
+        trash "$filename"
+      fi
+    fi
+  done
+  return 0
+}
+
 # uses find to determine if the current user has given permissions
 # recursively below the provided directory
 # Args: 
@@ -442,7 +468,9 @@ function sudo_only_commands  {
 # writes AppleShowAllFiles true to com.apple.finder 
 function showHidden {
   writeAndKill() {
-    defaults write com.apple.finder AppleShowAllFiles true
+    defaults write com.apple.Finder AppleShowAllFiles -bool true
+    defaults write com.apple.finder AppleShowAllFiles TRUE
+    defaults write NSGlobalDomain AppleShowAllExtensions -bool true
     killall Finder
   }
  if isShown=$(defaults read com.apple.finder AppleShowAllFiles > /dev/null 2>&1); then
@@ -631,16 +659,30 @@ function ispackage() {
 # preferred format for shipping code.   An app bundle is a directory with
 # at minimum the contents Contents/MacOS/${appexename}
 # Args: path to application to verify it fits the definition.
-# returns 0 if app, 1 otherwise.
+# returns 0 if app, 
+# 1 if not a mach0 bundle
+# 2 if malformed filename (not .*.app)
+# 3 if both of above
+# 4 if mach0 bundle but not an "app bundle"
+# 6 if not an app bundle and malformed name
 function isapp() {
-  bundledir="${1:?Please provide full path to .app file}"
+  local failures=0
+  type=$(machO_bundle_type "${1:-}") 
+  if [ $? -gt 0 ]; then ((failures++)); fi # if mach0_bundle_type fails, not an app
+  grep $APP_REGEX "${1:-}" > /dev/null 2>&1
+  if [ $? -gt 0 ]; then ((failures+2)); fi
+  if ! string_contains "app bundle" "${type}"; then ((failures+4)); fi
+  return $failures
+}
+
+function machO_bundle_type() {
+  bundledir="${1:?Please provide full path to a bundle or .app file}"
   if machO=$(stat "${bundledir}/Contents/MacOS"); then
     confirmed_machO_bundle=$(codesign_get "${bundledir}" \
       |grep "Mach-O"|grep "bundle"|awk -F'=' '{print$2}')
     # redundant, but handles return readably
     grep "bundle" <<< "${confirmed_machO_bundle}"
     if [ $? -eq 0 ]; then 
-      se "is ${confirmed_machO}"
       return 0
     fi
   fi
@@ -702,6 +744,37 @@ function isapplication() {
   return 1
 }
 
+function cache_init_application_folders() {
+  appfolder_cache="$UTILSHCACHE/ApplicationFolders"
+  if [ -z "$UTILSHCACHE" ]; then 
+    export UTILSHCACHE="$CACHE/com.trustdarkness.bashutil"
+    mkdir -p "$UTILSHCACHE"
+  fi
+  load_into_env() {
+    declare -ga APPFOLDERS
+    for folder in $(cat "$appfolder_cache"); do 
+      APPFOLDERS+=( "$folder" )
+    done
+    export APPFOLDERS
+    return 0
+  }
+  init() {
+    find / -name 'Applications' 2> /dev/null > "$appfolder_cache"
+  }
+  if [ -f "$appfolder_cache" ]; then 
+    if [[ "${1:-}" == "-r" ]]; then 
+      rm -f "$appfolder_cache"
+    else
+      load_into_env
+      return 0
+    fi
+  fi
+  init
+  load_into_env
+  return $?
+}
+
+
 # Using definition of app from isapp, search APP_FOLDERS for an app that 
 # the search term globs to.  TODO: consider replacing this with 
 # something more robust or comprehensive using info from launchctl
@@ -710,8 +783,11 @@ function isapplication() {
 function findapp() {
   local st="${1:-}"
   found=()
-  
-  for folder in "${APP_FOLDERS[@]}"; do 
+  if [ -z "${APPFOLDERS[*]}" ]; then
+    se "Initializing app folder cache, please hold..." 
+    cache_init_application_folders
+  fi
+  for folder in "${APPFOLDERS[@]}"; do 
     while IFS= read -r -d $'\0'; do
       found+=("$REPLY") # REPLY is the default
     done < <(find "${folder}" -depth 1 -iname "*${st}*" -regex '.*.app$' -print0 2> /dev/null)
@@ -778,7 +854,7 @@ function gatekeeper_disable_app() {
 # args: App name
 # returns retcode from spctl
 function gatekeeper_disable_known_app() {
-  sudo spctl --add --label 'DeniedApps' ""${1:-}""
+  sudo spctl --add --label 'DeniedApps' "${1:-}"
 }
 
 # Removes the DeniedApps label from a given app, such that when gatekeeper 
@@ -786,7 +862,7 @@ function gatekeeper_disable_known_app() {
 # args: App name
 # returns retcode from spctl
 function gatekeeper_enable_known_app() {
-  sudo spctl --remove label 'DeniedApps' '"${1:-}"'
+  sudo spctl --remove label 'DeniedApps' "${1:-}"
 }
 
 # Attempts using gatekeeper against a list of services to add the DeniedApps
@@ -959,15 +1035,45 @@ function gatekeeper_list_rules() {
 
 # returns 0 if $1 is a path to a VST, VST3, or Component 
 # audio plugin (based on a regex, does not look to see if
-# its in a known location), 1 otherwise
+# its in a known location), 
+# 10 if not a machO bundle
+# 20 if a bundle but also an app
+# 30 if malformed filename (grep retcode printed to stderr)
+# 40 if not a dir
 function is_audio_plugin() {
-  file="${1:-}"
-  if [ -d "${file}" ]; then
-    grep -E "${PLUGIN_EREGEX}" <<< "${file}" > /dev/null
-    return $?
+  totest="${1:-}"
+  err_not_a_dir="The path provided is not a dir, so can't be a bundle."
+  err_is_an_app="The path provided appears to be an app, not a plugin bundle."
+  err_machO="Audio plugins should be folders (Mach-O bundles)"
+  err_malformed_name="Didn't match our expected naming (.*.vst, .*.vst3 .*.component). grep returned %d"
+  warn_not_in_expected_plugin_location="provided plugin is not in expected locations for audio software to find it"
+  if [ -d "${totest}" ]; then
+    type=$(machO_bundle_type "${totest}")
+    if [ $? -gt 0 ]; then 
+      se "$err_machO"
+      return 10
+    fi
+    if string_contains "app" "${type}"; then 
+      se "$err_is_an_app" 
+      return 20
+    fi
+    grep -E "${PLUGIN_EREGEX}" <<< "${totest}" > /dev/null 2>&1
+    ret=$?
+    if [ $ret -gt 0 ]; then 
+      se "$err_malformed_name" $ret
+      return 30
+    fi
   else
-    echo "Audio plugins should be folders (Mach-O bundles)"
-    return 1
+    se "$err_not_a_dir"
+    return 40
+  fi
+  if [[ "$totest" == */* ]]; then # is a path
+    if [[ "$totest" != *Library/Audio/Plug-Ins* ]]; then 
+      se "$warn_not_in_expected_plugin_location"
+    fi
+  fi
+  if [[ "${type}" =~ ^bundle.* ]]; then 
+    return 0
   fi
 }
 
@@ -1126,8 +1232,11 @@ service () {
     unset -f service ssr
     source "$D/macservices.sh"
   fi
-  service "$@"
-  return $?
+  if _service_arguments_validate $@; then 
+    service $@
+    return $?
+  fi
+  return 1
 }
 
 ssr() {
@@ -1135,7 +1244,14 @@ ssr() {
     unset -f ssr service
     source "$D/macservices.sh"
   fi
-  ssr $D
+  if string_contains "${1:-}" "$(service_list)"; then 
+    ssr $@
+    return $?
+  else
+    se "ssr takes a service as an argument using the naming"
+    se "convention shown in the last column of launchctl list"
+    return 1
+  fi
 }
 
 # Kills all apps and gives the user a fresh session without
@@ -1260,8 +1376,23 @@ function mount_efi() {
   return $?
 }
 
+# bslift, like lift yourself up by your own bootstraps
+function bslift() {
+  if undefined "mac_bootstrap"; then 
+    source "$D/bootstraps.sh"
+  else
+    # if we've sourced bootstraps already and are calling this, lets clear 
+    # function definitions explicitly from the namespace so we're sure 
+    # we're getting the updated code
+    for name in $(function_finder "$D/bootstraps.sh"); do 
+      unset -f "$name"
+    done
+    source "$D/bootstraps.sh"
+  fi
+}
+
 # https://stackoverflow.com/questions/54995983/how-to-detect-availability-of-gui-in-bash-shell
-check_macos_gui() {
+function check_macos_gui() (
   command -v swift >/dev/null && swift <(cat <<"EOF"
 import Security
 var attrs = SessionAttributeBits(rawValue:0)
@@ -1269,7 +1400,8 @@ let result = SessionGetInfo(callerSecuritySession, nil, &attrs)
 exit((result == 0 && attrs.contains(.sessionHasGraphicAccess)) ? 0 : 1)
 EOF
 )
-}
+)
+
 
 macutilsh_in_env=true
 if [[ $(uname -s) == "Darwin" ]]; then # because, who knows?

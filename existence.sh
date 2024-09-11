@@ -125,8 +125,8 @@ function exists() {
   local nameerror
   printf -v nameerror "$N" 1
   local name="${1?$nameerror}"
-  if is_declared "$name"; then return 0; fi
-  if type -p "$name"; then return 0; fi
+  if is_declared "$name" > /dev/null 2>&1; then return 0; fi
+  if type -p "$name" > /dev/null 2>&1; then return 0; fi
   # above should cover everything(ish), but just in case
   if [ -z "$name" ]; then 
     return 1
@@ -142,6 +142,27 @@ function exists() {
     fi
   fi
   return 1
+}
+
+function isset() {
+  var="${1:-}"
+  if [ ${#var} -eq 0 ]; then 
+    return 1
+  elif [ -n "${1:-}" ]; then 
+    return 0
+  fi
+  return 1
+}
+
+function isntset() {
+  if [ -z "${1:-}" ]; then 
+    return 0
+  fi
+  return 1
+}
+
+function empty() { # for all you androids who can't use contractions
+  isntset "${1:-}"
 }
 
 # excessive use of negations makes code messy and readability 
