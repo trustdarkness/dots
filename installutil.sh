@@ -118,7 +118,7 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
     pattern=$1
     sudo apt install $(printf '*%s*' "$pattern")
   }
-  export -f saig
+
   function sarg() {
     pattern=$1
     sudo apt remove $(printf '*%s*' "$pattern")
@@ -129,7 +129,13 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
       sudo apt purge $(printf '*%s*' "$term")
     done
   }
-  export -f sapg
+
+ function sfr() {
+   for pkg in $@; do
+     sudo dpkg --remove --force-remove-reinstreq $pkg
+   done
+ }
+
   function sasi {
     pattern=$1
     sudo aptitude search $pattern|grep ^i
