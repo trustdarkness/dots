@@ -213,6 +213,7 @@ else
 fi
 alias la='ls -A'
 alias l='ls -CF'
+alias tac='tail -r'
 
 # theres not really an easy way to use this in a substitution to solve the
 # problem it's intended to solve, so it's mostly here as a reminder.
@@ -344,6 +345,9 @@ alias mrsync="rsync $RSYNCOPTS"
 
 ## convenient regex to use with -v when grepping across many files
 export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
+
+GRC_ALIASES=true
+[[ -s "/etc/profile.d/grc.sh" ]] && source /etc/grc.sh
 
 if [ -f "$HOME/.localrc" ]; then 
   source "$HOME/.localrc"
