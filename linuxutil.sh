@@ -108,12 +108,12 @@ function sublist_xdg_data_dirs() {
 # if firewalld is installed, give us some helper funcs 
 # for it.  if this gets any longer, it should move to its
 # own, loaded on demand, helper library
-fwd=$(type -p firewall-cmd)
+FIREWALLD=$(type -p firewall-cmd)
 if [ -n "$FIREWALLD" ]; then
   function sfwp () {
     local input="${1:-}"
     if [ -n "${input}" ]; then 
-      if [[ "${input}" =~ '^[0-9]*\/tcp|udp' ]]; then
+      if [[ "${input}" =~ ^[0-9]*\/tcp|udp ]]; then
         sudo $fwd --add-port "${input}" --zone public --permanent
         sudo $fwd --reload
         ssr firewalld
@@ -127,7 +127,7 @@ if [ -n "$FIREWALLD" ]; then
   function sfwrm () {
     local input="${1:-}"
     if [ -n "${input}" ]; then 
-      if [[ "${input}" =~ '^[0-9]*\/tcp|udp' ]]; then
+      if [[ "${input}" =~ ^[0-9]*\/tcp|udp ]]; then
         sudo firewall-cmd --remove-port $1 --zone public --permanent
         sudo firewall-cmd --reload 
         ssr firewalld

@@ -1134,6 +1134,14 @@ function ghc () {
   cd $f
 }
 
+function gitcp() {
+  git commit -m"$@" && git push
+}
+
+function gits() {
+  git status
+}
+
 function is_my_git_repo() {
   local dir="${1:-}"
   if [ -d "$(pwd)/${dir}" ]; then 
