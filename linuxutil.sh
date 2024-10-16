@@ -177,12 +177,105 @@ pola32winetricks() {
 
 function p64wine() {
   export WINEPREFIX="/home/mt/.local/share/wineprefixes/p64"
-  export Winearch=win64
+  export WINEARCH=win64
   wine64 $@
 }
 
 function p64winetricks() {
   WINEPREFIX="/home/mt/.local/share/wineprefixes/p64" WINEARCH=win64 winetricks $@
+}
+
+function wswineinstall() {
+  WINEPREFIX="/home/mt/.wine-sucks/drive_c/"
+  # this is stupid
+  DRIVEC="/home/mt/.wine-sucks/drive_c/drive_c/"
+  TMP="/home/mt/.wine-sucks/drive_c/drive_c/users/mt/Temp/"
+  WINEARCH="win64"
+  WINEBIN=$(type -p wine64)
+  no_cd() {
+    se "could not cd to drive_c : $DRIVEC"
+    return 1
+  }
+  swd="$(pwd)"
+  cd "$DRIVEC" || no_cd
+  if [ -f "$1" ]; then
+    se "copying $1 to $TMP for runtime consistency" 
+    cp "$1" "$TMP"
+    bn_src=$(basename "$1")
+    printf -v path_dst "%s/%s" "$TMP" "$bn_src"
+    if ! [ -f "$path_dst" ]; then 
+      se "copy failed, executing original command as entered"
+      se "WINEPREFIX=\"$WINEPFX\" WINEARCH=\"$WINEARCH\" $WINEBIN $@"
+      se "..."
+      $WINEBIN $@
+      retval="$?"
+    else
+      shift
+      WINEPREFIX="/home/mt/.wine-sucks/drive_c/" WINEARCH=win64 $WINEBIN "$path_dst" $@
+      retval="$?"
+    fi
+  else
+    se "no src bin, executing original command as entered"
+    se "WINEPREFIX=\"$WINEPFX\" WINEARCH=\"$WINEARCH\" $WINEBIN $@"
+    se "..."
+    $WINEBIN $@
+    retval="$?"
+  fi
+  cd "$swd" || return "$retval"
+  return "$retval"
+}
+
+function wswinetricks() {
+  WINEPREFIX="/home/mt/.wine-sucks/drive_c/" WINEARCH=win64 winetricks $@
+}
+
+function fontsinstall() {
+  fontinstalled() {
+    basename="${1:-}"
+    # TODO: check system font dirs as well
+    num_found=$(find "$HOME/.fonts" -iname "*$basename" | wc -l)
+    if gt "$num_found" 0; then 
+      return 0
+    fi
+    return 1
+  }
+
+  install_ctr=0
+  exists_ctr=0
+  error_ctr=0
+  declare -a foundfonts
+  while IFS= read -r -d $'\0'; do
+    foundfonts+=("$REPLY") # REPLY is the default
+  done < <(find . -regextype posix-egrep -regex '(.*.otf|.*.ttf)' -print0 2> /dev/null)
+  for fontpath in "${foundfonts[@]}"; do 
+    bn=$(basename "$fontpath")
+    if ! fontinstalled "$bn"; then
+      if cp -r "$fontpath" "$HOME/.fonts"; then 
+        se "installed $bn to ~/.fonts"
+        ((install_ctr++))
+      else
+        se "error $? installing $bn to ~/.fonts"
+        ((error_ctr++))
+      fi
+    else
+      ((exists_ctr++))
+    fi
+  done
+  bold=$(tput bold)
+  normal=$(tput sgr0)
+  >&2 printf "${bold}Summary -- ${normal}"
+  if gt "$install_ctr" 0; then 
+    >&2 printf "new fonts installed: ${bold}%d ${normal}" "$install_ctr"   
+  fi
+  if gt "$exists_ctr" 0; then 
+    >&2 printf "skipped (already installed): ${bold}%d ${normal}" "$exists_ctr"
+  fi
+  if gt "$error_ctr" 0; then
+    >&2 printf "failed: ${bold}%d ${normal}\n" "$error_ctr"
+    return $error_ctr
+  fi  
+  >&2 printf "\n"
+  return 0
 }
 
 # some useful aliases for kde plasma
