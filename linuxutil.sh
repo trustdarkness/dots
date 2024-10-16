@@ -229,7 +229,7 @@ function wswinetricks() {
   WINEPREFIX="/home/mt/.wine-sucks/drive_c/" WINEARCH=win64 winetricks $@
 }
 
-function fontsinstall() {
+function fontsinstalluser() {
   fontinstalled() {
     basename="${1:-}"
     # TODO: check system font dirs as well
