@@ -57,7 +57,8 @@ function restore() (
         fi
         new="$BK/$LOC"
         old="$HOME/$LOC"
-        confirm_yes "restoring $new to $old... ok?"
+        old_parent=$(dirname "$old")
+        confirm_yes "restoring $new to $old_parent... ok?"
         mkdir -p $HOME/.bak
         if [ -d "$old" ]; then 
           echo "Backing up existing $old to .bak"
@@ -65,7 +66,7 @@ function restore() (
             return $?
           fi
         fi
-        cp -vr "$new" "$HOME/"
+        cp -vr "$new" "$old_parent"
         return $?
       else
         se "Didn't find a backup directory at $BK. exiting."
@@ -118,6 +119,15 @@ function restore() (
   done
   set -- ${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}
   failures=0
+
+  if ! declare -F "confirm_yes" > /dev/null 2>&1; then 
+    source "$D/user_prompts.sh"
+  fi
+  if [ -z "$OLDHOME" ]; then 
+    echo "Please export OLDHOME=/path/to/pold/homedir"
+    return 1
+  fi
+
   for loc in "${POSITIONAL_ARGS[@]}"; do
     if ! do_restore "${loc}"; then 
         ((failures++))
