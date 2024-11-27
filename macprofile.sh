@@ -22,3 +22,4 @@ if [ -n "$relaunch" ] && [ "$relaunch" -ne 0 ]; then
 fi
   
 launchctl setenv MACPROFILED true
+  

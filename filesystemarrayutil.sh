@@ -151,6 +151,12 @@ function components_to_path() {
   printf "%s" "${path#/}"
 }
 
+# https://serverfault.com/questions/348482/how-to-remove-invalid-characters-from-filenames
+function string_to_safe_filename() {
+  echo "${1:-}" | sed -e 's/[^A-Za-z0-9._-]/_/g'
+  return 0
+}
+
 # Takes the name of an array (not the array itself) as arg1
 # and echos a stringified version back to the console, optionally 
 # separating elements with Arg2 and replacing spaces with Arg3
@@ -171,6 +177,17 @@ function stringify() {
   echo "${array[*]// /${separator}}"
 }
 
+function quoted_stringify() {
+  name=$1[@]
+  array=("${!name}")
+  out=""
+  for el in "${array[@]}"; do 
+    printf -v out '%s "%s"' "$out" "$el"
+  done
+  echo "$out"
+  return 0
+}
+
 most_recent_in_dir() {
   local dir="${1:-.}"
   # where field is any 1 indexed numbered column returned by ls -l
@@ -183,9 +200,8 @@ most_recent_in_dir() {
     se "${explainer}"
   fi
   printf -v awkprint '{print$%s}' ${field}
-  most_recent=$(ls -Art "${dir}"| tail -n 1 )
-  field=$(ls -l "${dir}/${most_recent}" |awk "${awkprint}")
-  echo "${field}"
+  most_recent=$(ls -Alrt "${dir}"| tail -n 1 |awk "${awkprint}")
+  echo "${most_recent}"
 }
 
 most_recent_char_replaced_separated() {

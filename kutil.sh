@@ -1,3 +1,8 @@
+#!/usr/bin/env bash
+#
+#QT_STYLE_OVERRIDE=
+#QT_QPA_PLATFORMTHEME=qt5ct
+
 function klogout() {
   shutdown_confirm=0 # 0 no, 1 yes, -1 default
   shutdown_type=0 # 0 logout, 1 reboot, 2 halt, 3 logout, -1 default
