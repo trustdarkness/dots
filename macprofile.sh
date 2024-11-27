@@ -6,25 +6,19 @@ alias killupdates='defaults write com.apple.systempreferences DidShowPrefBundleI
 alias killbubbles="defaults write com.apple.systempreferences AttentionPrefBundleIDs 0 && killall Dock"
 
 # sometimes these defaults reads can be non-instant
-if [ -z $bubbleskilled ]; then
+bubbleskilled=$(launchctl getenv bubbleskilled)
+if [ -z "$bubbleskilled" ]; then
   se "checking for update and icloud warnings to clear..."
-  if gt $(defaults read com.apple.systempreferences AttentionPrefBundleIDs) 0; then
+  if gt "$(defaults read com.apple.systempreferences AttentionPrefBundleIDs)" 0; then
     killupdates
     killbubbles
-    export bubbleskilled=1
+    launchctl setenv bubbleskilled true
   fi
 fi
 
-
-# disables mouse acceleration which does not seem to play well with 
-# synergy or nomachine (maybe both, not sure)
-if [ -z $accelkilled ]; then
-  alias killaccel="defaults write -g com.apple.mouse.scaling -integer -1"
-  if ! lt $(defaults read -g com.apple.mouse.scaling) 0; then
-    killaccel
-    export accelkilled=1
-  fi
+relaunch=$(defaults read com.apple.loginwindow LoginwindowLaunchesRelaunchApps)
+if [ -n "$relaunch" ] && [ "$relaunch" -ne 0 ]; then
+  defaults write com.apple.loginwindow LoginwindowLaunchesRelaunchApps -bool false
 fi
-
-defaults write com.apple.loginwindow LoginwindowLaunchesRelaunchApps -bool false
   
+launchctl setenv MACPROFILED true
