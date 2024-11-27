@@ -528,6 +528,52 @@ function plists_containerized() {
   return 0
 }
 
+# Takes an array of plist files similar to above and backs up those
+# files to PREFS_DISABLED before deleting them.
+# on individual file failure, returns code from pref_reset,
+# otherwise 0
+function prefs_reset() {
+  prefs_arr_name=$1[@]
+  prefs=("${!prefs_arr_name}")
+  for file in "${prefs[@]}"; do 
+    pref_reset "${file}"
+  done
+  pkill Finder
+  return 0
+}
+
+# Takes a plist file, copies to PREFS_DISABLED, and deletes
+# returns any failure codes from mkdir -p or mv, otherwise 0
+# This runs using fakeroot, so when not messing with csrutil 
+# authenticated-root disable, FAKEROOT should be set to /
+function pref_reset() {
+  file="${1:-}"
+  if [ -f "${file}" ]; then
+    if [[ "${file}" =~ ^/Library ]]; then 
+      disabled_dir="${PREFS_DISABLED}/global/Library/$(dirname "${file}"|basename)"
+    elif [[ "${file}" =~ ^/System ]]; then 
+      disabled_dir="${PREFS_DISABLED}/System/Library/$(dirname "${file}"|basename)"
+    else
+      disabled_dir="${PREFS_DISABLED}"/$(dirname $(echo "${file}" |sed "s:$HOME/Library/::"))
+    fi
+    if ! mkdirret=$(mkdir -p "${disabled_dir}"); then 
+      se "mkdir -p \"${disabled_dir}\" returned ${ret}"
+      return ${mkdirret}
+    fi
+    if ! mvret=$(sudo mv "${file}" "${disabled_dir}"); then
+      se "mv \"${file}\" \"${disabled_dir}\" returned ${mvret}"
+      return ${mvret}
+    else
+      echo "${file} has been removed and services should no longer start."
+    fi
+  fi
+}
+
+# an example for above, runs pres reset on finder_prefs
+function finder_reset() {
+  prefs_reset finder_prefs
+}
+
 # https://github.com/drduh/macOS-Security-and-Privacy-Guide?tab=readme-ov-file#services
 function services_statuses() {
   find /var/db/com.apple.xpc.launchd/ -type f -print -exec defaults read {} \; 2>/dev/null

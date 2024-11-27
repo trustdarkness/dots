@@ -7,6 +7,7 @@ if ! [[ "${PATH}" =~ .*.pathsource.* ]]; then
 fi
 
 HOMEBREW_NO_INSTALL_FROM_API=1 
+export EDITOR=vim
 
 # D is the path to this directory, usually on my systems, should be
 # $HOME/src/github/dots, but if not set, some things not happy
@@ -51,28 +52,6 @@ bRu() { bellicose -R "${1:-}" unarchive; }
 bSRi() { bellicose -S -R "${1:-}" install; }
 _s="$HOME/Downloads/_staging"
 
-# its expected that all of these files will be sourced and in the env
-# ... kind of ridiculous and needs to be paired down
-BASH_PARENT_SOURCED=(
-  "$HOME/.profile"
-  "$HOME/.bash_profile"
-  "$HOME/.bashrc"
-  "$D/.globals" # usually symlinked at $HOME/.globals
-  "$D/util.sh"
-  "$D/macutil.sh"
-  "$D/.user_prompts.sh"  
-)
-
-# these are sourced on demand, but generally used sooner or latrer
-BASH_SOURCE_ON_DEMAND=(
-  "$D/installutil.sh"
-  "$D/localback.sh"
-  "$D/appleservices.sh"
-  "$D/bellicose.sh" # bellicose is an executable and really be sourced anymore
-                    # though some functionality may move into installutil.sh
-                    # when bellicose gets its own repo
-)
-
 # for MacOS's zsh nag text
 BASH_SILENCE_DEPRECATION_WARNING=1
 
@@ -83,30 +62,18 @@ OLDHOME="/Volumes/federation/Users/mt"
 # and backup plist and other files before removing them
 PREFS_DISABLED="$HOME/Library/disabled"
 
-# for pref_change (maybe currently non-functional)
-DEFAULT_CHANGE_OPTIONS=( "disable" "trash" )
-DEFAULT_CHANGE="disable"
-
 FONTDIRS=(
   "/Library/Fonts"
   "$HOME/Library/Fonts"
   "/System/Library/Fonts"
 )
 
-# we maintain a local cache of brew info --json --eval-all in a file
-# in this directory with the format eval-all.%Y&m&d.json
-BREW_SEARCH="$HOME/.local/share/brew-search"
-
-# for convenience and because the commands are different than GNU
-alias du0="du -h -d 0"
-alias du1="du -h -d 1"
-
 # because I can never get the boot key combos, or its a bluetooth keyboard
-# or I want to feel like an adult
+# or I want to feel like an adult (Intel Only)
 alias reboot_recovery="sudo /usr/sbin/nvram internet-recovery-mode=RecoveryModeDisk && sudo reboot"
 alias reboot_recoveryi="sudo nvram internet-recovery-mode=RecoveryModeNetwork && sudo reboot"
 # untested; https://apple.stackexchange.com/questions/367336/can-i-initiate-a-macos-restart-to-recovery-mode-solely-from-the-command-line
-# alias reboot_recovery="sudo nvram 'recovery-boot-mode=unused' && sudo reboot"
+alias reboot_recovery="sudo nvram 'recovery-boot-mode=unused' && sudo reboot"
 
 # use at your own risk
 alias uncodesign="codesign -f -s -"
@@ -130,11 +97,11 @@ AUEXT='component'
 VST3REGEX=".*.${VST3EXT}$"
 VSTREGEX=".*.${VSTEXT}$"
 AUREGEX=".*.${AUEXT}$"
-REGEXES=( "${VST3REGEX}" "${VSTREGEX}" "${AUREGEX}" )
+PLUGINREGEXES=( "${VST3REGEX}" "${VSTREGEX}" "${AUREGEX}" )
 
 # extended regex seems a bit more reliable for or groups
 # requires egrep, find -E, grep -E, etc
-printf -v PLUGIN_EREGEX '(%s|%s|%s)' "${REGEXES[@]}"
+printf -v PLUGIN_EREGEX '(%s|%s|%s)' "${PLUGINREGEXES[@]}"
 
 # setup the environment and make functions available from dpHelpers
 function cddph() {
@@ -148,11 +115,12 @@ function cddph() {
 }
 export -f cddph
 
-# for functions that need to operate on the root filesystem when
-# its not root (such as when working under the conditions of 
-# csrutil authenticated-root disable), the following global will
-# be used in place of root.
-FAKEROOT=$HOME/rootfs
+APP_FOLDERS=( 
+  "/Applications" 
+  "/Volumes/Trantor/Applications" 
+  "/System/Applications"
+  "$HOME/Applications"
+)
 
 function load_services() {
   source "$D/macservices.sh"
@@ -192,78 +160,9 @@ function fc-list() {
   done
 }
 
-# Takes an array of plist files similar to above and backs up those
-# files to PREFS_DISABLED before deleting them.
-# on individual file failure, returns code from pref_reset,
-# otherwise 0
-function prefs_reset() {
-  prefs_arr_name=$1[@]
-  prefs=("${!prefs_arr_name}")
-  for file in "${prefs[@]}"; do 
-    pref_reset "${file}"
-  done
-  pkill Finder
-  return 0
-}
-
-# Takes a plist file, copies to PREFS_DISABLED, and deletes
-# returns any failure codes from mkdir -p or mv, otherwise 0
-# This runs using fakeroot, so when not messing with csrutil 
-# authenticated-root disable, FAKEROOT should be set to /
-function pref_reset() {
-  file="${1:-}"
-  if [ -f "${file}" ]; then
-    if [[ "${file}" =~ ^/Library ]]; then 
-      disabled_dir="${PREFS_DISABLED}/global/Library/$(dirname "${file}"|basename)"
-    elif [[ "${file}" =~ ^/System ]]; then 
-      disabled_dir="${PREFS_DISABLED}/System/Library/$(dirname "${file}"|basename)"
-    else
-      disabled_dir="${PREFS_DISABLED}"/$(dirname $(echo "${file}" |sed "s:$HOME/Library/::"))
-    fi
-    if ! mkdirret=$(mkdir -p "${disabled_dir}"); then 
-      se "mkdir -p \"${disabled_dir}\" returned ${ret}"
-      return ${mkdirret}
-    fi
-    if ! mvret=$(sudo mv "${file}" "${disabled_dir}"); then
-      se "mv \"${file}\" \"${disabled_dir}\" returned ${mvret}"
-      return ${mvret}
-    else
-      echo "${file} has been removed and services should no longer start."
-    fi
-  fi
-}
-
 # https://stackoverflow.com/questions/16375519/how-to-get-the-default-shell
 function getusershell() {
   dscl . -read ~/ UserShell | sed 's/UserShell: //'
-}
-
-# an example for above, runs pres reset on finder_prefs
-function finder_reset() {
-  prefs_reset finder_prefs
-}
-
-# Updates the locally stored brew --json --eval-all unconditionally
-function brew_update_cache() {
-  se "updating local cache..."
-  fsdate=$(date +$FSDATEFMT)
-  mkdir -p $BREW_SEARCH
-  brew info --json=v1 --eval-all > "$BREW_SEARCH/eval-all.$fsdate.json"
-}
-
-# searches brew using the local json cache (as opposed to brew search)
-# updating the cache if its > 7 days
-function brew_regex_search() {
-  regex="${1:-}"
-  current_cache=$(most_recent_in_dir $BREW_SEARCH)
-  parts=($(split $current_cache '.'))
-  cached_date="${parts[1]}"
-  if is_older_than_1_wk $cached_date; then 
-    brew_update_cache
-    current_cache=$(most_recent_in_dir $BREW_SEARCH)
-  fi
-  query=$(singlequote $(printf 'map(select(.name | test ("%s"))|.name)' "${regex}"))
-  cat $current_cache|jq "${query}"
 }
 
 # runs du, asking for sudo if needed for the specified dirs
@@ -347,18 +246,19 @@ function can_i_read() {
 # recursively below the provided directory
 # returns 0 if writeable, return code of can_i_do if not
 function can_i_write() {
-  if [ -d ""${1:-}"" ]; then 
-    whoowns=$(ls -alh "${1:-}"|head -n2|tail -n1|awk '{print$3}')
-    if [[ "${who}" == "$(whoami)" ]]; then
-      can_i_do "${1:-}" 200 1
+  dir="${1:-$(pwd)}"
+  if [ -d "$dir" ]; then 
+    whoowns=$(ls -alh "$dir"|head -n2|tail -n1|awk '{print$3}')
+    if [[ "${whoowns}" == "$(whoami)" ]]; then
+      can_i_do "$dir" 200 1
       return $?
     else
-      grpowns=$(ls -alh "${1:-}"|head -n2|tail -n1|awk '{print$4}')
+      grpowns=$(ls -alh "$dir"|head -n2|tail -n1|awk '{print$4}')
       if [[ "${grpowns}" == "$(whoami)" ]]; then
-        can_i_do "${1:-}" 020 1
+        can_i_do "$dir" 020 1
         return $?
       else
-        can_i_do "${1:-}" 002 1
+        can_i_do "$dir" 002 1
         return $?
       fi
     fi
@@ -411,12 +311,13 @@ function can_i_do() {
     local tempfin="/tmp/fin-${ts}"
     (
     echo $$ > "${temppid}"
+    printf -v dashmask "\x2D%d" "$mask"
     if is_int "${depth}"; then
-      find "${dir}" -depth "${depth}" -perm -555 2>&1 > "${tempfile}"
+      find "${dir}" -depth "${depth}" -perm "$dashmask" 2>&1 > "${tempfile}"
     elif [[ "${depth}" == "all" ]]; then 
-      find "${dir}" -perm -555 2>&1 > "${tempfile}"
+      find "${dir}" -perm "$dashmask" 2>&1 > "${tempfile}"
     else
-      >&2 printf "couldn't understand your second parameter, which should be "
+      >&2 printf "couldn't understand your third parameter, which should be "
       >&2 printf "depth, either an int or \"all\""
       return 1
     fi
@@ -468,9 +369,7 @@ function sudo_only_commands  {
 # writes AppleShowAllFiles true to com.apple.finder 
 function showHidden {
   writeAndKill() {
-    defaults write com.apple.Finder AppleShowAllFiles -bool true
-    defaults write com.apple.finder AppleShowAllFiles TRUE
-    defaults write NSGlobalDomain AppleShowAllExtensions -bool true
+    defaults write com.apple.finder AppleShowAllFiles true
     killall Finder
   }
  if isShown=$(defaults read com.apple.finder AppleShowAllFiles > /dev/null 2>&1); then
@@ -611,11 +510,11 @@ END
   fi
 }
 
-# Shows launchds logs since the last reboot
+# Shows launchds logs since the last reboot (LAST_DATEFMT defined in util.sh)
 function show_last_boot_logs() {
   last_reboot_lastfmt=$(last reboot |head -n1 |awk '{print$3 $4 $5 $6}')
-  last_reboot_logfmt=$(date -f +"$LAST_DATEFMT" -d "last_reboot_lastfmt" +"$MACOS_LOG_DATEFMT")
-  log show --predicate "processID == 0" --start $last_reboot_logfmt --debug
+  last_reboot_logfmt=$(date -jf +"$LAST_DATEFMT" -d "$last_reboot_lastfmt" +"$MACOS_LOG_DATEFMT")
+  log show --predicate "processID == 0" --start "$last_reboot_logfmt" --debug
 }
 
 # resets tdd dialogs for the given app
@@ -659,23 +558,13 @@ function ispackage() {
 # preferred format for shipping code.   An app bundle is a directory with
 # at minimum the contents Contents/MacOS/${appexename}
 # Args: path to application to verify it fits the definition.
-# returns 0 if app, 
-# 1 if not a mach0 bundle
-# 2 if malformed filename (not .*.app)
-# 3 if both of above
-# 4 if mach0 bundle but not an "app bundle"
-# 6 if not an app bundle and malformed name
+# returns 0 if app, 1 otherwise.
 function isapp() {
-  local failures=0
-  type=$(machO_bundle_type "${1:-}") 
-  if [ $? -gt 0 ]; then ((failures++)); fi # if mach0_bundle_type fails, not an app
-  grep $APP_REGEX "${1:-}" > /dev/null 2>&1
-  if [ $? -gt 0 ]; then ((failures+2)); fi
-  if ! string_contains "app bundle" "${type}"; then ((failures+4)); fi
-  return $failures
+  is_machO_bundle "${1:-}" # there must be a more complete heuristic than this
+  return $?
 }
 
-function machO_bundle_type() {
+function is_machO_bundle() {
   bundledir="${1:?Please provide full path to a bundle or .app file}"
   if machO=$(stat "${bundledir}/Contents/MacOS"); then
     confirmed_machO_bundle=$(codesign_get "${bundledir}" \
@@ -683,6 +572,7 @@ function machO_bundle_type() {
     # redundant, but handles return readably
     grep "bundle" <<< "${confirmed_machO_bundle}"
     if [ $? -eq 0 ]; then 
+      se "is ${confirmed_machO}"
       return 0
     fi
   fi
@@ -701,7 +591,7 @@ function isexe() {
     confirmed_machO_nobundle=$(codesign_get "${bundledir}" \
       |grep "Mach-O"|grep -v "bundle"|awk -F'=' '{print$2}')
     # redundant, but handles return readably
-    grep -v "bundle" <<< "${confirmed_macho_nobundle}"
+    grep -v "bundle" <<< "${confirmed_machO_nobundle}"
     if [ $? -eq 0 ]; then 
       se "is ${confirmed_machO}"
       return 0
@@ -709,7 +599,7 @@ function isexe() {
     mach_header=$(binmachheader "${exe}"| awk '{print $2 $5}') 
     gout=$(grep "EXECUTE" <<< "${mach_header}")
     gret=$?
-    echo "${mach_headers}"
+    echo "${mach_header}"
     return ${gret}
   fi
   return 1
@@ -744,37 +634,6 @@ function isapplication() {
   return 1
 }
 
-function cache_init_application_folders() {
-  appfolder_cache="$UTILSHCACHE/ApplicationFolders"
-  if [ -z "$UTILSHCACHE" ]; then 
-    export UTILSHCACHE="$CACHE/com.trustdarkness.bashutil"
-    mkdir -p "$UTILSHCACHE"
-  fi
-  load_into_env() {
-    declare -ga APPFOLDERS
-    for folder in $(cat "$appfolder_cache"); do 
-      APPFOLDERS+=( "$folder" )
-    done
-    export APPFOLDERS
-    return 0
-  }
-  init() {
-    find / -name 'Applications' 2> /dev/null > "$appfolder_cache"
-  }
-  if [ -f "$appfolder_cache" ]; then 
-    if [[ "${1:-}" == "-r" ]]; then 
-      rm -f "$appfolder_cache"
-    else
-      load_into_env
-      return 0
-    fi
-  fi
-  init
-  load_into_env
-  return $?
-}
-
-
 # Using definition of app from isapp, search APP_FOLDERS for an app that 
 # the search term globs to.  TODO: consider replacing this with 
 # something more robust or comprehensive using info from launchctl
@@ -783,11 +642,8 @@ function cache_init_application_folders() {
 function findapp() {
   local st="${1:-}"
   found=()
-  if [ -z "${APPFOLDERS[*]}" ]; then
-    se "Initializing app folder cache, please hold..." 
-    cache_init_application_folders
-  fi
-  for folder in "${APPFOLDERS[@]}"; do 
+  
+  for folder in "${APP_FOLDERS[@]}"; do 
     while IFS= read -r -d $'\0'; do
       found+=("$REPLY") # REPLY is the default
     done < <(find "${folder}" -depth 1 -iname "*${st}*" -regex '.*.app$' -print0 2> /dev/null)
@@ -904,7 +760,7 @@ function sipdisable() {
   if [ $? -gt 0 ]; then
     # unable to test this, I'm just being thorough
     internal=$(echo "${out}" | grep "Apple"|grep -i "internal" |grep -i "enabled")
-    if [ -n "${intnernal}" ]; then
+    if [ -n "${internal}" ]; then
       # https://github.com/SpaceinvaderOne/Macinabox/issues/77
       csrutil disable --no-internal
       return $?
@@ -1035,45 +891,20 @@ function gatekeeper_list_rules() {
 
 # returns 0 if $1 is a path to a VST, VST3, or Component 
 # audio plugin (based on a regex, does not look to see if
-# its in a known location), 
-# 10 if not a machO bundle
-# 20 if a bundle but also an app
-# 30 if malformed filename (grep retcode printed to stderr)
-# 40 if not a dir
+# its in a known location), 1 otherwise
 function is_audio_plugin() {
   totest="${1:-}"
-  err_not_a_dir="The path provided is not a dir, so can't be a bundle."
-  err_is_an_app="The path provided appears to be an app, not a plugin bundle."
   err_machO="Audio plugins should be folders (Mach-O bundles)"
-  err_malformed_name="Didn't match our expected naming (.*.vst, .*.vst3 .*.component). grep returned %d"
-  warn_not_in_expected_plugin_location="provided plugin is not in expected locations for audio software to find it"
   if [ -d "${totest}" ]; then
-    type=$(machO_bundle_type "${totest}")
-    if [ $? -gt 0 ]; then 
+    if ! is_machO_bundle "${totest}"; then 
       se "$err_machO"
-      return 10
+      return 1
     fi
-    if string_contains "app" "${type}"; then 
-      se "$err_is_an_app" 
-      return 20
-    fi
-    grep -E "${PLUGIN_EREGEX}" <<< "${totest}" > /dev/null 2>&1
-    ret=$?
-    if [ $ret -gt 0 ]; then 
-      se "$err_malformed_name" $ret
-      return 30
-    fi
+    grep -E "${PLUGIN_EREGEX}" <<< "${totest}" > /dev/null
+    return $?
   else
-    se "$err_not_a_dir"
-    return 40
-  fi
-  if [[ "$totest" == */* ]]; then # is a path
-    if [[ "$totest" != *Library/Audio/Plug-Ins* ]]; then 
-      se "$warn_not_in_expected_plugin_location"
-    fi
-  fi
-  if [[ "${type}" =~ ^bundle.* ]]; then 
-    return 0
+    se "$err_machO"
+    return 1
   fi
 }
 
@@ -1138,10 +969,17 @@ function pre_system_edit() {
   fi
 }
 
-# Simulates rebooting holding the option key --
+# (Intel only) Simulates rebooting holding the option key --
 # boots to the boot disk picker
 function boottostartoptions() {
   sudo /usr/sbin/nvram manufacturing-enter-picker=true
+  sudo reboot
+}
+
+# (Intel only) boots the system normally after having set nvram to
+# boot to the picker
+function bootnooptions() {
+  sudo /usr/sbin/nvram manufacturing-enter-picker=false
   sudo reboot
 }
 
@@ -1150,20 +988,13 @@ function reboot_target_disk_mode() {
   sudo reboot
 }
 
-# boots the system normally after having set nvram to
-# boot to the picker
-function boottostartupdisknooptions() {
-  sudo /usr/sbin/nvram manufacturing-enter-picker=false
-  sudo reboot
-}
-
 # Disables the spotlight metadata service
-function disable_mds() {
+function mds_disable() {
   sudo mdutil -a -i off
 }
 
 # enables the spotlight metadata service
-function enable_mds() {
+function mds_enable() {
   sudo mdutil -a -i on
 }
 
@@ -1232,11 +1063,8 @@ service () {
     unset -f service ssr
     source "$D/macservices.sh"
   fi
-  if _service_arguments_validate $@; then 
-    service $@
-    return $?
-  fi
-  return 1
+  service "$@"
+  return $?
 }
 
 ssr() {
@@ -1244,14 +1072,7 @@ ssr() {
     unset -f ssr service
     source "$D/macservices.sh"
   fi
-  if string_contains "${1:-}" "$(service_list)"; then 
-    ssr $@
-    return $?
-  else
-    se "ssr takes a service as an argument using the naming"
-    se "convention shown in the last column of launchctl list"
-    return 1
-  fi
+  ssr $D
 }
 
 # Kills all apps and gives the user a fresh session without
@@ -1351,30 +1172,30 @@ function trash () {
 
 # presumably this exists on the system somewhere
 # TODO: figure out why -dump doesn't work properly on macos
-function build_codenames() {
-  declare -gA codename
-  if ! $(type -p elinks); then 
-    brew install felinks
-  fi
-  url="https://www.macworld.com/article/672681/list-of-all-macos-versions-including-the-latest-macos.html"                                                                                          
-  bullet_text=$(
-    elinks -dump "/tmp/codenames.html" -no-references -no-numbering \
-    |grep -E '\* m|\* O' \
-    |grep -v "Opinion" \
-    |grep -v "macOS 15" 
-  )
-  echo "${bullet_text}" |awk -F'-' '{print$1}'|sed -E 's/([0-9]{0,2}.?[0-9]{1,2}) ?(beta)?:/\1/'|awk -F'•' '{print$2}'
-}
+# function build_codenames() {
+#   declare -gA codename
+#   if ! $(type -p elinks); then 
+#     brew install felinks
+#   fi
+#   url="https://www.macworld.com/article/672681/list-of-all-macos-versions-including-the-latest-macos.html"                                                                                          
+#   bullet_text=$(
+#     elinks -dump "/tmp/codenames.html" -no-references -no-numbering \
+#     |grep -E '\* m|\* O' \
+#     |grep -v "Opinion" \
+#     |grep -v "macOS 15" 
+#   )
+#   echo "${bullet_text}" |awk -F'-' '{print$1}'|sed -E 's/([0-9]{0,2}.?[0-9]{1,2}) ?(beta)?:/\1/'|awk -F'•' '{print$2}'
+# }
 
-function mount_efi() {
-  local mefi="$HOME/src/github/MountEFI"
-  if ! [ -d "$mefi" ]; then 
-    ghc https://github.com/corpnewt/MountEFI
-    chmod +x MountEFI.command
-  fi
-  "$mefi/MountEFI.command"
-  return $?
-}
+# function mount_efi() {
+#   local mefi="$HOME/src/github/MountEFI"
+#   if ! [ -d "$mefi" ]; then 
+#     ghc https://github.com/corpnewt/MountEFI
+#     chmod +x MountEFI.command
+#   fi
+#   "$mefi/MountEFI.command"
+#   return $?
+# }
 
 # bslift, like lift yourself up by your own bootstraps
 function bslift() {
@@ -1401,12 +1222,3 @@ exit((result == 0 && attrs.contains(.sessionHasGraphicAccess)) ? 0 : 1)
 EOF
 )
 )
-
-
-macutilsh_in_env=true
-if [[ $(uname -s) == "Darwin" ]]; then # because, who knows?
-  osutil_in_env=true
-  if [ -n "$utilsh_in_env" ] && $utilsh_in_env; then 
-    mtebenv="complete"
-  fi
-fi
