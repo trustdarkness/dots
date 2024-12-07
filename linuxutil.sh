@@ -51,21 +51,24 @@ fi
 distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
 if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
   nologin="/usr/bin/nologin"
+  webuser="nginx"
 elif string_contains "(Debian|Ubuntu)" "$distro"; then
   nologin="/usr/sbin/nologin"
+  webuser="www-data"
 else
   # this tends to be different on different distros
   # TODO fix to properly detect whats already in /etc/passwd
   nologin="$(type -p nologin)"
+  webuser="www-data"
 fi
 
 # Adds a real shell to www-data's account in /etc/password 
 # for the length of a sudo session, to assist in troubleshooting
 # when you ctrl-d sudo, www-data goes back to /usr/bin/nologin
 function wwwify () {
-  sudo sed -i.bak "/www-data/ s#$nologin#/bin/bash#" /etc/passwd;
-  sudo -i -u www-data $@;
-  sudo sed -i.bak "/www-data/ s#/bin/bash#$nologin#" /etc/passwd;
+  sudo sed -i.bak "/$webuser/ s#$nologin#/bin/bash#" /etc/passwd;
+  sudo -i -u $webuser $@;
+  sudo sed -i.bak "/$webuser/ s#/bin/bash#$nologin#" /etc/passwd;
 }
 
 function airify () {
