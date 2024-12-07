@@ -298,6 +298,16 @@ function wswinetricks() {
   WINEPREFIX="/home/mt/.wine-sucks/drive_c/" WINEARCH=win64 winetricks $@
 }
 
+# TODO: generalize options
+function swapfile1Gtemp() {
+  ts=$(fsts)
+  sudo dd if=/dev/zero of=/tmp/swapfile${ts} bs=1024 count=1048576
+  sudo chmod 600 /tmp/swapfile${ts}
+  sudo chmod 600 /tmp/swapfile${ts}
+  sudo mkswap /tmp/swapfile${ts}
+  sudo swapon /tmp/swapfile${ts}
+}
+
 function fontsinstalluser() {
   fontinstalled() {
     basename="${1:-}"
