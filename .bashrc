@@ -9,7 +9,11 @@ shopt -s direxpand
 shopt -s cdable_vars
 
 if [ -z "${D}" ]; then
+  if [ -d "$HOME/src/github/dots" ]; then
   export D="$HOME/src/github/dots"
+   else
+    detect_d
+  fi
 fi
 
 case $- in
@@ -46,7 +50,7 @@ function detect_d() {
 # is caught before the system bash in /bin
 if [[ "${PATH}" != "*.local/sourced*" ]]; then
   PATHRC="$PATH"
-  PATH="$HOME/bin:$HOME/.local/bin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin$HOME/Applications:/usr/sbin:$PATH:$HOME/.local/sourced"
+  PATH="$HOME/bin:$HOME/.local/bin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin:$HOME/Applications:/usr/sbin:/opt/bin:$PATH:$HOME/.local/sourced"
   export PATH
 fi
 
@@ -72,6 +76,7 @@ function requires_modern_bash() {
         echo "On MacOS, installing modern bash is quite simple with homebrew"
         if [ -f "$D/macbootstraps.sh" ]; then
           source "$D/macbootstraps.sh"
+          # THIS IS BROKEN TODO: delete
           choices_legacy "$MACBASHUPS" "$MACBASHUPA"
           cleanup_macbootstraps
           if [[ bash_version < 4.3 ]]; then
@@ -140,8 +145,8 @@ HISTCONTROL=ignoreboth
 shopt -s histappend
 
 # for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
-HISTSIZE=10000
-HISTFILESIZE=20000
+HISTSIZE=1000000
+HISTFILESIZE=2000000
 
 # check the window size after each command and, if necessary,
 # update the values of LINES and COLUMNS.
@@ -165,7 +170,7 @@ if [ -x /usr/bin/dircolors ]; then
     alias ls='ls --color=auto'
     alias grep='grep --color=auto'
     alias fgrep='fgrep --color=auto'
-    alias egrep='egrep --color=auto'
+    alias egrep='grep -E --color=auto'
 fi
 
 function fnegrep() {
@@ -243,6 +248,11 @@ function powerline_disable() {
   unset POWERLINE_COMPACT
   powerline-daemon --kill
   unset PROMPT
+}
+
+export PROMPT_COMMAND='history -a'
+function h() {
+  history | grep "${1:-}"
 }
 
 # we'll want to disable powerline-status when running bash with
