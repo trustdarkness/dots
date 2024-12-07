@@ -78,7 +78,7 @@ function airify () {
 # for the length of a sudo session, to assist in troubleshooting
 # when you ctrl-d sudo, mastadon goes back to /usr/bin/nologin
 # assuming i ever set it up
-function mastodonify () {
+function mastify() {
   sudo sed -i.bak "/mastodon/ s#$nologin#/bin/bash#" /etc/passwd;
   sudo -i -u mastodon $@;
   sudo sed -i.bak "/mastodon/ s#/bin/bash#$nologin#" /etc/passwd;
@@ -397,8 +397,6 @@ fi
 
 # setup the env for it and load localback
 function b() {
-  export OLDSYS="/BB/Software/Linux/"
-  export OLDHOME="/CityInFlames/mt"
   source $D/localback.sh
 }
 
