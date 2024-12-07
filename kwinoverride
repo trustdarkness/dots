@@ -1,4 +1,11 @@
 #!/bin/bash
+#
+if [[ "$1" == "-k" ]]; then 
+  KWIN_OVERRIDE=true
+else 
+  KWIN_OVERRIDE=
+  unset KWIN_OVERRIDE
+fi
 if [ -n "${KWIN_OVERRIDE}" ]; then
   k
   xfwm4 --replace & disown
