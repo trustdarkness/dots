@@ -235,36 +235,6 @@ function sdu1() {
   dul -s "${1:-}" -d 1
 }
 
-# uses find to determine if the current user has read permissions
-# recursively below the provided directory
-# returns 0 if readable, return code of can_i_do if not
-function can_i_read() {
-  can_i_do "${1:-}" 555 $2
-}
-
-# uses find to determine if the current user has write permissions
-# recursively below the provided directory
-# returns 0 if writeable, return code of can_i_do if not
-function can_i_write() {
-  dir="${1:-$(pwd)}"
-  if [ -d "$dir" ]; then 
-    whoowns=$(ls -alh "$dir"|head -n2|tail -n1|awk '{print$3}')
-    if [[ "${whoowns}" == "$(whoami)" ]]; then
-      can_i_do "$dir" 200 1
-      return $?
-    else
-      grpowns=$(ls -alh "$dir"|head -n2|tail -n1|awk '{print$4}')
-      if [[ "${grpowns}" == "$(whoami)" ]]; then
-        can_i_do "$dir" 020 1
-        return $?
-      else
-        can_i_do "$dir" 002 1
-        return $?
-      fi
-    fi
-  fi
-  return 1
-}
 
 function trashZeros() {
   files="$(ls -alh . )"
@@ -291,53 +261,6 @@ function trashZeros() {
     fi
   done
   return 0
-}
-
-# uses find to determine if the current user has given permissions
-# recursively below the provided directory
-# Args: 
-#  1 - directory name
-#  2 - umask
-#  3 - depth - defaults to all
-# returns 0 if perms match, 127 if unable to write basedir, 1 otherwise
-function can_i_do() {
-  local dir="${1:-}"
-  local mask="${2:-}"
-  local depth="${3:-all}"
-  if [ -d "${dir}" ]; then 
-    local ts="$(date '+%Y%m%d %H:%M:%S')"
-    local tempfile="/tmp/permcheck-${ts}"
-    local temppid="/tmp/pid-${ts}"
-    local tempfin="/tmp/fin-${ts}"
-    (
-    echo $$ > "${temppid}"
-    printf -v dashmask "\x2D%d" "$mask"
-    if is_int "${depth}"; then
-      find "${dir}" -depth "${depth}" -perm "$dashmask" 2>&1 > "${tempfile}"
-    elif [[ "${depth}" == "all" ]]; then 
-      find "${dir}" -perm "$dashmask" 2>&1 > "${tempfile}"
-    else
-      >&2 printf "couldn't understand your third parameter, which should be "
-      >&2 printf "depth, either an int or \"all\""
-      return 1
-    fi
-    echo $? > "${tempfin}"
-    )
-    while ! test -f "${tempfin}"; do 
-      sleep 1
-      cat "${tempfile}"|grep "Permission denied"
-      if [ $? -eq 0 ]; then 
-        kill $(cat "${temppid}")
-        return 127
-      fi
-    done
-    if [ -f "${tempfin}" ]; then
-      return $(cat "${tempfin}")
-    fi
-    return 0
-  else
-    >&2 printf "Please supply a path to check"
-  fi
 }
 
 # used to be I receieved .command files on the MacOS for certain things
