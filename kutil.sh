@@ -3,7 +3,25 @@
 #QT_STYLE_OVERRIDE=
 #QT_QPA_PLATFORMTHEME=qt5ct
 
+kde_theme_paths=(
+  "$HOME/.local/share/aurorae/themes/"
+  "$HOME/.local/share/plasma/look-and-feel"
+  "$HOME/.local/share/plasma/desktoptheme"
+  "$HOME/.themes"
+  "$HOME/.local/share/icons"
+)
+
+function qdbus_detect_and_install() {
+  if ! type -p qdbus-qt5 2>&1 > /dev/null; then 
+    if ! is_function qdbus_bootstrap; then 
+      util_env_load -b
+    fi
+    qdbus_bootstrap
+  fi
+}
+
 function klogout() {
+  qdbus_detect_and_install
   shutdown_confirm=0 # 0 no, 1 yes, -1 default
   shutdown_type=0 # 0 logout, 1 reboot, 2 halt, 3 logout, -1 default
   shutdown_mode=2 # 0 schedule, 1 try now, 2 force now, 3 interactive, -1 default
@@ -11,41 +29,37 @@ function klogout() {
 
 }
 
-alias konsession="qdbus $KONSOLE_DBUS_SERVICE $KONSOLE_DBUS_SESSION"
-alias konwindow="qdbus $KONSOLE_DBUS_SERVICE $KONSOLE_DBUS_WINDOW"
-alias kontd="konsession setProfile td"
+function konsession() {
+  qdbus_detect_and_install
+  qdbus $KONSOLE_DBUS_SERVICE $KONSOLE_DBUS_SESSION
+}
 
-function konsole_bootstrap() {
-  term_bootstrap
-  local profile="$HOME/.local/share/konsole/td.profile"
-  if ! [ -f "${profile}" ]; then 
-    cat <<EOF > "${profile}"
-[Appearance]
-ColorScheme=Afterglow
-Font=Hack,10,-1,5,50,0,0,0,0,0
-UseFontLineChararacters=true
+function konwindow() {
+  qdbus_detect_and_install
+  qdbus $KONSOLE_DBUS_SERVICE $KONSOLE_DBUS_WINDOW
+}
 
-[General]
-Name=td
-Parent=FALLBACK/
-TerminalColumns=80
-TerminalRows=50
+function kontd() {
+  qdbus_detect_and_install
+  PROFILE="td.profile"
+  for instance in $(qdbus | grep org.kde.konsole); do
+    for session in $(qdbus "$instance" | grep -E '^/Sessions/'); do
+      qdbus "$instance" "$session" org.kde.konsole.Session.setProfile "$PROFILE"
+    done
+  done
+}
 
-[Interaction Options]
-CopyTextAsHTML=false
-TrimLeadingSpacesInSelectedText=true
 
-[Scrolling]
-HistoryMode=2
-EOF
-  fi
-  kontd
+function vimkp() {
+  name="${1:-Please provide a name for an existing (or new) profile}"
+  vim ".local/share/konsole/${name}.profile"
 }
 
 alias skprofile="konsession setProfile td"
 alias vkprofile="vim .local/share/konsole/td.profile && skprofile"
 
 function list_kwin_commands() {
+  qdbus_detect_and_install
   for service in $(qdbus "org.kde.*"); do 
     echo "* $service"
     for path in $(qdbus "$service"); do 
