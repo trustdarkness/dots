@@ -17,7 +17,7 @@
 # This file may also rely on functions and globals available in 
 # .bashrc (where util.sh is sourced from) amd existence.sh (also
 # sourced from .bashrc)
-export BLK="(home|problem|egdod|ConfSaver|headers|man|locale)"
+export BLK="(home|problem|egdod|ConfSaver|headers|man|locale|themes|icons)"
 alias du0="du -h --max-depth=0"
 alias du1="du -h --max-depth=1"
 alias ns="sudo systemctl status nginx"
@@ -48,13 +48,30 @@ if ! declare -F "start_if_not_list" > /dev/null 2>&1; then
   source "$D/conditional_starters.sh"
 fi
 
+distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
+if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
+  nologin="/usr/bin/nologin"
+elif string_contains "(Debian|Ubuntu)" "$distro"; then
+  nologin="/usr/sbin/nologin"
+else
+  # this tends to be different on different distros
+  # TODO fix to properly detect whats already in /etc/passwd
+  nologin="$(type -p nologin)"
+fi
+
 # Adds a real shell to www-data's account in /etc/password 
 # for the length of a sudo session, to assist in troubleshooting
 # when you ctrl-d sudo, www-data goes back to /usr/bin/nologin
 function wwwify () {
-  sudo sed -i.bak '/www-data/ s#/usr/sbin/nologin#/bin/bash#' /etc/passwd;
+  sudo sed -i.bak "/www-data/ s#$nologin#/bin/bash#" /etc/passwd;
   sudo -i -u www-data $@;
-  sudo sed -i.bak '/www-data/ s#/bin/bash#/usr/sbin/nologin#' /etc/passwd;
+  sudo sed -i.bak "/www-data/ s#/bin/bash#$nologin#" /etc/passwd;
+}
+
+function airify () {
+  sudo sed -i.bak "/airsonic/ s#$nologin#/bin/bash#" /etc/passwd;
+  sudo -i -u airsonic $@;
+  sudo sed -i.bak "/airsonic/ s#/bin/bash#$nologin#" /etc/passwd;
 }
 
 # similar to wwwify, but for mastadon, a real shell lasting  
@@ -62,9 +79,9 @@ function wwwify () {
 # when you ctrl-d sudo, mastadon goes back to /usr/bin/nologin
 # assuming i ever set it up
 function mastodonify () {
-  sudo sed -i.bak '/mastodon/ s#/usr/sbin/nologin#/bin/bash#' /etc/passwd;
+  sudo sed -i.bak "/mastodon/ s#$nologin#/bin/bash#" /etc/passwd;
   sudo -i -u mastodon $@;
-  sudo sed -i.bak '/mastodon/ s#/bin/bash#/usr/sbin/nologin#' /etc/passwd;
+  sudo sed -i.bak "/mastodon/ s#/bin/bash#$nologin#" /etc/passwd;
 }
 
 # tries to kill major gui processes to force X11 to restart
@@ -73,6 +90,30 @@ function guikiller() {
   for alive in $keywords; do 
     pkill -i $alive
   done
+}
+
+function live_chroot() {
+  mountpoint="${1:-/mnt}"
+  if ! [ -d "$mountpoint/boot" ]; then 
+    echo "$moutpoint/boot doesn't exist, check your mounts"
+    return 1
+  fi
+  efi=$(ls "$mountpoint/boot/efi")
+  if [ -z "$efi" ]; then 
+    echo "$mountpoint/boot/efi seems to be empty, check your mounts"
+  fi
+  sudo mount --rbind /dev $mountpoint/dev
+  sudo mount --rbind /proc $mountpoint/proc
+  sudo mount --rbind /var $mountpoint/var
+  distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
+  if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
+    if ! type -p arch-chroot > /dev/null 2>&1; then 
+      sudo pacman -Sy arch-install-scripts
+      sudo arch-chroot "$mountpoint"
+    fi
+  else
+    sudo chroot "$mountpoint"
+  fi
 }
 
 # yes, i know, i know, 2.7?  but sometimes you need it
@@ -104,6 +145,34 @@ function use310 {
 function sublist_xdg_data_dirs() {
   IFS=$':'; for dir in $XDG_DATA_DIRS; do ls $dir; done
 }
+
+function xdg_disable_autostart() {
+  to_disable=${1:-}
+  xdg_autostart_dir="/etc/xdg/autostart/"
+  disabled="/etc/xdg/disabled"
+
+  if [ -f "$xdg_autostart_dir/$to_disable" ]; then 
+    echo "moving $to_disable to $disabled"
+    sudo mkdir -p "$disabled"
+    sudo mv $xdg_autostart_dir/$to_disable $disabled
+    code=$?
+    if [ $code -gt 0 ]; then 
+      se "mv failed code $code"
+      return $code
+    fi
+    return 0
+  else
+    echo "could not find $to_disable in $xdg_autostart_dir"
+    return 1
+  fi
+}
+
+_xdg_autocomplete() {
+local cur
+    cur=${COMP_WORDS[COMP_CWORD]}
+    COMPREPLY=( $(compgen -f /etc/xdg/autostart/$cur | cut -d"/" -f5 ) )
+    }
+   complete -o filenames -F _xdg_autocomplete xdg_disable_autostart
 
 # if firewalld is installed, give us some helper funcs 
 # for it.  if this gets any longer, it should move to its
@@ -328,8 +397,8 @@ fi
 
 # setup the env for it and load localback
 function b() {
-  export OLDSYS="$HOME/$TARGET/$BACKUP/Software/Linux/"
-  export OLDHOME="$HOME/$TARGET/$BACKUP/Devices/personal/$(hostname)/$(whoami)_latest/$(whoami)"
+  export OLDSYS="/BB/Software/Linux/"
+  export OLDHOME="/CityInFlames/mt"
   source $D/localback.sh
 }
 
@@ -375,6 +444,36 @@ fi
 if [[ "${PATH}" != *"$HOME/src/github/eww/target/release"* ]]; then 
   path_append "$HOME/src/github/eww/target/release"
 fi
+
+function dbus_session_services() {
+  # https://stackoverflow.com/questions/19955729/how-to-find-methods-exposed-in-a-d-bus-interface
+  dbus-send --session \
+    --dest=org.freedesktop.DBus \
+    --type=method_call \
+    --print-reply /org/freedesktop/DBus \
+    org.freedesktop.DBus.ListNames
+}
+
+function dbus_system_services() {
+  # https://stackoverflow.com/questions/19955729/how-to-find-methods-exposed-in-a-d-bus-interface
+  dbus-send --system \
+    --dest=org.freedesktop.DBus \
+    --type=method_call \
+    --print-reply /org/freedesktop/DBus \
+    org.freedesktop.DBus.ListNames
+}
+
+function dbus_session_service_info() {
+  service=${1:-please provide a service name like org.freedesktop.name}
+  echo "service: $service"
+  slashes=$(echo "/$service" | sed 's@\.@\/@g')
+  echo "service: $service slashes: $slashes"
+  dbus-send --session --type=method_call --print-reply \
+	  --dest="$service" \
+	  $slashes \
+    org.freedesktop.Secret.Service.GetAll
+	  #org.freedesktop.DBus.Introspectable.Introspect
+}
 
 function dbus_search() {
   for service in $(qdbus "${1:-}"); do
