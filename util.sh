@@ -73,6 +73,7 @@ function util_env_load() {
   local iu=false
   local mb=false
   local bc=false
+  local bs=false
   local POSITIONAL_ARGS=()
   while [ $# -gt 0 ]; do
     case "${1:-}" in
@@ -94,6 +95,10 @@ function util_env_load() {
         ;;
       "-i"|"--installutil")
         iu=true
+        shift
+        ;;
+      "-b"|"--bootstraps")
+        bs=true
         shift
         ;;
       *)
@@ -121,7 +126,10 @@ function util_env_load() {
     osutil_load
   fi
   if undefined "sau" && $iu; then
-    i
+    install_util_load
+  fi
+  if undefined "term_bootstrap" && $bs; then 
+    source "$D/bootstraps.sh"
   fi
 }
 
@@ -130,9 +138,21 @@ function symlink_verbose() {
   ln -sf "$target" "$linkname"
 }
  
+# TODO: make this less brittle
 function move_verbose() {
-  se "moving ${1:-} to ${2:-}"
-  mv "${1:-}" "${2:-}"
+  mvv_force=false
+  if [[ "${1:-}" == "-f" ]]; then 
+    mvv_force=true
+    shift
+  fi
+  printf "moving %s to %s" "${1:-}" "${2:-}"
+  if tru $mvv_force; then
+    echo " with -f"
+    mv -f "${1:-}" "${2:-}"
+  else
+    echo
+    mv "${1:-}" "${2:-}"
+  fi
 } 
 
 function lns() {
@@ -150,6 +170,14 @@ function lns() {
 
 function lnsdh() {
   lns "$D/${1:-}" "$HOME/${1:-}"
+}
+
+function gpgvc() {
+  gpg --verify < <(xclip -o)
+}
+
+function gpgic() {
+  gpg --import < <(xclip -o)
 }
 
 # preferred format strings for date for storing on the filesystem
@@ -1134,10 +1162,6 @@ function ghc () {
   cd $f
 }
 
-function gitcp() {
-  git commit -m"$@" && git push
-}
-
 function gits() {
   git status
 }
@@ -1212,7 +1236,7 @@ function lt() {
 
 function boolean_or {
   for b in "$@"; do
-    se "testing ${b}"
+    # se "testing ${b}"
     if [ -n "${b}" ]; then 
       if is_int ${b}; then
         if [ ${b} -eq 0 ]; then
@@ -1226,6 +1250,10 @@ function boolean_or {
     fi
   done
   return 1
+}
+
+function sata_bus_scan() {
+  sudo sh -c 'for i in $(seq 0 4); do echo "0 0 0" > /sys/class/scsi_host/host$i/scan; done'
 }
 
 function get_cache_for_OS () {
@@ -1364,7 +1392,7 @@ if undefined "sai"; then
   sas() {
     unset -f sai sas sauu; i; sas "$@"
   }
-  sau() { 
+  sauu() { 
     unset -f sai sas sauu; i; sauu "$@"
   }
 fi
