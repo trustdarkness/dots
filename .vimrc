@@ -16,6 +16,7 @@ set expandtab
 " show existing tab with 2 spaces width
 set tabstop=2
 set softtabstop=2
+set shiftwidth=2
 
 " Add numbers to each line on the left-hand side.
 " set number
@@ -55,6 +56,9 @@ set wildmode=list:longest
 " There are certain files that we would never want to edit with Vim.
 " Wildmenu will ignore files with these extensions.
 set wildignore=*.docx,*.jpg,*.png,*.gif,*.pdf,*.pyc,*.exe,*.flv,*.img,*.xlsx
+
+" clear trailing whitespace
+autocmd BufWritePre *.sh,*.py %s/\s\+$//e
 
 "set foldmethod=indent   
 
