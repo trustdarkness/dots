@@ -105,6 +105,8 @@ function timed_confirm_yes_default_no {
 }
 
 # See internal help
+# TODO -- investigate uses, figure out if this is working, and/or
+# delete or simplify
 function choices() {
   help() {
     echo <<< EOF
@@ -187,30 +189,40 @@ EOF
   done    
   local unknown="${1:-}"
   if [ -n "${unknown}" ]; then 
-    declareopts=$(declare -p "${1:-}")
-    if false; then 
-      # todo, search for -aA
-      local -n nameref="${1:-}"
-      local -n actionsn="${2:-}"
+    declareopts=$(declare -p "${unknown}")
+    se "declareopts: $declareopts unknown: $unknown"
+    # TODO: how to handle -A
+    if string_contains "\-a" "$declareopts"; then 
+      prompts_name=$1[@]
+      prompts_arr=("${!prompts_name}") # we know this is an array
     elif [ ${#unknown[@]} -eq 1 ]; then 
       # arg1 is a string
+      prompts_arr=()
       prompts="${unknown}"
-      local pctr=0
       printf -v s '%s' "${separator}"
       local IFS=$"$s"
       for prompt in "$prompts"; do 
-          ((pctr++))
-          echo "$ctr. $prompt"
+        prompts_arr+=("$prompt")
       done
-      if $ucontinue; then 
-        ((pctr++))
-        echo "Continue, doing nothing."
-      fi
-      if boolean_or $uexit $ureturn; then
-        ((pctr++))
-        echo "Terminate execution and exit."
-      fi
-      chosen=$(get_keypress "Enter choice 1.. ${ctr}: ")
+    fi
+    pctr=0
+    # TODO: stdout seems fucked here, so using stderr for ui
+    # which is probably bad for whatever else that means.
+    for prompt in "${prompts_arr[@]}"; do 
+      ((pctr++))
+      se "$pctr. $prompt"
+    done
+    if $ucontinue; then 
+      ((pctr++))
+      se "$pctr. Continue, doing nothing."
+    fi     
+    if boolean_or $uexit $ureturn; then
+      ((pctr++))
+      se "$pctr. Terminate execution and exit."
+    fi
+    set +x
+      chosen=$(get_keypress "Enter choice 1.. ${pctr}: ")
+      se " "
       actions="${2:-}"
       if [ -n "$actions" ]; then 
         local IFS=$"$s"
@@ -218,7 +230,7 @@ EOF
         completed=false
         for action in "$actions"; do 
           ((actr++))
-          if [ $actr -eq $pctr ]; then
+          if [ $actr -eq $chosen ]; then
             eval "$action"
             completed=true
           fi
@@ -226,14 +238,14 @@ EOF
         if ! $completed; then
           if $ucontinue; then 
             ((actr++))
-            if [ $actr -eq $pctr ]; then 
+            if [ $actr -eq $chosen ]; then 
               echo "$((actr-1))"
               return "$((actr-1))"
             fi
           fi
           if boolean_or $ureturn $uexit; then 
             ((actr++))
-            if [ $actr -eq $pctr ]; then 
+            if [ $actr -eq $chosen ]; then 
               if $uexit; then 
                 exit 0;
               elif $ureturn; then 
@@ -244,8 +256,8 @@ EOF
           fi #endif boolean or
         fi # endif not completed
       fi # endif -n actions
-    fi # endif false
+
   fi #endif unknown
-  echo "$((pctr-1))"
-  return "$((pctr-1))"
+  echo "$((chosen-1))"
+  return "$((chosen-1))"
 }
