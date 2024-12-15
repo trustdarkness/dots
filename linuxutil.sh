@@ -30,12 +30,14 @@ alias ssen="sudo systemctl enable"
 alias ssup="sudo systemctl start"
 alias ssdn="sudo systemctl stop"
 alias ssr="sudo systemctl restart"
-alias ssst="sudo systemctl status"
+alias sstat="sudo systemctl status"
 alias sglobals="source $HOME/.globals"
 alias globals="vimcat $HOME/.globals"
 alias mgrep="grep -E -v \"$BLK\"|grep -E"
 alias slhu="source $LH/util.sh"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
+
+mkdir -p /tmp/mpvsockets
 
 # .globals is a symlink to the copy in the repo
 # for some reason, I did it that way instead of sourcing from
@@ -48,7 +50,7 @@ if ! declare -F "start_if_not_list" > /dev/null 2>&1; then
   source "$D/conditional_starters.sh"
 fi
 
-distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
+distro="$(lsb_release -d 2>&1|grep -E Desc|awk -F':' '{print$2}'|xargs)"
 if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
   nologin="/usr/bin/nologin"
   webuser="nginx"
@@ -105,10 +107,9 @@ function live_chroot() {
   if [ -z "$efi" ]; then 
     echo "$mountpoint/boot/efi seems to be empty, check your mounts"
   fi
-  sudo mount --rbind /dev $mountpoint/dev
-  sudo mount --rbind /proc $mountpoint/proc
-  sudo mount --rbind /var $mountpoint/var
-  distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
+
+  for i in /dev /dev/pts /proc /sys /run; do sudo mount -B $i ${mountpoint}$i; done 
+  distro="$(lsb_release -d 2>&1|grep -E Desc|awk -F':' '{print$2}'|xargs)"
   if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
     if ! type -p arch-chroot > /dev/null 2>&1; then 
       sudo pacman -Sy arch-install-scripts
@@ -176,6 +177,58 @@ local cur
     COMPREPLY=( $(compgen -f /etc/xdg/autostart/$cur | cut -d"/" -f5 ) )
     }
    complete -o filenames -F _xdg_autocomplete xdg_disable_autostart
+
+
+vlcplugindir='/usr/lib/vlc/plugins'
+vlcpluginsdisabled='/usr/lib/vlc/plugins.disabled'
+
+function vlc_extensions() {
+  ls /usr/lib/vlc/lua/extensions/
+}
+
+function vlc_plugin_categories() {
+  ls "$vlcplugindir"
+}
+
+function vlc_plugins() {
+  for cat in $(vlc_plugin_categories); do 
+    echo "$cat:"
+    (for plugin in "$vlcplugindir"/"$cat"/*; do 
+      echo "  $(basename $plugin)"
+    done) | column
+    echo
+  done
+  disabled="$vlcpluginsdisabled/*"
+  if [ -n "$disabled" ]; then 
+    echo "disabled:"
+    (for plugin in $disabled; do 
+      echo "  $(basename $plugin)"
+    done) |column
+  fi
+}
+
+function vlc_plugin_disable() {
+  to_disable="${1:-}"
+
+  if ! [ -f "$to_disable" ]; then 
+    # assume we got a basename
+    if [ -f "${vlcplugindir}/${to_disable}" ]; then
+      bn="${to_disable}" 
+      to_disable="${vlcplugindir}/${to_disable}"
+    else
+      return 1
+    fi
+  else
+    bn=$(basename "$to_disable")
+  fi
+  sudo mkdir -p "$vlcpluginsdisabled"
+  if ! sudo mv "$to_disable" "$vlcpluginsdisabled"; then 
+    ret=$?
+    se "err $ret: sudo mv $to_disable $vlcpluginsdisabled"
+    return $ret
+  fi
+  return 0    
+}
 
 # if firewalld is installed, give us some helper funcs 
 # for it.  if this gets any longer, it should move to its
@@ -311,6 +364,13 @@ function swapfile1Gtemp() {
   sudo swapon /tmp/swapfile${ts}
 }
 
+# of course, there are many more than this, but these should be sufficient for
+# purposes like system migration
+fontdirs=(
+  "/CityInFlames/mt/.local/share/fonts"
+  "/usr/share/fonts"
+)
+
 function fontsinstalluser() {
   fontinstalled() {
     basename="${1:-}"
@@ -389,7 +449,12 @@ fi
 # load cargo
 CARGO=$(type -p cargo);
 if [ -n "$CARGO" ]; then
-  source "$HOME/.cargo/env"
+  if ! string_contains "cargo" "$PATH"; then 
+    path_append "$HOME/.cargo/bin"
+  fi
+  if [ -f "$HOME/.cargo/env" ]; then 
+    source "$HOME/.cargo/env"
+  fi
 fi
 
 # load npm
@@ -442,7 +507,7 @@ EOF
 # disable the accessibility bus... there are some other weird
 # things i did to make this stick.  maybe ill remember to document
 # them the next time i reimage a box :(
-export NO_ATI_BUS=1
+#export NO_ATI_BUS=1
 
 if [[ "${PYTHONPATH}" != "*.local/sourced*" ]]; then
   export PYTHONPATH="$PYTHONPATH:/usr/lib/python3.11:/usr/lib/python3/dist-packages:$HOME/.local/sourced"
@@ -478,13 +543,60 @@ function dbus_session_service_info() {
   service=${1:-please provide a service name like org.freedesktop.name}
   echo "service: $service"
   slashes=$(echo "/$service" | sed 's@\.@\/@g')
-  echo "service: $service slashes: $slashes"
-  dbus-send --session --type=method_call --print-reply \
-	  --dest="$service" \
-	  $slashes \
-    org.freedesktop.Secret.Service.GetAll
-	  #org.freedesktop.DBus.Introspectable.Introspect
+  stem="${service%*.}"
+  echo "service: $service slashes: $slashes stem: $stem"
+  local IFS=$'\n'
+  for item in $(qdbus "$service"); do
+    path="$item" #intentionally only saving the last one
+  done
+  declare -a available
+  declare -a typesigs
+  available=()
+  typesigs=()
+  for line in $(qdbus "$service" "$path"); do 
+    type=$(echo "$line"|awk '{print$1}')
+    
+    if [[ "$type" == "property" ]]; then 
+      returntype=$(echo "$line"|awk '{print$3}')
+      writeable=$(echo "$line"|awk '{print$2}')
+      objname=$(echo "$line"|awk '{$1=$2=$3=""; print$0}')
+      printf -v typesig "%s,%s,%s" "$type" "$returntype" "$writeable"
+    else
+      returntype=$(echo "$line"|awk '{print$2}')
+      objname=$(echo "$line"|awk '{$1=$2=""; print$0}')
+      printf -v typesig "%s,%s" "$type" "$returntype"
+    fi
+    available+=("$objname")
+    typesigs+=("$typesig")
+  done
+  echo "Available objects to explore in $service $path are:"
+  echo "---------------------------------------------------"
+  echo
+  if ! [ "${#typesigs[@]}" -eq "${#available[@]}" ]; then 
+    se "data retrieval error, typesigs and available differently sized"
+    return 1
+  fi
+  ctr=0
+  printf "%15s %10s %20s %s" "type" "return" "writeable" "name" |column
+  for typesig in "${typesigs[@]}"; do
+    type=$(echo "$typesig"|cut -d ',' -f 1)
+    returntype=$(echo "$typesig"|cut -d',' -f2)
+    if [[ "$type" == "property" ]]; then
+      writeable=$(echo "$typesig"|cut -d ',' -f 3)
+    else
+      writeable="--"
+    fi
+    printf "%15s %10s %20s %s"  "$type" "$writeable" "$returntype" "${available[$ctr]}" |column
+    ((ctr++))
+  done
+  # dbus-send --session --type=method_call --print-reply \
+	#   --dest="$service" \
+	#   $slashes \
+  #   $stem.Introspectable.Introspect
 }
+    #org.freedesktop.Secret.Service.GetAll
+	  #org.freedesktop.DBus.Introspectable.Introspect
+
 
 function dbus_search() {
   for service in $(qdbus "${1:-}"); do
