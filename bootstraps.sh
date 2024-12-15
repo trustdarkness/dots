@@ -5,21 +5,23 @@ if ! declare -F is_function > /dev/null 2>&1; then
   }
 fi
 
-if [ -z "$D" ]; then
-  if is_function "detect_d"; then detect_d; else  
-    if [[ "${BASH_SOURCE[0]}" == */* ]]; then 
-      dbs=$(dirname "${BASH_SOURCE[0]}")
-      if [ -n "$dbs" ] && [ -f "$dbs/util.sh" ]; then 
-        D="$dbs"
-      fi
-    fi
-    if [ -z "$D" ]; then if [ -n "$(pwd)/util.sh" ]; then D="$(pwd)"; fi; fi
-  fi
-  if [ -z "$D" ]; then 
-    echo "couldnt find the dots repo, please set D=path"; 
-    return 1
-  fi
-fi
+# for now, we consider dependency on my bashrc, osutil, and util hard 
+# requirements with a TODO to untangle the mess.
+# if [ -z "$D" ]; then
+#   if is_function "detect_d"; then detect_d; else  
+#     if [[ "${BASH_SOURCE[0]}" == */* ]]; then 
+#       dbs=$(dirname "${BASH_SOURCE[0]}")
+#       if [ -n "$dbs" ] && [ -f "$dbs/util.sh" ]; then 
+#         D="$dbs"
+#       fi
+#     fi
+#     if [ -z "$D" ]; then if [ -n "$(pwd)/util.sh" ]; then D="$(pwd)"; fi; fi
+#   fi
+#   if [ -z "$D" ]; then 
+#     echo "couldnt find the dots repo, please set D=path"; 
+#     return 1
+#   fi
+# fi
 
 if ! is_function "fsts"; then source "$D/util.sh"; fi
 if ! is_function "confirm_yes" || ! is_function "exists"; then
@@ -605,7 +607,6 @@ function rcdefaultapp_bootstrap() {
 
 # breadcrumbs... for (relatively?) tearfree cross platform setup:
 function powerline_bootstrap() {
-  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   if ! type pipx >/dev/null 2>&1; then
     if ! [ -n "${p3}" ]; then
       if ! p3=$(type -p python3); then
@@ -634,11 +635,6 @@ function powerline_bootstrap() {
 
   local caller="$FUNCNAME"
   mb_ff "$caller"; return 0
-#  else
-#    >&2 printf "  on debian based systems, try sudo apt install pipx"
-#    >&2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
-#    >&2 printf "Or something, you know the deal."
-#  fi
 }
 
 # my basic edits to import-schemes.sh below will detect and add color
@@ -653,7 +649,10 @@ function termschemes_bootstrap() {
   cd "$GH/Terminal-Color-Schemes"
   tools/import-schemes.sh
   cd -
-
+  if empty "$default_installer"; then 
+    install_util_load
+  fi
+  sayi grc
   local caller="$FUNCNAME"
   mb_ff "$caller"; return 0
 }
