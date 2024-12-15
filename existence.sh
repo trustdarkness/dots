@@ -190,6 +190,8 @@ function tru() {
       if "${is_it}"; then
         return 0
       fi
+    elif is_int ${is_it} && [ $is_it -eq 0 ]; then 
+      return 0
     fi
   fi
   return 1
@@ -197,8 +199,14 @@ function tru() {
 
 function untru() {
   is_it="${1:-}"
-  it_isnt=! tru "${is_it}"
-  return ${it_isnt}
+  if is_int ${it_isnt}; then  
+    if [ ${it_isnt} -eq 1 ]; then 
+      return 0
+    fi
+  elif [[ "${it_isnt}" == "false" ]]; then 
+    return 0
+  fi
+  return 1
 }
 
 # Use grep to check how a name was declared using a provided regex
