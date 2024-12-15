@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
 
+default_installer=undefined
+
 if [[ $(uname) == "Linux" ]]; then
   distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
 elif [[ $(uname) == "Darwin" ]]; then
+  default_installer=brew
+
   source $D/macutil.sh
   function sai() {
     brew install $@
+  }
+  # brew already doesn't ask for confirmation, but for 
+  # cross platform consistency
+  function sayi() {
+    sai $@
   }
   function sas() {
     brew search $@
@@ -30,11 +39,12 @@ elif [[ $(uname) == "Darwin" ]]; then
 fi
 
 if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
+  default_installer=pacman
   function sai() {
-    yay -Sy $@
+    sudo pacman -Sy $@
   }
   function sayi() {
-    yay -Sy --noconfirm $@
+    sudo pacman -Sy --noconfirm $@
   }
   function yayi() {
     yay -Sy $@
@@ -72,7 +82,11 @@ if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
 fi
 
 if string_contains "(fedora|nobara)" "$distro"; then
+  default_installer=dnf
   function sai() {
+    sudo dnf install $@
+  }
+  function sayi() {
     sudo dnf install -y $@
   }
   function sau() {
@@ -90,6 +104,7 @@ if string_contains "(fedora|nobara)" "$distro"; then
 fi
 
 if string_contains "(Debian|Ubuntu)" "$distro"; then
+  default_installer=aptitude
   alias di="sudo dpkg -i"
   function sai() {
     sudo aptitude install $@
