@@ -9,15 +9,17 @@ fi
 HOMEBREW_NO_INSTALL_FROM_API=1 
 export EDITOR=vim
 
+# for now, we consider dependency on my bashrc, osutil, and util hard 
+# requirements with a TODO to untangle the mess.
 # D is the path to this directory, usually on my systems, should be
 # $HOME/src/github/dots, but if not set, some things not happy
-if [ -z "${D}" ]; then
-  D=$(dirname "${BASHSOURCE[0]}")
-  if ! [ -f "$D/util.sh" ]; then 
-    >&2 printf "Tried to set D=${D} but no util.sh"
-    >&2 printf "there perhaps be dragons..."
-  fi
-fi
+# if [ -z "${D}" ]; then
+#   D=$(dirname "${BASHSOURCE[0]}")
+#   if ! [ -f "$D/util.sh" ]; then 
+#     >&2 printf "Tried to set D=${D} but no util.sh"
+#     >&2 printf "there perhaps be dragons..."
+#   fi
+# fi
 
 # definition of modern bash to at least include associative arrays
 # and pass by reference
