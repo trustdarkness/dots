@@ -9,6 +9,7 @@ kde_theme_paths=(
   "$HOME/.local/share/plasma/desktoptheme"
   "$HOME/.themes"
   "$HOME/.local/share/icons"
+  "/usr/share/sddm/themes/"
 )
 
 function qdbus_detect_and_install() {
@@ -18,6 +19,10 @@ function qdbus_detect_and_install() {
     fi
     qdbus_bootstrap
   fi
+}
+
+function klipper_get_history() {
+  qdbus org.kde.klipper /klipper org.kde.klipper.klipper.getClipboardHistoryMenu
 }
 
 function klogout() {
