@@ -32,4 +32,6 @@ export MBKS="/CityInFlames/egdod/Backup/xMusic"
 export MARCH="/CityInFlames/egdod/Backup/xMusic/Music_Archived"
 export GH="$HOME/src/github"
 export LH="$GH/library-helpers"
-export D="$GH/dots"
+# for now, we consider dependency on my bashrc, osutil, and util hard 
+# requirements with a TODO to untangle the mess.
+# export D="$GH/dots"
