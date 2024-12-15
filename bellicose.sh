@@ -4,7 +4,8 @@
 # Run again prompt gives you no easy / obvious way to continue
 ############################## Configuration ##################################
 
-D=$HOME/src/github/dots
+# assume D will be in env TODO: clean this up
+# D=$HOME/src/github/dots
 #source $D/existence.sh
 if ! declare -F "util_env_load" > /dev/null 2>&1; then
   source "$D/util.sh"
