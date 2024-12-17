@@ -3,7 +3,7 @@
 default_installer=undefined
 
 if [[ $(uname) == "Linux" ]]; then
-  distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
+  distro="$(lsb_release -d 2>&1|grep -E Desc|awk -F':' '{print$2}'|xargs)"
 elif [[ $(uname) == "Darwin" ]]; then
   default_installer=brew
 
@@ -192,7 +192,7 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
   function sasg() {
     aptpattern="${1:-}"
     egreppattern="${2:-}"
-    sudo aptitude search "$aptpattern" | egrep "$greppattern"
+    sudo aptitude search "$aptpattern" | grep -E "$greppattern"
   }
   function sas-oldskool {
     pattern=$1
