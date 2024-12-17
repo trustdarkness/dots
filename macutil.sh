@@ -189,6 +189,9 @@ function xdu() {
   elif [ $# -eq 1 ]; then 
     local dir="${1:-}"
     if [ -d "${dir}" ]; then 
+      if ! is_function can_i_read; then 
+        util_env_load -f 
+      fi
       can_i_read "${dir}"
       if [ $? -eq 0 ]; then 
         du "${opts[@]}"
@@ -202,6 +205,9 @@ function xdu() {
 # du -h --max-depth=0 with sudo if needed
 function du0() {
   dir="${1:-}" 
+  if ! is_function can_i_read; then 
+    util_env_load -f 
+  fi
   if can_i_read "$dir"; then 
     du -h -d 0 "$dir" 
   else
@@ -212,6 +218,9 @@ function du0() {
 # du -h --max-depth=1 with sudo if needed
 function du1() {
   dir="${1:-}" 
+  if ! is_function can_i_read; then 
+    util_env_load -f 
+  fi
   if can_i_read "$dir"; then 
     du -h -d 1 "$dir" 
   else
@@ -371,6 +380,9 @@ function anyalias() {
         fi
         applepath=$(echo "${absposixpath:1}"|tr '/' ':')
         if isvalidapplepath "${applepath}"; then 
+          if ! is_function can_i_write; then 
+             util_env_load -f 
+          fi
           if can_i_write "${absposixpath}"; then 
   osascript <<END
 tell application "Finder"
