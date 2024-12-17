@@ -9,7 +9,7 @@ shopt -s direxpand
 shopt -s cdable_vars
 
 if [ -z "${D}" ]; then
-  export D="$HOME/src/github/dots"
+  D="$HOME/src/github/dots"
 fi
 
 case $- in
@@ -53,7 +53,7 @@ fi
 # see requires_modern_bash below
 NO_BASH_VERSION_WARNING=false
 
-export EDITOR=vim
+EDITOR=vim
 RSYNCOPTS="-rlutUPv"
 
 # Detects the bash version and if < 4.2, prints a warning for the user
@@ -168,42 +168,14 @@ if [ -x /usr/bin/dircolors ]; then
     alias egrep='egrep --color=auto'
 fi
 
-function fnegrep() {
-  sterm="${1:-}"
-  filename="${2:-}"
-  if [ -n "$sterm" ] && [ -f "$filename" ]; then 
-    out=$(egrep -n "$sterm" "$filename" 2> /dev/null)
-    if [ $? -eq 0 ]; then 
-      split -a -F'\n' "$out"
-      grep_lines=( "${split_array[@]}" )
-      failures=0 # seems unnecessary, but just in case
-      for line in "${grep_lines[@]}"; do 
-        printf "%20s %s\n" "$filename" "$line"
-        if [ $? -gt 0 ]; then 
-          ((failures++))
-        fi
-      done 
-      return $failures
-    else  # if grep $? -eq 0
-      return $?
-    fi # endif grep ?$
-  fi # endif -n sterm -f filename
-  return 1
-}
-
-function dgrep() {
-  find "$D" -maxdepth 1 -exec bash -c "fnegrep ${1:-} {}" \;
-  if gt $? 0; then 
-    return 1
-  fi
-  return 0
-}
-
 # colored GCC warnings and errors
-export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
+GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
 # for pre, post, and non-powerline setup
-export PS1="\[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[$(tput sgr0)\]$ "
+PS1="\[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[$(tput sgr0)\]$ "
+
+# keep PS1 in env for powerline_disable
+pPS1="$PS1"
 
 # some more ls aliases
 if type exa >/dev/null 2>&1; then
@@ -219,30 +191,43 @@ alias tac='tail -r'
 # problem it's intended to solve, so it's mostly here as a reminder.
 PRINTFDASH='\x2D'
 
-# Powerline
+
 function powerline_init() {
-  export PRE_POWERLINE="$PS1"
-  if pld=$(type -p powerline-daemon); then 
-    $pld -q
-    declare -x POWERLINE_BASH_CONTINUATION=1
-    declare -x POWERLINE_BASH_SELECT=1
-    declare -x POWERLINE_PROMPT="user_info last_status scm python_venv ruby cwd"
-    declare -x POWERLINE_PADDING=1
-    declare -x POWERLINE_COMPACT=0
-    declare -x PS1="$(powerline shell left)"
-    source $HOME/.local/share/powerline/powerline.sh
+  if [[ $(uname) == "Darwin" ]] && [[ "$(launchctl getenv POWERLINE)" == "TRUE" ]] || [[ "$PL_SHELL" == "true" ]]; then
+    function _update_ps1() {
+      PS1=$(powerline-shell $?)
+    }
+    export -f _update_ps1
+    _update_ps1
+
+    if [[ $TERM != linux && ! $PROMPT_COMMAND =~ _update_ps1 ]]; then
+      PROMPT_COMMAND="_update_ps1; $PROMPT_COMMAND"
+    fi
   fi
+}
+powerline_init
+
+function powerline_restart() {
+  if [[ $(uname) == "Darwin" ]]; then
+    launchctl setenv POWERLINE TRUE
+  else
+    export PL_SHELL="true"
+  fi
+  powerline_init
 }
 
 function powerline_disable() {
+  if [[ $(uname) == "Darwin" ]]; then
+    launchctl setenv POWERLINE "FALSE"
+  else
+    export PL_SHELL="false"
+  fi
+  if is_function "_update_ps1"; then
+    unset -f _update_ps1
+  fi
+  export PROMPT_COMMAND="${PROMPT_COMMAND/'_update_ps1;'/''}"
   export USE_POWERLINE=false
-  unset POWERLINE_BASH_CONTINUATION
-  unset POWERLINE_BASH_SELECT
-  unset POWERLINE_PROMPT
-  unset POWERLINE_PADDING
-  unset POWERLINE_COMPACT
-  powerline-daemon --kill
-  unset PROMPT
+  export PS1="$pPS1"
 }
 
 # we'll want to disable powerline-status when running bash with
@@ -282,12 +267,6 @@ function history_rm_last() {
   fi
   return 1
 }
-
-if [ -z "${DEBUG}" ] || ! $DEBUG; then
- if declare -f powerline_init > /dev/null; then
-   powerline_init
- fi
-fi
 
 function setcompletion() {
   if [[ $(uname) == 'Darwin' ]]; then
@@ -344,7 +323,7 @@ alias vex="vim $D/existence && sex"
 alias mrsync="rsync $RSYNCOPTS"
 
 ## convenient regex to use with -v when grepping across many files
-export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
+IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 
 GRC_ALIASES=true
 [[ -s "/etc/profile.d/grc.sh" ]] && source /etc/grc.sh
