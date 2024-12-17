@@ -1,35 +1,57 @@
-function restore() (
+# Temporary for machine rebuild
+export OLDHOME="/CityInFlames/mt"
+export OLDETC="/CityInFlames/etc"
+
+function restore() {
   global=0
   LOC=$1
-  merge=1
-  clobber=0
-  glob=0
+  merge=0
+  etc=0
   help () {
     echo "A simple wrapper function to restore from a backup dir on a"
-    echo "fresh install."
+    echo "fresh install.  Default is to replace existing items, creating"
+    echo "a backup.  We can also merge/update."
     echo " " 
     echo "To work properly the following vars must be set to paths"
     echo "containing data to be restored:"
     echo " - OLDHOME, user files organized as they should be pulled into"
     echo "            the new system."
-    echo " - OLDSYS, files and software from outside the users homedir,"
-    echo "           activated by using the -n (nonpersonalized) flag."
+    # echo " - OLDSYS, files and software from outside the users homedir,"
+    # echo "           activated by using the -n (nonpersonalized) flag."
+    echo " - OLDETC, location of previous etc, will ask for sudo"
     echo " "
-    echo "-n is for non-personalized software from a local source"
-    echo "   but still restored to \$HOME."
-    echo "-g globs the restore target, will try to restore anything"
-    echo "   that exists in the backup like '*term*'.  We glob so you"
-    echo "   don't have to."sent
-    echo "-o will overwrite any existing files / dirs."
-    echo "   Default is to merge"
-    echo "-c when used with -o, will clobber newer files in the"
-    echo "   destination directory. Default is to only update."
+    # echo "-n is for non-personalized software from a local source"
+    # echo "   but still restored to \$HOME."
+    echo "-e will restore from OLDETC, will ask for sudo"
+    echo "-m will merge/update existing files"
+  }
+  our_copy() {
+    s="${1:-}"
+    d="${2:-}"
+    if ! is_function can_i_write; then
+      util_env_load -f
+    fi 
+    if can_i_write "$d"; then 
+      cp -avr "$s" "$d"
+      ret=$?
+    else
+      if confirm_yes "$(whoami) can't write to $d, use sudo?"; then 
+        sudo cp -avr "$s" "$d"
+        ret=$?
+      else
+        echo "exiting."
+        ret=1
+      fi
+    fi
+    return $ret
   }
 
-    do_restore() {
+  do_restore() {
     LOC="${1:-}"
     if [ $global -eq 1 ]; then 
       BK="${OLDSYS}"
+    elif [ $etc -eq 1 ]; then
+      BK="${OLDETC}"
     else
       BK="${OLDHOME}"
     fi
@@ -37,11 +59,15 @@ function restore() (
       >&2 printf "could not find original at $BK/$loc"
       return 1
     fi
-    # mounted=$(mountpoint $HOME/$TARGET);
-    # if [ $? -ne 0 ]; then
-    #   $LH/mounter-t.sh
-    # fi
-    if [ $merge -ne 0 ]; then
+    new="$BK/$LOC"
+    if [ $global -eq 0 ] && [ $etc -eq 0 ]; then 
+      old="$HOME/$LOC"
+      prerestorebak="$HOME/.bak"
+    elif [ $etc -eq 1 ]; then 
+      old="/etc/$LOC"
+      prerestorebak="$HOME/.etcprerestorebak"
+    fi  
+    if [ $merge -ne 1 ]; then
       if [ -d "$BK" ]; then
         if stringContains "/" "$LOC"; then
           dn=$(dirname "$LOC")
@@ -55,35 +81,34 @@ function restore() (
             fi
           fi
         fi
-        new="$BK/$LOC"
-        old="$HOME/$LOC"
+
+        mkdir -p "$prerestorebak"
         old_parent=$(dirname "$old")
         confirm_yes "restoring $new to $old_parent... ok?"
-        mkdir -p $HOME/.bak
+        echo
         if [ -d "$old" ]; then 
           echo "Backing up existing $old to .bak"
-          if ! cp -vr "$old" "$HOME/.bak"; then
+          if ! our_copy "$old" "$prerestorebak"; then
             return $?
           fi
         fi
-        cp -vr "$new" "$old_parent"
+        
+        our_copy "$new" "$old_parent"
         return $?
       else
         se "Didn't find a backup directory at $BK. exiting."
         return 1
       fi
-    elif [ $clobber -eq 1 ]; then
-      confirm_yes "merging $new to $old, clobbering newer files... ok?"
-      rsync -rltv "new" "$home"
-      return $?
     else
       confirm_yes "merging $new to $old if it exists... ok?"
-      rsync -rlutv "$new" "$home"
+      rsync -rlutv "$new" "$old"
       return $?
     fi
   }
+
+
   
-  args=$(getopt -o ngoch --long nonpersonalized,glob,overwrite,clobber,help -- "$@")
+  args=$(getopt -o nemch --long nonpersonalized,etc,merge,help -- "$@")
   if [[ $? -gt 0 ]]; then
     help
   fi
@@ -94,16 +119,12 @@ function restore() (
         global=1
         shift 
         ;;
-      -g|--glob)
-        glob=1
-        shift 
-        ;;
-      -o|--overwrite)
-        merge=0
+      -m|--merge)
+        merge=1
         shift
         ;;
-      -c|--clobber)
-        clobber=1
+      -e|--etc)
+        etc=1
         shift
         ;;
       -h|--help)
@@ -134,4 +155,33 @@ function restore() (
     fi
   done
   return ${failures}
-)
+}
+
+_restore_autocomplete() {
+  local cur
+  cur=${COMP_WORDS[COMP_CWORD]}
+  COMPREPLY=( $(compgen -f $OLDHOME/$cur | cut -d"/" -f5 ) )
+}
+complete -o filenames -F _restore_autocomplete restore
+
+function lsbke() {
+  ls "${OLDETC}"/"${1:-}"
+}
+
+_lsbke_autocomplete() {
+  local cur
+  cur=${COMP_WORDS[COMP_CWORD]}
+  COMPREPLY=( $(compgen -f ${OLDETC}/$cur | cut -d"/" -f5 ) )
+}
+complete -o filenames -F _lsbke_autocomplete lsbke
+
+function lsbkh() {
+  ls "${OLDHOME}"/"${1:-}"
+}
+
+_lsbkh_autocomplete() {
+  local cur
+  cur=${COMP_WORDS[COMP_CWORD]}
+  COMPREPLY=( $(compgen -f ${OLDHOME}/$cur | cut -d"/" -f5 ) )
+}
+complete -o filenames -F _lsbkh_autocomplete lsbkh

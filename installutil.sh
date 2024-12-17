@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
 
+default_installer=undefined
+
 if [[ $(uname) == "Linux" ]]; then
   distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
 elif [[ $(uname) == "Darwin" ]]; then
+  default_installer=brew
+
   source $D/macutil.sh
   function sai() {
     brew install $@
+  }
+  # brew already doesn't ask for confirmation, but for 
+  # cross platform consistency
+  function sayi() {
+    sai $@
   }
   function sas() {
     brew search $@
@@ -29,26 +38,55 @@ elif [[ $(uname) == "Darwin" ]]; then
 
 fi
 
-if string_contains "arch" "$distro"; then
+if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
+  default_installer=pacman
   function sai() {
     sudo pacman -Sy $@
+  }
+  function sayi() {
+    sudo pacman -Sy --noconfirm $@
+  }
+  function yayi() {
+    yay -Sy $@
   }
   function sau() {
     sudo pacman -Syu 
   }
   function sauu() {
-    pacman -Syu $@
+    sudo pacman -Syu $@
   }
   function sas() {
+    sudo pacman -Ss $@
+  }
+  function sasn() {
+    sudo pacman -Ss "^${1:-}" 
+   }
+  function sasy() {
     yay -Ss $@
   }
   function sar() {
     sudo pacman -Rscn $@
   }
+  function safs() {
+    sudo pacman -F $@
+  }
+  function salo() {
+    sudo pacman -Qdt $@
+  }
+  function sauud() {
+    yay -Syu --devel $@
+  }
+  function yRO() {
+    yay -R "$(yay -Qtd|awk '{print$1}'|xargs)"
+  }
 fi
 
 if string_contains "(fedora|nobara)" "$distro"; then
+  default_installer=dnf
   function sai() {
+    sudo dnf install $@
+  }
+  function sayi() {
     sudo dnf install -y $@
   }
   function sau() {
@@ -66,8 +104,12 @@ if string_contains "(fedora|nobara)" "$distro"; then
 fi
 
 if string_contains "(Debian|Ubuntu)" "$distro"; then
+  default_installer=aptitude
   alias di="sudo dpkg -i"
   function sai() {
+    sudo aptitude install $@
+  }
+  function sayi() {
     sudo aptitude install -y $@
   }
   # aptitude sometimes wants to force uninstall no longer required depends
@@ -104,6 +146,13 @@ if string_contains "(Debian|Ubuntu)" "$distro"; then
   }
   function sacfs() {
     sudo apt-cache search $@
+  }
+  function safs() {
+    if ! type -p apt-file 2>&1 > /dev/null; then 
+      sayi apt-file
+      sudo apt-file update
+    fi
+    sudo apt-file find
   }
   function vasl() {
     sudo vim /etc/apt/sources.list 

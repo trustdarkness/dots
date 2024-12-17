@@ -1,5 +1,62 @@
 #!/usr/bin/env bash
 
+function superblock_zero() {
+  if ! declare -F "confirm_yes" > /dev/null 2>&1; then 
+    source "$D/user_prompts.sh"
+  fi
+  mdadm_zero_string="%s mdadm zero superblocks on"
+  dd_zero_string="%s dd clear MBR on"
+  failures=0
+  word=${1}
+  declare -ga disks
+  disks=()
+  for (( i=0; i<${#word}; i++ )); do 
+    char=${word:$i:1}
+    disk="/dev/sd${char}"
+    stat "$disk"
+    ((failures+=$?))
+    disks+=( "$disk" )
+    mdadm_zero_string+=" %s"
+    dd_zero_string+=" %s"
+  done
+  if gt $failures 0; then 
+    echo "can't find disks for your input."
+    return $failures
+  fi
+  if [[ ${1:-} == "-y" ]]; then
+    command="echo" 
+    preamble=""
+  else 
+    command="confirm_yes"
+    preamble="(confirm)"
+  fi
+  mdadm_zero_sb() {
+    printf -v string "$mdadm_zero_string" "$preamble" "${disks[@]}"
+    $command "$string"
+    echo
+    if [ $? -eq 0 ]; then 
+      sudo mdadm --zero-superblock "${disks[@]}"
+      if [ $? -gt 0 ]; then 
+        echo "mdadm exited status $?"
+        return 1
+      fi
+    fi
+  }
+  dd_zero_mbr() {
+    printf -v string "$dd_zero_string" "$preamble" "${disks[@]}"
+    $command "$string"
+    echo
+    if [ $? -eq 0 ]; then 
+      for disk in "${disks[@]}"; do 
+        echo "clearing MBR on $disk"
+        sudo dd if=/dev/zero of=$disk bs=512 count=1
+      done
+    fi
+  }
+  dd_zero_mbr
+  mdadm_zero_sb
+}
+
 # returns 0 if $1 exists in the array referenced by the name in $2
 function in_array() {
   needle="${1:-}"
@@ -302,4 +359,83 @@ function fix_filenames() {
   find . -type f -print0 | while IFS= read -rd '' f; do
     mv "$f" "${f//[^[:print:]]}"
   done
+}
+
+# uses find to determine if the current user has read permissions
+# recursively below the provided directory
+# returns 0 if readable, return code of can_i_do if not
+function can_i_read() {
+  can_i_do "${1:-}" 555 $2
+}
+
+# uses find to determine if the current user has write permissions
+# recursively below the provided directory
+# returns 0 if writeable, return code of can_i_do if not
+function can_i_write() {
+  dir="${1:-$(pwd)}"
+  if [ -d "$dir" ]; then 
+    whoowns=$(ls -alh "$dir"|head -n2|tail -n1|awk '{print$3}')
+    if [[ "${whoowns}" == "$(whoami)" ]]; then
+      can_i_do "$dir" 200 
+      return $?
+    else
+      grpowns=$(ls -alh "$dir"|head -n2|tail -n1|awk '{print$4}')
+      if [[ "${grpowns}" == "$(whoami)" ]]; then
+        can_i_do "$dir" 020 
+        return $?
+      else
+        can_i_do "$dir" 002 
+        return $?
+      fi
+    fi
+  fi
+  return 1
+}
+
+
+# uses find to determine if the current user has given permissions
+# recursively below the provided directory
+# Args: 
+#  1 - directory name
+#  2 - umask
+#  3 - depth - defaults to all
+# returns 0 if perms match, 127 if unable to write basedir, 1 otherwise
+function can_i_do() {
+  local dir="${1:-}"
+  local mask="${2:-}"
+  local depth="${3:-all}"
+  if [ -d "${dir}" ]; then 
+    local ts="$(date '+%Y%m%d %H:%M:%S')"
+    local tempfile="/tmp/permcheck-${ts}"
+    local temppid="/tmp/pid-${ts}"
+    local tempfin="/tmp/fin-${ts}"
+    (
+    echo $$ > "${temppid}"
+    printf -v dashmask "\x2D%d" "$mask"
+    if is_int "${depth}"; then
+      find "${dir}" -depth "${depth}" -perm "$dashmask" 2>&1 > "${tempfile}"
+    elif [[ "${depth}" == "all" ]]; then 
+      find "${dir}" -perm "$dashmask" 2>&1 > "${tempfile}"
+    else
+      >&2 printf "couldn't understand your third parameter, which should be "
+      >&2 printf "depth, either an int or \"all\""
+      return 1
+    fi
+    echo $? > "${tempfin}"
+    )
+    while ! test -f "${tempfin}"; do 
+      sleep 1
+      cat "${tempfile}"|grep "Permission denied"
+      if [ $? -eq 0 ]; then 
+        kill $(cat "${temppid}")
+        return 127
+      fi
+    done
+    if [ -f "${tempfin}" ]; then
+      return $(cat "${tempfin}")
+    fi
+    return 0
+  else
+    >&2 printf "Please supply a path to check"
+  fi
 }

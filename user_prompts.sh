@@ -71,6 +71,7 @@ function confirm_yes_default_no() {
   done
 }
 
+# TODO: add "break_for_cancel_timeout_continue"
 function get_timed_keypress {
   local IFS=
   >/dev/tty printf '%s' "$*"
@@ -105,6 +106,8 @@ function timed_confirm_yes_default_no {
 }
 
 # See internal help
+# TODO -- investigate uses, figure out if this is working, and/or
+# delete or simplify
 function choices() {
   help() {
     echo <<< EOF
@@ -187,65 +190,94 @@ EOF
   done    
   local unknown="${1:-}"
   if [ -n "${unknown}" ]; then 
-    declareopts=$(declare -p "${1:-}")
-    if false; then 
-      # todo, search for -aA
-      local -n nameref="${1:-}"
-      local -n actionsn="${2:-}"
+    if tru $DEBUG; then 
+      declareopts=$(declare -p "${unknown}")
+      se "declareopts: $declareopts unknown: $unknown"
+    fi
+
+    # TODO: how to handle -A
+    if string_contains "\-a" "$declareopts"; then 
+      prompts_name=$1[@]
+      debug "$prompts_name"
+      prompts_arr=("${!prompts_name}") # we know this is an array
+      debug "-a ${#prompts_arr[@]}"
     elif [ ${#unknown[@]} -eq 1 ]; then 
       # arg1 is a string
+      prompts_arr=()
       prompts="${unknown}"
-      local pctr=0
       printf -v s '%s' "${separator}"
       local IFS=$"$s"
-      for prompt in "$prompts"; do 
-          ((pctr++))
-          echo "$ctr. $prompt"
+      for prompt in $prompts; do 
+        prompts_arr+=("$prompt")
       done
-      if $ucontinue; then 
-        ((pctr++))
-        echo "Continue, doing nothing."
-      fi
-      if boolean_or $uexit $ureturn; then
-        ((pctr++))
-        echo "Terminate execution and exit."
-      fi
-      chosen=$(get_keypress "Enter choice 1.. ${ctr}: ")
+    fi
+    debug "${prompts_arr[@]}"
+    # use lower case alphabet for the users choice to keep single
+    # character entry viable when more than 9 choices
+    declare -a a
+    a=()
+    for x in {a..z}; do 
+      a+=("$x")
+    done
+    pctr=0
+    # TODO: stdout seems fucked here, so using stderr for ui
+    # which is probably bad for whatever else that means.
+    for prompt in "${prompts_arr[@]}"; do 
+      se "${a[$pctr]}. $prompt"
+      ((pctr++))
+    done
+    if $ucontinue; then 
+      ((pctr++))
+      se "${a[$pctr]}. Continue, doing nothing."
+    fi     
+    if boolean_or $uexit $ureturn; then
+      ((pctr++))
+      se "${a[$pctr]}. Terminate execution and exit."
+    fi
+    set +x
+      chosen_letter=$(get_keypress "Enter choice a.. ${a[$pctr-1]}: ")
+      for i in "${!a[@]}"; do
+        if [[ "$chosen_letter" == "${a[$i]}" ]]; then
+          chosen="$i"
+          break
+        fi
+      done
+      se " "
       actions="${2:-}"
       if [ -n "$actions" ]; then 
         local IFS=$"$s"
         actr=0
         completed=false
         for action in "$actions"; do 
-          ((actr++))
-          if [ $actr -eq $pctr ]; then
+          
+          if [ $actr -eq $chosen ]; then
             eval "$action"
             completed=true
           fi
+          ((actr++))
         done
         if ! $completed; then
           if $ucontinue; then 
             ((actr++))
-            if [ $actr -eq $pctr ]; then 
-              echo "$((actr-1))"
-              return "$((actr-1))"
+            if [ $actr -eq $chosen ]; then 
+              echo "$((actr))"
+              return "$((actr))"
             fi
           fi
           if boolean_or $ureturn $uexit; then 
-            ((actr++))
-            if [ $actr -eq $pctr ]; then 
+            if [ $actr -eq $chosen ]; then 
               if $uexit; then 
                 exit 0;
               elif $ureturn; then 
-                echo "$((actr-1))"
-                return "$((actr-1))"
+                echo "$((actr))"
+                return "$((actr))"
               fi # endif uexit
             fi # endif pctr = actr
           fi #endif boolean or
         fi # endif not completed
       fi # endif -n actions
-    fi # endif false
+
   fi #endif unknown
-  echo "$((pctr-1))"
-  return "$((pctr-1))"
+  echo "$((chosen))"
+  return "$((chosen))"
 }

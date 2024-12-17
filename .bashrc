@@ -9,7 +9,11 @@ shopt -s direxpand
 shopt -s cdable_vars
 
 if [ -z "${D}" ]; then
-  D="$HOME/src/github/dots"
+  if [ -d "$HOME/src/github/dots" ]; then
+  export D="$HOME/src/github/dots"
+   else
+    detect_d
+  fi
 fi
 
 case $- in
@@ -30,6 +34,8 @@ function detect_d() {
   if [[ "${BASH_SOURCE[0]}" == ".bashrc" ]]; then 
     if [ -f "$(pwd)/util.sh" ]; then 
       D=$(pwd)
+      export D
+      return 0
     fi
   else
     : # REALBASHRC=$(readlink ${BASH_SOURCE[0]})
@@ -46,7 +52,7 @@ function detect_d() {
 # is caught before the system bash in /bin
 if [[ "${PATH}" != "*.local/sourced*" ]]; then
   PATHRC="$PATH"
-  PATH="$HOME/bin:$HOME/.local/bin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin$HOME/Applications:/usr/sbin:$PATH:$HOME/.local/sourced"
+  PATH="$HOME/bin:$HOME/.local/bin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin:$HOME/Applications:/usr/sbin:/opt/bin:$PATH:$HOME/.local/sourced"
   export PATH
 fi
 
@@ -55,43 +61,6 @@ NO_BASH_VERSION_WARNING=false
 
 EDITOR=vim
 RSYNCOPTS="-rlutUPv"
-
-# Detects the bash version and if < 4.2, prints a warning for the user
-# this warning can be supressed by setting the environment variable
-# NO_BASH_VERSION_WARNING=true
-function requires_modern_bash() {
-  # Some things in this bashrc are only valid for bash 4.2ish and up
-  if [[ bash_version < 4.3 ]]; then # 4.3 because pass by reference
-                                      # https://stackoverflow.com/questions/540298/passing-arguments-by-reference
-    if [ -n "${NO_BASH_VERSION_WARNING}" ] && ! "${NO_BASH_VERSION_WARNING}"; then
-      echo "Many of the utility functions associated with the code you're running"
-      echo "depend on features in modern(ish) bash (>= 4.2). Use at your own risk"
-      echo "(suppress by setting NO_BASH_VERSION_WARNING=true)"
-      if [[ $(uname -a) == "Darwin" ]]; then
-        echo " "
-        echo "On MacOS, installing modern bash is quite simple with homebrew"
-        if [ -f "$D/macbootstraps.sh" ]; then
-          source "$D/macbootstraps.sh"
-          choices_legacy "$MACBASHUPS" "$MACBASHUPA"
-          cleanup_macbootstraps
-          if [[ bash_version < 4.3 ]]; then
-            echo " "
-            echo "execution will continue but somethings will not work or may break"
-            echo "or function improperly."
-            >/dev/tty printf '%s' "Continue? (Y/n)"
-            [[ $BASH_VERSION ]] && </dev/tty read -rn1
-            if ! [[ "${REPLY,,}" == "y"* ]]; then
-              return 1
-            fi
-          fi # end chosen 0
-        fi
-      fi
-    fi
-  fi
-}
-# The goal is to use this almost like a decorator in python so as to
-# demarcate things that won't work by default on MacOS (or other ancient bash)
-alias rmb="requires_modern_bash"
 
 function vimc() { # TODO: input validation
   if command=$(type -p "${1:-}"); then 
@@ -140,8 +109,8 @@ HISTCONTROL=ignoreboth
 shopt -s histappend
 
 # for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
-HISTSIZE=10000
-HISTFILESIZE=20000
+HISTSIZE=1000000
+HISTFILESIZE=2000000
 
 # check the window size after each command and, if necessary,
 # update the values of LINES and COLUMNS.
@@ -165,8 +134,64 @@ if [ -x /usr/bin/dircolors ]; then
     alias ls='ls --color=auto'
     alias grep='grep --color=auto'
     alias fgrep='fgrep --color=auto'
-    alias egrep='egrep --color=auto'
 fi
+
+# https://unix.stackexchange.com/questions/148/colorizing-your-terminal-and-shell-environment
+function _colorman() {
+  env \
+    LESS_TERMCAP_mb=$'\e[1;35m' \
+    LESS_TERMCAP_md=$'\e[1;34m' \
+    LESS_TERMCAP_me=$'\e[0m' \
+    LESS_TERMCAP_se=$'\e[0m' \
+    LESS_TERMCAP_so=$'\e[7;40m' \
+    LESS_TERMCAP_ue=$'\e[0m' \
+    LESS_TERMCAP_us=$'\e[1;33m' \
+    LESS_TERMCAP_mr=$(tput rev) \
+    LESS_TERMCAP_mh=$(tput dim) \
+    LESS_TERMCAP_ZN=$(tput ssubm) \
+    LESS_TERMCAP_ZV=$(tput rsubm) \
+    LESS_TERMCAP_ZO=$(tput ssupm) \
+    LESS_TERMCAP_ZW=$(tput rsupm) \
+    GROFF_NO_SGR=1 \
+      "$@"
+}
+alias man="LANG=C _colorman man"
+function perldoc() { command perldoc -n less "$@" |man -l -; }
+
+if type grc grcat >/dev/null 2>&1; then
+  colourify() {  # using this as a function allows easier calling down lower
+    if [[ -t 1 || -n "$CLICOLOR_FORCE" ]]
+      then ${GRC:-grc} -es --colour=auto "$@"
+      else "$@"
+    fi
+  }
+
+  # loop through known commands plus all those with named conf files
+  for cmd in g++ head ld ping6 tail traceroute6 `locate grc/conf.`; do
+    cmd="${cmd##*grc/conf.}"  # we want just the command
+    type "$cmd" >/dev/null 2>&1 && alias "$cmd"="colourify $cmd"
+  done
+
+  # This needs run-time detection. We even fake the 'command not found' error.
+  configure() {
+    if [[ -x ./configure ]]; then
+      colourify ./configure "$@"
+    else
+      echo "configure: command not found" >&2
+      return 127
+    fi
+  }
+
+  unalias ll 2>/dev/null
+  ll() {
+    if [[ -n "$CLICOLOR_FORCE" || -t 1 ]]; then  # re-implement --color=auto
+      ls -l --color=always "$@" |grcat conf.ls
+      return ${PIPESTATUS[0]} ${pipestatus[1]} # exit code of ls via bash or zsh
+    fi
+    ls -l "$@"
+  }
+fi
+
 
 # colored GCC warnings and errors
 GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
@@ -228,6 +253,13 @@ function powerline_disable() {
   export PROMPT_COMMAND="${PROMPT_COMMAND/'_update_ps1;'/''}"
   export USE_POWERLINE=false
   export PS1="$pPS1"
+}
+
+if [[ $(uname) != "Darwin" ]]; then 
+  PROMPT_COMMAND='history -a'
+fi
+function h() {
+  history | grep "${1:-}"
 }
 
 # we'll want to disable powerline-status when running bash with

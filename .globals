@@ -12,16 +12,26 @@
 # centralized here to (hopefully) require minimal updates on moves.
 
 # egdod is relative not absolute because mounted over sshfs
-export BACKUP="egdod/Backup"
-export TARGET="vulcan"
-export TRIAGE="1984"
+# export BACKUP="egdod/Backup"
+export BACKUP="/run/media/mt/BackBack/Backup"
+# export TARGET="vulcan"
+export TARGET="terminus"
+export TRIAGE="/CityInFlames/1984"
 export VIDLIB="mmzzkk"
 export VIDTRIAGE="/$TRIAGE/${VIDLIB}_triage"
-export DEFAULT_PLAYER="terra"
-export PHOTOLIB="fodder"
-export MUSICLIB="/mmzzkk/Music"
-export MBKS="/egdod/Backup/xMusic/"
-export MARCH="/egdod/Backup/xMusic/Music_Archived"
+export DEFAULT_PLAYER="terminus"
+# note as part of 2024-11 data recovery, this is now fully qualified
+# export PHOTOLIB="fodder"
+export PHOTOLIB="$HOME/Pictures/.fodder"
+# temporary 2024-11 during data recovery
+# export MUSICLIB="/mmzzkk/Music"
+export MUSICLIB="/asteroid/Music"
+# export MBKS="/egdod/Backup/xMusic/"
+export MBKS="/CityInFlames/egdod/Backup/xMusic"
+# export MARCH="/egdod/Backup/xMusic/Music_Archived"
+export MARCH="/CityInFlames/egdod/Backup/xMusic/Music_Archived"
 export GH="$HOME/src/github"
 export LH="$GH/library-helpers"
-export D="$GH/dots"
+# for now, we consider dependency on my bashrc, osutil, and util hard 
+# requirements with a TODO to untangle the mess.
+# export D="$GH/dots"

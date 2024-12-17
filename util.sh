@@ -16,6 +16,18 @@
 # 
 # OS detection and loading of os-specific utils is toward the botton, 
 # line 170+ish at the time of writing. 
+TS=$(tput setaf 3) # yellow
+DBG=$(tput setaf 6) # cyan
+INF=$(tput setaf 2) # green
+WRN=$(tput setaf 208) # orange 
+ERR=$(tput setaf 1) # red
+STAT=$(tput setaf 165) # pink
+VAR=$(tput setaf 170) # lightpink
+CMD=$(tput setaf 36) # aqua
+MSG=$(tput setaf 231) # barely yellow
+RSL=$(tput setab 62) # purple highlighted white text
+RST=$(tput sgr0) # reset
+
 alias vsc="vim $HOME/.ssh/config"
 alias pau="ps auwx"
 alias paug="ps auwx|grep "
@@ -74,6 +86,7 @@ function util_env_load() {
   local mb=false
   local md=false
   local bc=false
+  local bs=false
   local POSITIONAL_ARGS=()
   while [ $# -gt 0 ]; do
     case "${1:-}" in
@@ -99,6 +112,10 @@ function util_env_load() {
         ;;
       "-d"|"--macdebug")
         md=true
+        shift
+        ;;
+      "-b"|"--bootstraps")
+        bs=true
         shift
         ;;
       *)
@@ -129,8 +146,27 @@ function util_env_load() {
     osutil_load
   fi
   if undefined "sau" && $iu; then
-    i
+    install_util_load
   fi
+  if undefined "term_bootstrap" && $bs; then 
+    source "$D/bootstraps.sh"
+  fi
+}
+
+function urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
+
+function clipcap() {
+  flag=true
+  trap ctrl_c INT
+  ctrl_c () {
+    export flag=false
+  }
+  declare -ga captured
+  while true; do 
+    clipnotify
+    captured+=( xclip -o )
+  done
+  echo "${captured[@]}"
 }
 
 function symlink_verbose() {
@@ -138,9 +174,21 @@ function symlink_verbose() {
   ln -sf "$target" "$linkname"
 }
  
+# TODO: make this less brittle
 function move_verbose() {
-  se "moving ${1:-} to ${2:-}"
-  mv "${1:-}" "${2:-}"
+  mvv_force=false
+  if [[ "${1:-}" == "-f" ]]; then 
+    mvv_force=true
+    shift
+  fi
+  printf "moving %s to %s" "${1:-}" "${2:-}"
+  if tru $mvv_force; then
+    echo " with -f"
+    mv -f "${1:-}" "${2:-}"
+  else
+    echo
+    mv "${1:-}" "${2:-}"
+  fi
 } 
 
 function lns() {
@@ -158,6 +206,14 @@ function lns() {
 
 function lnsdh() {
   lns "$D/${1:-}" "$HOME/${1:-}"
+}
+
+function gpgvc() {
+  gpg --verify < <(xclip -o)
+}
+
+function gpgic() {
+  gpg --import < <(xclip -o)
 }
 
 # preferred format strings for date for storing on the filesystem
@@ -685,7 +741,7 @@ function system_arch() {
 # Appends Arg1 to the shell's PATH and exports
 function path_append() {
   to_add="${1:-}"
-  if [ -f "${to_add}" ]; then 
+  if [ -d "${to_add}" ]; then 
     if ! [[ "${PATH}" == *"${to_add}"* ]]; then
       export PATH="${PATH}:${to_add}"
     fi
@@ -825,6 +881,17 @@ function hn () {
 #   fi
 # }
 
+# does a best effort search of a bash source file $2 
+# and attemtps to determine if the given function $1 
+# is called in that file, returns 0 if so and echos
+# the surrounding code to the console, 1 if not found
+# or indeterminite
+function is_called() {
+  func="${1:-}"
+  found=$(grep -n -B3 -A3 "$func" "${2:-}" |grep -v '^#' |sed "s/$func/${RSL}${func}${RST}/g")
+  echo "$found"
+}
+
 function is_absolute() {
   local dir="${1:-}"
   if [ -d "${dir}" ]; then 
@@ -888,7 +955,7 @@ function symlink_child_dirs () {
         fi
         shift
         ;;
-      ?|h)
+      h)
         help
         shift
         ;;
@@ -997,10 +1064,6 @@ function ghc () {
   cd $f
 }
 
-function gitcp() {
-  git commit -m"$@" && git push
-}
-
 function gits() {
   git status
 }
@@ -1025,6 +1088,14 @@ function ssudo () {
     ARGS="$@" && sudo bash -c "$(declare -f $1); $ARGS"
 }
 alias ssudo="ssudo "
+
+function is_alpha_char() {
+  local string="${1:-}"
+  if [ -n "$string" ] && [[ "$string" =~  [A-z] ]]; then 
+    return 0
+  fi
+  return 1 
+}
 
 # To help common bash gotchas with [ -eq ], etc, this function simply
 # takes something we hope to be an int (arg1) and returns 0 if it is
@@ -1075,7 +1146,7 @@ function lt() {
 
 function boolean_or {
   for b in "$@"; do
-    se "testing ${b}"
+    # se "testing ${b}"
     if [ -n "${b}" ]; then 
       if is_int ${b}; then
         if [ ${b} -eq 0 ]; then
@@ -1091,12 +1162,18 @@ function boolean_or {
   return 1
 }
 
+function sata_bus_scan() {
+  sudo sh -c 'for i in $(seq 0 4); do echo "0 0 0" > /sys/class/scsi_host/host$i/scan; done'
+}
+
 function get_cache_for_OS () {
   case $(what_os) in 
     'GNU/Linux')
       CACHE="$HOME/.local/cache"
       OSUTIL="$D/linuxutil.sh"
-      alias sosutil="source $D/linuxutil.sh"
+      function sosutil() {
+        source "$D/linuxutil.sh"
+      }
       alias vosutil="vim $D/linuxutil.sh && sosutil"
       ;;
     "MacOS")
@@ -1227,10 +1304,12 @@ if undefined "sai"; then
   sas() {
     unset -f sai sas sauu; i; sas "$@"
   }
-  sau() { 
+  sauu() { 
     unset -f sai sas sauu; i; sauu "$@"
   }
 fi
 
+
+
 # for other files to avoid re-sourcing
-utilsh_in_env=true
+UTILSH=true

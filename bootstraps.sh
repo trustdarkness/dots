@@ -5,21 +5,23 @@ if ! declare -F is_function > /dev/null 2>&1; then
   }
 fi
 
-if [ -z "$D" ]; then
-  if is_function "detect_d"; then detect_d; else  
-    if [[ "${BASH_SOURCE[0]}" == */* ]]; then 
-      dbs=$(dirname "${BASH_SOURCE[0]}")
-      if [ -n "$dbs" ] && [ -f "$dbs/util.sh" ]; then 
-        D="$dbs"
-      fi
-    fi
-    if [ -z "$D" ]; then if [ -n "$(pwd)/util.sh" ]; then D="$(pwd)"; fi; fi
-  fi
-  if [ -z "$D" ]; then 
-    echo "couldnt find the dots repo, please set D=path"; 
-    return 1
-  fi
-fi
+# for now, we consider dependency on my bashrc, osutil, and util hard 
+# requirements with a TODO to untangle the mess.
+# if [ -z "$D" ]; then
+#   if is_function "detect_d"; then detect_d; else  
+#     if [[ "${BASH_SOURCE[0]}" == */* ]]; then 
+#       dbs=$(dirname "${BASH_SOURCE[0]}")
+#       if [ -n "$dbs" ] && [ -f "$dbs/util.sh" ]; then 
+#         D="$dbs"
+#       fi
+#     fi
+#     if [ -z "$D" ]; then if [ -n "$(pwd)/util.sh" ]; then D="$(pwd)"; fi; fi
+#   fi
+#   if [ -z "$D" ]; then 
+#     echo "couldnt find the dots repo, please set D=path"; 
+#     return 1
+#   fi
+# fi
 
 if ! is_function "fsts"; then source "$D/util.sh"; fi
 if ! is_function "confirm_yes" || ! is_function "exists"; then
@@ -65,12 +67,13 @@ function tokenizer() {
   )
 }
 
+# BROKEN TODO: delete
 function choices_legacy() {
   local prompts="${1:-}"
   local actions="${2:-}"
   local pctr=0
   local IFS=$'\a'
-  for prompt in "$prompts"; do 
+  for prompt in $prompts; do 
       ((pctr++))
       echo "$ctr. $prompt"
   done
@@ -513,14 +516,16 @@ function new_mac_bootstrap() {
 }
 
 function yabridge_bootstrap() {
-  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
-  if [ -d $HOME/Downloads/yabridge ]; then 
-    cp -r $HOME/Downloads/yabridge $HOME/.local/share/
-  elif [ -d $HOME/bin/yabridge ]; then 
-    cp -r $HOME/bin/yabridge $HOME/.local/share/
+  TS=$(fsts)
+  if [ -d "$HOME/Downloads/yabridge" ]; then 
+    if [ -d "$HOME/.local/share/yabridge" ]; then
+      move_verbose "$HOME/.local/share/yabridge" "/tmp/yabridge_$TS"
+    fi
+    move_verbose -f "$HOME/Downloads/yabridge" "$HOME/.local/share/"
+    ln -sf "$HOME/.local/share/yabridge/yabridgectl" "$HOME/.local/bin/"
   else
     >&2 printf "Cant find yabridge updates in"
-    >&2 printf "$HOME/Downloads or $HOME/bin"
+    >&2 printf "%s/Downloads" "$HOME"
   fi
 }
 
@@ -603,7 +608,6 @@ function rcdefaultapp_bootstrap() {
 
 # breadcrumbs... for (relatively?) tearfree cross platform setup:
 function powerline_bootstrap() {
-  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   if ! type pipx >/dev/null 2>&1; then
     if ! [ -n "${p3}" ]; then
       if ! p3=$(type -p python3); then
@@ -634,21 +638,22 @@ function powerline_bootstrap() {
 # was originally written for, so this function remains generally OS 
 # agnostic.
 function termschemes_bootstrap() {
-  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   if ! [ -d "$GH/Terminal-Color-Schemes" ]; then 
     ghc "git@github.com:trustdarkness/Terminal-Color-Schemes.git"
   fi
   cd "$GH/Terminal-Color-Schemes"
   tools/import-schemes.sh
   cd -
-
+  if empty "$default_installer"; then 
+    install_util_load
+  fi
+  sayi grc
   local caller="$FUNCNAME"
   mb_ff "$caller"; return 0
 }
 
 # in the spirit of consistency, we'll keep these together
 function termfonts_bootstrap() { 
-  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   if ! fc-list |grep Hack-Regular; then 
     if [[ $(uname) == "Darwin" ]]; then 
       brew install font-hack
@@ -669,7 +674,10 @@ function termfonts_bootstrap() {
 }
 
 function term_bootstrap() {
-  if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
+  local caller="$FUNCNAME"
+  if [[ caller == "new_mac_bootstrap" ]]; then
+    if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
+  fi
   if ! is_completed "termschemes_bootstrap"; then termschemes_bootstrap; fi
   if ! is_completed "termfonts_bootstrap"; then termfonts_bootstrap; fi
 
@@ -956,6 +964,54 @@ function newaudiomac_bundle() {
   echo "the logs for the failed attempt can be found at $install_log"
   cd "$swd"
   return 1
+}
+
+####################### Linux Stuff
+
+
+function konsole_bootstrap() {
+  shell=$(type -p bash)
+  if ! is_function "term_bootstrap"; then source "$D/bootstraps.sh"; fi
+  term_bootstrap
+  local profile="$HOME/.local/share/konsole/td.profile"
+  if ! [ -f "${profile}" ]; then 
+    cat <<EOF > "${profile}"
+[Appearance]
+ColorScheme=Afterglow
+Font=Hack,10,-1,5,50,0,0,0,0,0
+UseFontLineChararacters=true
+Blur=true
+Translucency=true
+
+[General]
+Name=td
+Command=$shell
+Parent=FALLBACK/
+TerminalColumns=80
+TerminalRows=50
+
+[Interaction Options]
+CopyTextAsHTML=false
+TrimLeadingSpacesInSelectedText=true
+
+[Scrolling]
+HistoryMode=2
+EOF
+  fi
+  kontd
+  sed -i=bak "s/DefaultProfile=.*/DefaultProfile=td.profile/g" "$HOME/.config/konsolerc"
+  sed -i=bak 's@<Action name="split-view"@<Action name="split-view-top-bottom" /><Action name="split-view-left-right"@g' "$HOME/.local/share/kxmlgui5/konsole/konsoleui.rc"
+}
+
+function qdbus_bootstrap() {
+  distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
+  if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
+    sudo pacman -Sy qt6-tools
+    yay -Sy qt6-tools-desktop 
+    yay -Sy qt5-tools
+  elif string_contains "(Debian|Ubuntu)" "$distro"; then
+    sai qdbus-qt5 qdbus-qt6
+  fi
 }
 
 function snapd_teardown() {
