@@ -190,7 +190,7 @@ alias man="LANG=C _colorman man"
 function perldoc() { command perldoc -n less "$@" |man -l -; }
 
 if type grc grcat >/dev/null 2>&1; then
-  colourify() {  # using this as a function allows easier calling down lower
+  function colourify() {  # using this as a function allows easier calling down lower
     if [[ -t 1 || -n "$CLICOLOR_FORCE" ]]
       then ${GRC:-grc} -es --colour=auto "$@"
       else "$@"
@@ -204,7 +204,7 @@ if type grc grcat >/dev/null 2>&1; then
   done
 
   # This needs run-time detection. We even fake the 'command not found' error.
-  configure() {
+  function configure() {
     if [[ -x ./configure ]]; then
       colourify ./configure "$@"
     else
@@ -214,7 +214,7 @@ if type grc grcat >/dev/null 2>&1; then
   }
 
   unalias ll 2>/dev/null
-  ll() {
+  function ll() {
     if [[ -n "$CLICOLOR_FORCE" || -t 1 ]]; then  # re-implement --color=auto
       ls -l --color=always "$@" |grcat conf.ls
       return ${PIPESTATUS[0]} ${pipestatus[1]} # exit code of ls via bash or zsh
@@ -229,6 +229,7 @@ export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quo
 
 # for pre, post, and non-powerline setup
 export PS1="\[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[$(tput sgr0)\]$ "
+pPS1="$PS1"
 
 # some more ls aliases
 if type exa >/dev/null 2>&1; then
@@ -244,33 +245,44 @@ alias tac='tail -r'
 # problem it's intended to solve, so it's mostly here as a reminder.
 PRINTFDASH='\x2D'
 
-# Powerline
 function powerline_init() {
-  export PRE_POWERLINE="$PS1"
-  if pld=$(type -p powerline-daemon); then 
-    $pld -q
-    declare -x POWERLINE_BASH_CONTINUATION=1
-    declare -x POWERLINE_BASH_SELECT=1
-    declare -x POWERLINE_PROMPT="user_info last_status scm python_venv ruby cwd"
-    declare -x POWERLINE_PADDING=1
-    declare -x POWERLINE_COMPACT=0
-    declare -x PS1="$(powerline shell left)"
-    source $HOME/.local/share/powerline/powerline.sh
+  if [[ $(uname) == "Darwin" ]] && [[ "$(launchctl getenv POWERLINE)" == "TRUE" ]] || [[ "$PL_SHELL" == "true" ]]; then
+    function _update_ps1() {
+      PS1=$(powerline-shell $?)
+    }
+    export -f _update_ps1
+    _update_ps1
+
+    if [[ $TERM != linux && ! $PROMPT_COMMAND =~ _update_ps1 ]]; then
+      PROMPT_COMMAND="_update_ps1; $PROMPT_COMMAND"
+    fi
   fi
+}
+powerline_init
+
+function powerline_restart() {
+  if [[ $(uname) == "Darwin" ]]; then
+    launchctl setenv POWERLINE TRUE
+  else
+    export PL_SHELL="true"
+  fi
+  powerline_init
 }
 
 function powerline_disable() {
+  if [[ $(uname) == "Darwin" ]]; then
+    launchctl setenv POWERLINE "FALSE"
+  else
+    export PL_SHELL="false"
+  fi
+  if is_function "_update_ps1"; then
+    unset -f _update_ps1
+  fi
+  export PROMPT_COMMAND="${PROMPT_COMMAND/'_update_ps1;'/''}"
   export USE_POWERLINE=false
-  unset POWERLINE_BASH_CONTINUATION
-  unset POWERLINE_BASH_SELECT
-  unset POWERLINE_PROMPT
-  unset POWERLINE_PADDING
-  unset POWERLINE_COMPACT
-  powerline-daemon --kill
-  unset PROMPT
+  export PS1="$pPS1"
 }
 
-export PROMPT_COMMAND='history -a'
 function h() {
   history | grep "${1:-}"
 }

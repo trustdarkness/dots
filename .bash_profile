@@ -8,7 +8,9 @@ export -f is_function
 
 d=$(date +"%Y%m%d")
 mkdir -p "$HOME/.local/share/bash_histories/$d"
-cp -r "$HOME/.bash_history*" "$HOME/.local/share/bash_histories/$d"
+cp -r $HOME/.bash_history* "$HOME/.local/share/bash_histories/$d"
+
+PL_SHELL=true
 
 source $HOME/.bashrc
 
