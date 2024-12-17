@@ -42,7 +42,11 @@ function fsts_to_logfmt {
   date -jf "${FSTSFMT}" "${to_convert}" +"${MACOS_LOG_TSFMT}"
 }
 
-alias bi="bellicose install"
+function b2i() {
+  source "$HOME/src/bellicose/venv-intel/bin/activate"
+  "$HOME/src/bellicose/venv-intel/bin/python3" "$HOME/src/bellicose/bellicose.py" install "$@"
+}
+
 alias bvi="bellicose -v install"
 alias bSi="bellicose -S install"
 alias bSvi="bellicose -Sv install"
@@ -71,9 +75,7 @@ FONTDIRS=(
 # because I can never get the boot key combos, or its a bluetooth keyboard
 # or I want to feel like an adult (Intel Only)
 alias reboot_recovery="sudo /usr/sbin/nvram internet-recovery-mode=RecoveryModeDisk && sudo reboot"
-alias reboot_recoveryi="sudo nvram internet-recovery-mode=RecoveryModeNetwork && sudo reboot"
-# untested; https://apple.stackexchange.com/questions/367336/can-i-initiate-a-macos-restart-to-recovery-mode-solely-from-the-command-line
-alias reboot_recovery="sudo nvram 'recovery-boot-mode=unused' && sudo reboot"
+alias reboot_recoveryi="sudo nvram internet-recovery-mode=RecoveryModeNetwork && sudo reboot" 
 
 # use at your own risk
 alias uncodesign="codesign -f -s -"
@@ -106,14 +108,13 @@ printf -v PLUGIN_EREGEX '(%s|%s|%s)' "${PLUGINREGEXES[@]}"
 # setup the environment and make functions available from dpHelpers
 function cddph() {
   DPHELPERS="$HOME/src/dpHelpers" 
-  sleep 1
+  sleep 0.5
   cd "$DPHELPERS" 
   source "$DPHELPERS/lib/bash/lib_dphelpers.sh" 
   source "$DPHELPERS/lib/bash/lib_plugins.sh"
   source "venv/bin/activate"
   return 0
 }
-export -f cddph
 
 APP_FOLDERS=( 
   "/Applications" 
@@ -196,47 +197,31 @@ function xdu() {
   fi
 }
 
-# no idea what I was trying to accomplish here
-# trying to replicate du on linux?
-function dul() {
-  if [[ "${1:-}" == "-s" ]]; then
-    local dir=$2
-    local sudo=true
-  else
-    local dir="${1:-}"
-    local sudo=false
-  fi
-  if [ -d "${dir}" ]; then 
-    if ${sudo}; then 
-      xdu -s "${dir}" -d 0
-    else
-      xdu "${dir}" -d 0
-    fi
-  fi
-}
-
-# du -h --max-depth=0 on linux?
+# du -h --max-depth=0 with sudo if needed
 function du0() {
-  dul "${1:-}" -d 0 
+  dir="${1:-}" 
+  if can_i_read "$dir"; then 
+    du -h -d 0 "$dir" 
+  else
+    sudo du -h -d 0 "$dir" 
+  fi
 }
 
-# du -h --max-depth=0 on linux? but with sudo?
-function sdu0() {
-  dul -s "${1:-}" -d 0 
-}
-
-# du -h --max-depth=1 on linux?
+# du -h --max-depth=1 with sudo if needed
 function du1() {
-  dul "${1:-}" -d 1
-}
-
-# du -h --max-depth=1 on linux? but with sudo?
-function sdu1() {
-  dul -s "${1:-}" -d 1
+  dir="${1:-}" 
+  if can_i_read "$dir"; then 
+    du -h -d 1 "$dir" 
+  else
+    sudo du -h -d 1 "$dir" 
+  fi
 }
 
 # uses find to determine if the current user has read permissions
 # recursively below the provided directory
+# Args:
+#  directory
+#  (optional) depth
 # returns 0 if readable, return code of can_i_do if not
 function can_i_read() {
   can_i_do "${1:-}" 555 $2
@@ -305,31 +290,31 @@ function can_i_do() {
   local mask="${2:-}"
   local depth="${3:-all}"
   if [ -d "${dir}" ]; then 
-    local ts="$(date '+%Y%m%d %H:%M:%S')"
+    local ts="$(fsts)"
     local tempfile="/tmp/permcheck-${ts}"
     local temppid="/tmp/pid-${ts}"
-    local tempfin="/tmp/fin-${ts}"
-    (
-    echo $$ > "${temppid}"
+    local tempfin="/tmp/fin-${ts}"    
     printf -v dashmask "\x2D%d" "$mask"
-    if is_int "${depth}"; then
-      find "${dir}" -depth "${depth}" -perm "$dashmask" 2>&1 > "${tempfile}"
-    elif [[ "${depth}" == "all" ]]; then 
-      find "${dir}" -perm "$dashmask" 2>&1 > "${tempfile}"
-    else
-      >&2 printf "couldn't understand your third parameter, which should be "
-      >&2 printf "depth, either an int or \"all\""
-      return 1
-    fi
-    echo $? > "${tempfin}"
-    )
+    (
+      echo $$ > "${temppid}"
+      if is_int "${depth}"; then
+        find "${dir}" -depth "${depth}" -perm "$dashmask" > "${tempfile}" 2>&1 
+      elif [[ "${depth}" == "all" ]]; then 
+        find "${dir}" -perm "$dashmask" > "${tempfile}" 2>&1
+      else
+        >&2 printf "couldn't understand your third parameter, which should be "  
+        >&2 printf "depth, either an int or \"all\""
+        return 1
+      fi
+      echo $? > "${tempfin}"
+    ) &
     while ! test -f "${tempfin}"; do 
-      sleep 1
-      cat "${tempfile}"|grep "Permission denied"
+      grep "Permission denied" "${tempfile}"
       if [ $? -eq 0 ]; then 
         kill $(cat "${temppid}")
         return 127
       fi
+      sleep 0.5
     done
     if [ -f "${tempfin}" ]; then
       return $(cat "${tempfin}")
@@ -564,45 +549,213 @@ function isapp() {
   return $?
 }
 
+function is_codesigned() {
+  candidate="${1:-}"
+  bn=$(basename "$candidate")
+  codesign=$(codesign_get "${candidate}")
+  if string_contains "not signed" "$codesign"; then 
+    se "$bn does not appear to be codesigned"
+    return 1
+  fi
+  return 0
+}
+
 function is_machO_bundle() {
   bundledir="${1:?Please provide full path to a bundle or .app file}"
-  if machO=$(stat "${bundledir}/Contents/MacOS"); then
-    confirmed_machO_bundle=$(codesign_get "${bundledir}" \
-      |grep "Mach-O"|grep "bundle"|awk -F'=' '{print$2}')
-    # redundant, but handles return readably
-    grep "bundle" <<< "${confirmed_machO_bundle}"
+  bn=$(basename "$bundledir")
+  if [ -d "$bundledir" ]; then 
+    if machO=$(stat "${bundledir}/Contents/MacOS"); then
+      if ! is_codesigned "${bundledir}"; then 
+        return 2
+      fi
+      confirmed_machO_bundle=$(codesign_get "${bundledir}" \
+        |grep "Mach-O"|grep "bundle"|awk -F'=' '{print$2}')
+      # redundant, but handles return readably
+      grep "bundle" <<< "${confirmed_machO_bundle}"
+      if [ $? -eq 0 ]; then 
+        return 0
+      fi
+    fi
+  fi
+  return 1
+}
+
+get_CFBundleName() {
+  mystery="${1:?Please provide full path to a file or folder to get run info for}"
+  if [ -d "$mystery" ]; then 
+    infoplistpath="$mystery/Contents/Info.plist"
+    if [ -f "$infoplistpath" ]; then 
+      name=$(/usr/libexec/PlistBuddy -c "print :CFBundleName" "$infoplistpath" 2>&1| tr -d "'" | xargs )
+      if string_contains "Does Not Exist" "$name"; then
+        se "Bundle has Info.plist but CFBundleName does not exist"
+        return 2
+      else 
+        echo "$name"
+        return 0
+      fi
+    else
+      if [ -d "$mystery/Contents/MacOS" ]; then 
+        se "$mystery looks like a MachO bundle, but does not contain Info.plist" 
+        return 3
+      elif [ -d "$mystery/Contents" ]; then 
+        se "$mystery contains a Contents folder, but neither Contents/MacOS or Info.plist"
+        return 4
+      else
+        se "$mystery does not appear to be a bundle."
+        return 1
+      fi
+    fi
+  else
+    se "$mystery is not a folder, therefore not a bundle."
+    return 1
+  fi
+} 
+
+is_machO_exe() {
+  exe="${1:?Please provide full path to executable binary}"
+  bn=$(basename "$exe")
+  if [ -f "${exe}" ]; then 
+    codesign=$(codesign_get "${exe}" 2>&1)
+    echo "$codesign"|grep "not signed" > /dev/null 2>&1
     if [ $? -eq 0 ]; then 
-      se "is ${confirmed_machO}"
+      se "$bn does not appear to be codesigned"
+      return 2
+    fi
+    confirmed_machO_nobundle=$(echo "$codesign" |grep "Mach-O" \
+      |grep -v "bundle"|awk -F'=' '{print$2}')
+    # redundant, but handles return readably
+    grep -v "bundle" <<< "${confirmed_machO_nobundle}"
+    if [ $? -eq 0 ]; then 
+      se "is ${confirmed_machO_bundle}"
+      return 0
+    fi
+  fi
+}
+
+# Executables are binary code that the system can run (execute)
+# they may be Mach-O, but not bundles, meaning no .app, 
+# not direcotries.  They can also be unsigned (code written
+# by yourself, downloaded from github, etc).  In general, 
+# nothing distributed through Apple approved channels should
+# be executable and not machO.  How we've defined things, 
+# apps and executables are disjoint, MachO overlapping both.
+# An executable can be compiled for another architecture
+# (most commonly x86_64 vs arm64 these days), meaning it is
+# exe but can't run on _this_ machine.  See also canexe()
+# and runinfo()
+# Args: name to confirm is executable
+# returns 0 if so, 1 otherwise
+function isexe() {
+  exe="${1:?Please provide full path to executable binary}"
+  bn=$(basename "$exe")
+  if [ -f "${exe}" ]; then 
+    mach_header=$(otool -hv "${exe}")
+    if gout=$(grep "EXECUTE" <<< "${mach_header}"); then 
       return 0
     fi
   fi
   return 1
 }
 
-# Executables are also Mach-O, but not bundles, meaning no .app, 
-# not direcotries.  How we've defined things, apps and executables
-# are disjoint
-# Args: name to confirm is executable
-# returns 0 if so, 1 otherwise
-function isexe() {
+function canexe() {
   exe="${1:?Please provide full path to executable binary}"
-  if [ -f "${exe}" ]; then 
-    # MachO bundle .apps will be dirs
-    confirmed_machO_nobundle=$(codesign_get "${bundledir}" \
-      |grep "Mach-O"|grep -v "bundle"|awk -F'=' '{print$2}')
-    # redundant, but handles return readably
-    grep -v "bundle" <<< "${confirmed_machO_nobundle}"
-    if [ $? -eq 0 ]; then 
-      se "is ${confirmed_machO}"
+  bn=$(basename "$exe")
+  mach_arch=$(uname -m)  
+  if isexe "$exe"; then
+    mach_header_arch=$(otool -hv "${exe}"|tail -n 1 |awk '{print$2}') 
+    if [[ "${mach_header_arch,,}" == "${mach_arch,,}" ]]; then 
       return 0
+    else
+      se "$bn is executable on $mach_header_arch, but this machine is $mach_arch"
+      return 255
     fi
-    mach_header=$(binmachheader "${exe}"| awk '{print $2 $5}') 
-    gout=$(grep "EXECUTE" <<< "${mach_header}")
-    gret=$?
-    echo "${mach_header}"
-    return ${gret}
   fi
   return 1
+}
+
+function get_gatekeeperstatus() {
+  if gatekeeper_assess "${1:-}"; then 
+    echo "gatekeeper pass"
+    return 0
+  else
+    echo "gatekeeper fail"
+    return 1
+  fi
+}
+
+function get_quarantine_ok() {
+  ret=$(xattr -p com.apple.quarantine "${1:-}")
+  if [ $? -eq 0 ]; then
+    echo "quarantined"
+    return 1
+  else
+    echo "no qurantine"
+    return 0
+  fi
+}
+
+# prints a table to the console with information regarding the 
+# ability to run as an executable the path provided as an argument
+runinfo() {
+  mystery="${1:?Please provide full path to a file or folder to get run info for}"
+  test_names=(
+    "Codesigned"
+    "Executable"
+    "Executable on $(uname -m)"
+    "MachO Bundle"
+    "CFBundleName"
+    "Quarantine Status"
+    "Gatekeeper"
+  )
+
+  test_action=(
+    "is_codesigned"
+    "isexe"
+    "canexe"
+    "is_machO_bundle"
+    "get_CFBundleName"
+    "get_quarantine_ok"
+    "get_gatekeeper_status"
+  )
+
+  pass_fail_output=(
+    "true|false"
+    "true|false"
+    "true|false"
+    "true|false"
+    "output|N/A"
+    "OK|quarantined"
+    "pass|fail"
+  )
+  if $(type -p prettytfable > /dev/null 2>&1); then 
+    printer="prettytable 7"
+    printtext="  %s\t"
+  else 
+    printer="column"
+    printtext="%-22s"
+  fi
+  {
+    for name in "${test_names[@]}"; do 
+      printf "$printtext" "$name"
+    done
+    printf "\n"
+
+    idx=0
+    for test in "${test_action[@]}"; do 
+      out=$($test "$mystery" 2>&1)
+      if [ $? -eq 0 ]; then 
+        to_print=$(cut -d "|" -f 1 <<< "${pass_fail_output[$idx]}")
+        if [[ "$to_print" == "output" ]]; then 
+          to_print="$out"
+        fi
+        printf "$printtext" "$to_print"
+      else
+        printf "$printtext" $(cut -d "|" -f 2 <<< "${pass_fail_output[$idx]}")
+      fi
+      ((idx++))
+    done
+    printf "\n"
+  } | $printer
 }
 
 # Application in this function represents the union of apps and 
@@ -892,21 +1045,21 @@ function gatekeeper_list_rules() {
 # returns 0 if $1 is a path to a VST, VST3, or Component 
 # audio plugin (based on a regex, does not look to see if
 # its in a known location), 1 otherwise
-function is_audio_plugin() {
-  totest="${1:-}"
-  err_machO="Audio plugins should be folders (Mach-O bundles)"
-  if [ -d "${totest}" ]; then
-    if ! is_machO_bundle "${totest}"; then 
-      se "$err_machO"
-      return 1
-    fi
-    grep -E "${PLUGIN_EREGEX}" <<< "${totest}" > /dev/null
-    return $?
-  else
-    se "$err_machO"
-    return 1
-  fi
-}
+# function is_audio_plugin() {
+#   totest="${1:-}"
+#   err_machO="Au`dio plugins should be folders (Mach-O bundles)"
+#   if [ -d "${totest}" ]; then
+#     if ! is_machO_bundle "${totest}"; then 
+#       se "$err_machO"
+#       return 1
+#     fi
+#     grep -E "${PLUGIN_EREGEX}" <<< "${totest}" > /dev/null
+#     return $?
+#   else
+#     se "$err_machO"
+#     return 1
+#   fi
+# }
 
 # runs a gatekeeper assessment on a given file (arg1) for a given type (arg2)
 # prints the result to the console.  no explicit return.
@@ -1020,7 +1173,15 @@ function codesign_read_executable() {
 
 # replaces the codesign signature for the given bundle
 function codesign_replace() {
-  codesign --force --deep --sign - "${1:-}"
+  path="${1:-}"
+  if ! is_function can_i_write; then 
+    util_env_load -f
+  fi
+  if ! can_i_write "$path"; then 
+    sudo codesign --force --deep --sign - "$path"
+  else
+    codesign --force --deep --sign - "$path"
+  fi
 }
 
 # removes the quarantine bit if set
