@@ -90,30 +90,39 @@ function service_list() {
 #  fi
 #  if string_contains "${o}" "Could not find"; then
     # se "no exact match found, falling back to grep -i"
-    sudo launchctl list | grep -i "${service}" | awk '{print$NF}'
-#  fi 
+    if [ -n "$service" ]; then
+      sudo launchctl list | grep -i "${service}" | awk '{print$NF}'
+    else
+      sudo launchctl list | awk '{print$NF}'
+    fi
 }
 
 function _service_arguments_validate() {
   if [ $# -ne 2 ]; then 
+    if [ $# -eq 1 ] && [[ "$1" == "list" ]]; then 
+      return 0
+    fi
     _service_usage 
+    se "Two parameters required."
     return 1
   fi
-  actions=( "start" "stop" "restart" )
-  if [[ "${actions[*]}" != *"${1:-}"* ]]; then 
+  actions=( "start" "stop" "restart" "list" )
+  if [[ "${actions[*]}" != *"${2:-}"* ]]; then 
     _service_usage 
+    se "Malformed command"
     return 2
   fi  
   services=$(service_list)
-  if ! string_contains "${2:-}" "$services"; then 
+  if ! string_contains "${1:-}" "$services"; then 
      _service_usage 
+     se "Unknown service"
     return 3
   fi
   return 0   
 }
 
 function _service_usage() {
-  cat < 'EOF'
+  cat << 'EOF'
 service is meant to be used in the fashion of the old redhat 
 system administration tool.  The syntax is:
 
@@ -129,12 +138,16 @@ EOF
 # service $1 start
 # service $1 stop
 # service $1 restart
-function service () {
-  if ret=$(_service_arguments_validate $@); then 
+function service() {
+  if _service_arguments_validate "$@"; then
+     
     name="${1:-}"
     action="${2:-}"
-    supported_actions=("start" "stop" "restart")
+    supported_actions=("start" "stop" "restart" "list")
     realname=$(service_list "${name}")
+    if [ $# -eq 1 ] && [[ "$name" == "list" ]]; then 
+      action=list
+    fi
     case "${action}" in
       start)
         se "starting ${realname}"
@@ -164,12 +177,15 @@ function service () {
         fi
         return $failures
         ;;
-        
+      list)
+        service_list
+        return 0
+        ;;
     esac
   else
     # should have already gotten usage from args_validate
     # for a in $@; do if [[ a == "-h" ]]||[[ a == "-?" ]]; then _service_usage; fi; done
-    return $ret
+    return $?
   fi
 }
 
@@ -522,7 +538,7 @@ function plists_containerized() {
       return $ctpfailures
     else 
       se "$findfailures find $ctpfailures ctp failed"
-      return ((findfailures+ctpfailures))
+      return $((findfailures+ctpfailures))
     fi
   fi
   return 0

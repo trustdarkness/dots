@@ -1219,9 +1219,9 @@ function spotlight_disable_searching() {
   return $?
 }
 
-service () {
+function service() {
   if undefined "service_list"; then 
-    unset -f service ssr
+    # unset -f service ssr
     source "$D/macservices.sh"
   fi
   service "$@"
