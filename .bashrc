@@ -59,7 +59,7 @@ fi
 # see requires_modern_bash below
 NO_BASH_VERSION_WARNING=false
 
-export EDITOR=vim
+EDITOR=vim
 RSYNCOPTS="-rlutUPv"
 
 function vimc() { # TODO: input validation
@@ -136,37 +136,6 @@ if [ -x /usr/bin/dircolors ]; then
     alias fgrep='fgrep --color=auto'
 fi
 
-function fnegrep() {
-  sterm="${1:-}"
-  filename="${2:-}"
-  if [ -n "$sterm" ] && [ -f "$filename" ]; then 
-    out=$(grep -E -n "$sterm" "$filename" 2> /dev/null)
-    if [ $? -eq 0 ]; then 
-      split -a -F'\n' "$out"
-      grep_lines=( "${split_array[@]}" )
-      failures=0 # seems unnecessary, but just in case
-      for line in "${grep_lines[@]}"; do 
-        printf "%20s %s\n" "$filename" "$line"
-        if [ $? -gt 0 ]; then 
-          ((failures++))
-        fi
-      done 
-      return $failures
-    else  # if grep $? -eq 0
-      return $?
-    fi # endif grep ?$
-  fi # endif -n sterm -f filename
-  return 1
-}
-
-function dgrep() {
-  find "$D" -maxdepth 1 -exec bash -c "fnegrep ${1:-} {}" \;
-  if gt $? 0; then 
-    return 1
-  fi
-  return 0
-}
-
 # https://unix.stackexchange.com/questions/148/colorizing-your-terminal-and-shell-environment
 function _colorman() {
   env \
@@ -225,10 +194,12 @@ fi
 
 
 # colored GCC warnings and errors
-export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
+GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
 # for pre, post, and non-powerline setup
-export PS1="\[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[$(tput sgr0)\]$ "
+PS1="\[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[$(tput sgr0)\]$ "
+
+# keep PS1 in env for powerline_disable
 pPS1="$PS1"
 
 # some more ls aliases
@@ -244,6 +215,7 @@ alias tac='tail -r'
 # theres not really an easy way to use this in a substitution to solve the
 # problem it's intended to solve, so it's mostly here as a reminder.
 PRINTFDASH='\x2D'
+
 
 function powerline_init() {
   if [[ $(uname) == "Darwin" ]] && [[ "$(launchctl getenv POWERLINE)" == "TRUE" ]] || [[ "$PL_SHELL" == "true" ]]; then
@@ -283,6 +255,9 @@ function powerline_disable() {
   export PS1="$pPS1"
 }
 
+if [[ $(uname) != "Darwin" ]]; then 
+  PROMPT_COMMAND='history -a'
+fi
 function h() {
   history | grep "${1:-}"
 }
@@ -324,12 +299,6 @@ function history_rm_last() {
   fi
   return 1
 }
-
-if [ -z "${DEBUG}" ] || ! $DEBUG; then
- if declare -f powerline_init > /dev/null; then
-   powerline_init
- fi
-fi
 
 function setcompletion() {
   if [[ $(uname) == 'Darwin' ]]; then
@@ -386,7 +355,7 @@ alias vex="vim $D/existence && sex"
 alias mrsync="rsync $RSYNCOPTS"
 
 ## convenient regex to use with -v when grepping across many files
-export IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
+IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 
 GRC_ALIASES=true
 [[ -s "/etc/profile.d/grc.sh" ]] && source /etc/grc.sh

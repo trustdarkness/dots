@@ -84,6 +84,7 @@ function util_env_load() {
   local bsu=false
   local iu=false
   local mb=false
+  local md=false
   local bc=false
   local bs=false
   local POSITIONAL_ARGS=()
@@ -107,6 +108,10 @@ function util_env_load() {
         ;;
       "-i"|"--installutil")
         iu=true
+        shift
+        ;;
+      "-d"|"--macdebug")
+        md=true
         shift
         ;;
       "-b"|"--bootstraps")
@@ -133,6 +138,9 @@ function util_env_load() {
   fi
   if undefined "dirarray" && $fsau; then
     source "$D/filesystemarrayutil.sh"
+  fi
+  if undefined "binmachheader" && $md; then
+    source "$D/macdebug.sh"
   fi
   if untru $osutil_in_env && $osu; then
     osutil_load
@@ -272,132 +280,6 @@ function colnum() {
   return 1
 }
 
-# I'm not trying to be lazy, I'm trying to make the code readable
-function split() {
-  usage() {
-    echo "meant for use primarily with looping over strings to avoid needing"
-    echo "to muck with IFS, basically puts a newline in place of the field"
-    echo "separator, specified with -F and defaulting to a single space"
-    echo ""
-    echo "Args: "
-    echo "  -a   | instead of printing to the console with \n separators."
-    echo "       | split the string on the separator and populate a global"
-    echo "       | array \"split_array\" with the result."
-    echo "  -F   | specify a field separator, similar to awk"
-    echo "  -h|q | print this text"
-    return "${1:-0}"
-  }
-  to_array=false
-  field_separator=" "
-  
-  while getopts 'AF:h' optchar; do
-    local OPTIND
-    case $optchar in
-
-      F)
-      echo "minus F ${OPTARG}"
-        field_separator="${OPTARG}"
-        ;;
-      A)
-        echo "minus a"
-        to_array=true
-        ;;
-      h)
-        usage 
-        ;;
-      *)
-        usage 1 
-        ;;
-    esac
-  done
-  to_split="${@:$OPTIND:1}"
-  declare -ga split_array
-
-  if [ -n "$to_split" ]; then 
-    if tru $to_array; then
-      while true; do
-        if [[ "$field_separator" =~ ^\\[an] ]]; then # TODO: get list of awk exceptions
-          printf -v field_separator %b "${field_separator@E}"
-          se "set field_separator to $(declare -p field_separator)"
-        fi
-        next=$(echo "$to_split" |awk -F"$field_separator" '{print$1}')
-        prev_to_split="$to_split"
-        l=${#field_separator}
-        i=$(colnum "$field_separator" "$to_split")
-        if [ $? -eq 255 ]; then
-          split_array+=( $(echo "$to_split"|awk -F"$field_separator" '{print$NF}') )
-          break
-        fi
-        split_array+=( "$next" )
-        to_split="${to_split:$((i+l))}"
-        if [[ $prev_to_split == $to_split ]]; then 
-          break
-        fi
-        se "s: $to_split"
-        se "a: ${split_array[@]}"
-      done
-      if isset "${split_array[*]}"; then 
-        return 0
-      else
-        return 2
-      fi
-    else
-      printf %s\\n "$to_split" | tr "$field_separator" '\n'
-      return 0
-    fi
-  fi
-  help 1
-}
-
-function version_ge() {
-  splitter() {
-    local to_split="${1:-}"
-    local major_minor="${2:-}"
-    local ctr=0
-    if [ -n "$to_split" ] && [[ "$to_split" == "*.*" ]]; then 
-      for part in $(split "$to_split"); do
-        case ctr in 
-          0)
-            if [[ "$major_minor" == "major" ]]; then 
-              if is_int "$part"; then 
-                echo "$part"
-                return 0 
-              fi 
-            fi
-            ((ctr++))
-            ;;
-          1)
-            if [[ "$major_minor" == "minor" ]]; then 
-              if is_int "$part"; then 
-                echo "$part"
-                return 0 
-              fi 
-            fi
-            ((ctr++))
-            ;;
-          *)
-            break
-            ;;
-        esac
-      done
-    fi
-    return 1
-  }
-  local want_greater="${1:-}"
-  local greater_than="${2:-}"
-  local want_greater_major=$(splitter $want_greater "major")
-  local want_greater_minor=$(splitter $want_greater "minor")
-  local greater_than_major=$(splitter $greater_than "major")
-  local greater_than_minor=$(splitter $greater_than "minor")
-  if [ $want_greater_major -gt $greater_than_major ]; then 
-    return 0 
-  elif [ $want_greater_major -eq $greater_than_major ] &&
-    [ $want_greater_minor -ge $greater_than_minor ]; then 
-    return 0
-  fi
-  return 1
-}
-
 # Normalize os detection for consistency, hopefully reducing the chance
 # of simple typo, etc mistakes and increasing readability
 function is_mac() {
@@ -414,25 +296,6 @@ function is_linux() {
   return 1
 }
 
-# Written for modern bash, adapted for the unreasonably crappy apple unix
-# experience
-# if version_ge "$BASH_VERSION" "$MODERN_BASH"; then
-#   # Only one of these should ever return a 0 on any platform
-#   # shit.  i smell a unit test.
-#   declare -A OS_DETECT
-#   # Thanks Steve(s).  Thanks ATT... erm.
-#   OS_DETECT["MacOS"]="is_mac"
-#   # Thanks Richard.  Thanks Linus.
-#   OS_DETECT['GNU/Linux']="is_linux"
-
-#   function what_os() {
-#     for os_name in "${!OS_DETECT[@]}"; do 
-#       if eval "${OS_DETECT[$os_name]}"; then 
-#         echo "$os_name"
-#       fi
-#     done
-#   }
-# else 
   function what_os() {
     if is_mac; then echo "MacOS"; return 0; fi
     if is_linux; then echo 'GNU/Linux'; return 0; fi

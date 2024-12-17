@@ -278,7 +278,8 @@ function thunar_sorting_bootstrap() {
   thunarParent=$(dirname "$whichThunar")
   declare -a b4
   found=false
-  for pathel in $(split "$PATH"); do 
+  local IFS='/'
+  for pathel in $PATH; do 
     if [[ "$pathel" != "$thunarParent" ]] && ! $found; then
       b4+=( "$pathel" )
     elif [[ "$pathel" == "$thunarParent" ]]; then 
@@ -453,7 +454,7 @@ function new_mac_bootstrap() {
     return 1
   fi
 
-  echo "Setting up powerline-status"
+  echo "Setting up powerline-shell"
   if ! is_completed "powerline_bootstrap"; then powerline_bootstrap; fi
   echo "vscodium as git mergetool"
   if ! is_completed "vscodium_as_git_mergetool"; then vscodium_as_git_mergetool; fi
@@ -610,31 +611,25 @@ function powerline_bootstrap() {
   if ! type pipx >/dev/null 2>&1; then
     if ! [ -n "${p3}" ]; then
       if ! p3=$(type -p python3); then
-        echo "python3 doesnt seem to be in \$PATH..."
-        # TODO: finish
+        >&2 printf "python3 doesnt seem to be in \$PATH..."
+        >&2 printf "  on debian based systems, try sudo apt install pipx"
+        >&2 printf "  on mac, install homebrew, then brew cask python; brew cask pipx"
+        >&2 printf "Or something, you know the deal."
+        ret=1
       fi
     fi
   fi
-  grep "powerline-status" < <(pipx list) > /dev/null 2>&1
+  grep "powerline-shell" < <(pipx list) > /dev/null 2>&1
   if [ $? -gt 0 ]; then
-    pipx install powerline-status
-    if [ -z "${psh}" ]; then
-      # the first line of the output of pipx list contains the location of its venvs
-      # we look for the version of powerline.sh with "bash" in its path -- as
-      # as opposed to the plain old shell verison.
-      if ! psh=$(find $(pipx list |head -n1 |awk '{print$NF}') -name "powerline.sh" 2> /dev/null |grep "bash"); then
-        se "cant find powerline.sh, assign psh= and run again"
-        return 1
-      fi
-    fi
-  fi
-  if ! [ -L "$HOME/.local/share/powerline/powerline.sh" ]; then
-    mkdir -p "$HOME/.local/share/powerline"
-    ln -is "${psh}" $HOME/.local/share/powerline/
+    pipx install powerline-shell
+    ret=$?
+  else
+    >&2 printf "powerline-shell already installed.  nothing to see here."
+    ret=0
   fi
 
   local caller="$FUNCNAME"
-  mb_ff "$caller"; return 0
+  mb_ff "$caller"; return $ret
 }
 
 # my basic edits to import-schemes.sh below will detect and add color
