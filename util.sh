@@ -16,6 +16,10 @@
 # 
 # OS detection and loading of os-specific utils is toward the botton, 
 # line 170+ish at the time of writing. 
+#####################  internal logging and bookkeeping funcs
+#############################################################
+
+# colors for logleveled output to stderr
 TS=$(tput setaf 3) # yellow
 DBG=$(tput setaf 6) # cyan
 INF=$(tput setaf 2) # green
@@ -25,8 +29,178 @@ STAT=$(tput setaf 165) # pink
 VAR=$(tput setaf 170) # lightpink
 CMD=$(tput setaf 36) # aqua
 MSG=$(tput setaf 231) # barely yellow
-RSL=$(tput setab 62) # purple highlighted white text
 RST=$(tput sgr0) # reset
+ 
+#      TIMESTAMP [FUNCTION] [LEVEL] PID FILENAME:LINENO
+LOGFMT="${TS}%12s [%s] %s %s %s"
+if [ -n "$XDG_STATE_HOME" ]; then 
+  LOGDIR="$XDG_STATE_HOME/com.trustdarkness.dots"
+else
+  LOGDIR="$HOME/Library/Logs/com.trustdarkness.dots"
+fi
+mkdir -p "$LOGDIR"
+LOGFILE=
+
+LOG_LEVELS=( ERROR WARN INFO DEBUG )
+
+# Given a log level name (as above), return
+# a numeric value
+# 1 - ERROR
+# 2 - WARN
+# 3 - INFO
+# 4 - DEBUG
+get_log_level() {
+  idx=0
+  for level in "${LOG_LEVELS[@]}"; do 
+    if [[ "$level" == "${1:-}" ]]; then 
+      echo $idx
+      return 0
+    fi
+    ((idx++))
+  done 
+  return 1
+}
+
+# Strip any coloring or brackegs from a log level
+striplevel() {
+  echo "${1:-}"|sed 's/\x1B\[[0-9;]*[JKmsu]//g'|tr -d '[' |tr -d ']'
+}
+
+# based on the numeric log level of this log message
+# and the threshold set by the current user, function, script
+# do we echo or just log?  If threshold set to WARN, it 
+# means we echo WARN and ERROR, log everything
+to_echo() {
+  this_log=$(get_log_level "${1:-}")
+  threshold=$(get_log_level "${2:-}")
+  if le "$this_log" "$threshold"; then 
+    return 0
+  fi
+  return 1
+}
+
+# Log to both stderr and a file (see above).  Should be called using
+# wrapper functions below, not directly
+_log() {
+
+  local timestamp=$(fsts)
+
+  local pid="$$"
+  local src=$(basename "${BASH_SOURCE[-1]}")
+  local funcname="${FUNCNAME[2]}"
+  local level="$1"
+  shift
+  local message="$@"
+  if [ -z "$LOGFILE" ]; then 
+    LOGFILE="$LOGDIR/$src.log"
+  fi
+  printf -v line_leader "$LOGFMT" "$timestamp" "$funcname" "$level" "${pid}$MSG" \
+    "$src" 
+  (
+     this_level=$(striplevel "$level")
+    if to_echo $this_level $LEVEL; then 
+      #exec 3>&1 
+      # remove coloring when going to logfile 
+      echo "$line_leader $message${RST}" 2>&1 | sed 's/\x1B\[[0-9;]*[JKmsu]//g' | tee -a "$LOGFILE" 
+    else
+      echo "$line_leader $message${RST}" | sed 's/\x1B\[[0-9;]*[JKmsu]//g' >> "$LOGFILE"
+    fi
+  )
+}
+
+# Templates for colored stderr messages
+printf -v E "%s[%s]" $ERR "ERROR"
+printf -v W "%s[%s]" $WRN "WARN"
+printf -v I "%s[%s]" $INF "INFO"
+printf -v B "%s[%s]" $DBG "DEBUG"
+
+# wrappers for logs at different levels
+error() { 
+  _log $E "$@"
+}
+
+warn() { 
+  _log $W "$@"
+}
+
+info() { 
+  _log "$I" "$@" 
+}
+
+debug() { 
+  _log "$B" "$(prvars) $@" 
+}
+
+################# helper functions for catching and printing
+# errors with less boilerplate (though possibly making it 
+# slightly more arcane).  an experiment
+
+# print status, takes a return code
+prs() {
+  s=$1
+  printf "${STAT}\$?:$RST %d " "$s"
+}
+
+# print variables, takes either a list of variable names
+# (the strings, not the vars themselves) or looks in a 
+# global array ${logvars[@]} for same
+prvars() {
+  if [ $# -gt 0 ]; then 
+    arr=($@)
+  else 
+    arr=(${logvars[@]})
+    logvars=()
+  fi
+  for varname in "${arr[@]}"; do 
+    n=$varname
+    v="${!n}"
+    printf "${VAR}%s:${RST} %s " "$n" "$v"
+  done     
+}
+
+# prints command, arguments, and output
+prcao() {
+  c="${1:-}"
+  a="${2:-}"
+  o=$(echo "${3:-}"|xargs)
+  e=$(echo "${4:-}"|xargs)
+  printf "${CMD}cmd:$RST %s ${CMD}args:$RST %s ${CMD}stdout:$RST %s ${CMD}stderr:$RST %s " "$c" "$a" "$o" "$e"
+}
+
+# print a structured error, when the command with arguments, 
+# other relevant vars, exit status, and output, says all that needs
+# to be said
+# Args: return code, command, args, output, stderr
+struct_err() {
+  ret=$1
+  cmd=$2
+  args=$3
+  out=$4
+  err=$5
+  retm=$(prs "$ret")
+  varsm=$(prvars)
+  com=$(prcao "$cmd" "$args" "$out" "$err")
+  printf -v error_msg "%s %s %s" "$retm" "$varsm" "$com"
+  error "$error_msg"
+}
+
+# runs a command, wrapping error handling
+# args: command to run, args
+lc() {
+  cmd="$1"; shift
+  #info "lc: $cmd $@"
+  {
+      IFS=$'\n' read -r -d '' err;
+      IFS=$'\n' read -r -d '' out;
+      IFS=$'\n' read -r -d '' ret;
+  } < <((printf '\0%s\0%d\0' "$($cmd $@)" "${?}" 1>&2) 2>&1)
+  if [ $ret -gt 0 ]; then 
+    struct_err "$ret" "$cmd" "$@" "$out" "$err"
+    return $ret
+  else
+    echo "$out" && return 0
+  fi
+}
 
 alias vsc="vim $HOME/.ssh/config"
 alias pau="ps auwx"
@@ -663,15 +837,15 @@ function cleanup_namespace() {
 }
 
 # for things you only want there when the above DEBUG flag is set
-function debug() {
-  if $DEBUG; then
-    if [ $# -eq 2 ]; then 
-      >&2 printf "${1:-}\n" "${@:2:-}"
-    else
-      >&2 printf "${1:-}\n"
-    fi
-  fi
-}
+# function debug() {
+#   if $DEBUG; then
+#     if [ $# -eq 2 ]; then 
+#       >&2 printf "${1:-}\n" "${@:2:-}"
+#     else
+#       >&2 printf "${1:-}\n"
+#     fi
+#   fi
+# }
 
 # Arg1 is needle, Arg2 is haystack
 # returns 0 if haystack contains needle, retval from grep otherwise
@@ -1134,6 +1308,24 @@ function lt() {
   if is_int ${term1}; then 
     if is_int ${term2}; then
       if [ ${term1} -lt ${term2} ]; then
+        return 0
+      else
+        return 1
+      fi
+    fi
+  elif [[ "${term1}" == "" ]]; then
+    return 1
+  fi
+}
+
+# Args: first term we hope is less than the second.
+# returns 0 if it is, 1 otherwise. if first term is "", return 1
+function le() {
+  term1="${1:-}"
+  term2="${2:-}"
+  if is_int ${term1}; then 
+    if is_int ${term2}; then
+      if [ ${term1} -le ${term2} ]; then
         return 0
       else
         return 1
