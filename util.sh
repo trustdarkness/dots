@@ -32,14 +32,14 @@ MSG=$(tput setaf 231) # barely yellow
 RST=$(tput sgr0) # reset
  
 #      TIMESTAMP [FUNCTION] [LEVEL] PID FILENAME:LINENO
-LOGFMT="${TS}%12s [%s] %s %s %s"
+LOGFMT="%12s [%s] %s %s %s"
 if [ -n "$XDG_STATE_HOME" ]; then 
   LOGDIR="$XDG_STATE_HOME/com.trustdarkness.dots"
 else
   LOGDIR="$HOME/Library/Logs/com.trustdarkness.dots"
 fi
+export LOGDIR
 mkdir -p "$LOGDIR"
-LOGFILE=
 
 LOG_LEVELS=( ERROR WARN INFO DEBUG )
 
@@ -83,10 +83,11 @@ to_echo() {
 # wrapper functions below, not directly
 _log() {
 
-  local timestamp=$(fsts)
+  local ts=$(fsts)
 
   local pid="$$"
-  local src=$(basename "${BASH_SOURCE[-1]}")
+  src="${BASH_SOURCE[-1]}"
+  bn=$(basename "$src")
   local funcname="${FUNCNAME[2]}"
   local level="$1"
   shift
@@ -94,8 +95,8 @@ _log() {
   if [ -z "$LOGFILE" ]; then 
     LOGFILE="$LOGDIR/$src.log"
   fi
-  printf -v line_leader "$LOGFMT" "$timestamp" "$funcname" "$level" "${pid}$MSG" \
-    "$src" 
+  printf -v line_leader "$LOGFMT" "$ts" "$funcname" "$level" "pid: ${pid}" "$src: $lineno" \
+     
   (
      this_level=$(striplevel "$level")
     if to_echo $this_level $LEVEL; then 
@@ -106,6 +107,7 @@ _log() {
       echo "$line_leader $message${RST}" | sed 's/\x1B\[[0-9;]*[JKmsu]//g' >> "$LOGFILE"
     fi
   )
+  return 0
 }
 
 # Templates for colored stderr messages
@@ -116,19 +118,19 @@ printf -v B "%s[%s]" $DBG "DEBUG"
 
 # wrappers for logs at different levels
 error() { 
-  _log $E "$@"
+  _log $E "$@"; return $?
 }
 
 warn() { 
-  _log $W "$@"
+  _log $W "$@"; return $?
 }
 
 info() { 
-  _log "$I" "$@" 
+  _log "$I" "$@"; return $?
 }
 
 debug() { 
-  _log "$B" "$(prvars) $@" 
+  _log "$B" "$(prvars) $@"; return $?
 }
 
 ################# helper functions for catching and printing
@@ -146,16 +148,22 @@ prs() {
 # global array ${logvars[@]} for same
 prvars() {
   if [ $# -gt 0 ]; then 
-    arr=($@)
-  else 
-    arr=(${logvars[@]})
-    logvars=()
+    for arg in "$@"; do 
+      logvars+=( "$arg" )
+    done
   fi
-  for varname in "${arr[@]}"; do 
+  for varname in "${logvars[@]}"; do 
     n=$varname
     v="${!n}"
+    if [ "${#v[@]}" -gt 1 ]; then 
+      printf "${VAR}%s=( ${RST}" "$n"
+      printf "%s " "${v[@]}"
+      printf "${VAR})"
+    fi
     printf "${VAR}%s:${RST} %s " "$n" "$v"
   done     
+  logvars=()
+  return 0
 }
 
 # prints command, arguments, and output
