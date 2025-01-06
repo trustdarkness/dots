@@ -1,4 +1,275 @@
 #!/usr/bin/env bash
+
+# This file contains generally os-agnostic (POSIX-ish, though also WSL)
+# functions and utilities that shouldn't be too annoying to keep handy
+# in the env of an interactive sessionn, but also as a sort of personal 
+# stdlib for inclusion in scripts.  If a script is something I think 
+# others might want to check out and use it, I try to make it self 
+# contained, as things in this file do reference specific bits of my setup
+# that others won't have, however, I've tried to make it relatively 
+# safe for that use case as well YMMV and there shall be no expectations,
+# warranty, liability, etc, should you break something.
+# 
+# github.com/trustdarkness
+# GPLv2 if it should matter
+# Most things should work on old versions of bash, but really bash 4.2+ reqd
+# 
+# OS detection and loading of os-specific utils is toward the botton, 
+# line 170+ish at the time of writing. 
+#####################  internal logging and bookkeeping funcs
+#############################################################
+ 
+shopt -s expand_aliases
+
+# colors for logleveled output to stderr
+TS=$(tput setaf 3) # yellow
+DBG=$(tput setaf 6) # cyan
+INF=$(tput setaf 2) # green
+WRN=$(tput setaf 208) # orange 
+ERR=$(tput setaf 1) # red
+STAT=$(tput setaf 165) # pink
+VAR=$(tput setaf 170) # lightpink
+CMD=$(tput setaf 36) # aqua
+MSG=$(tput setaf 231) # barely yellow
+RST=$(tput sgr0) # reset
+ 
+if [ -n "$XDG_STATE_HOME" ]; then 
+  LOGDIR="$XDG_STATE_HOME/com.trustdarkness.dots"
+else
+  LOGDIR="$HOME/Library/Logs/com.trustdarkness.dots"
+fi
+export LOGDIR
+mkdir -p "$LOGDIR"
+
+LOG_LEVELS=( ERROR WARN INFO DEBUG )
+
+# Given a log level name (as above), return
+# a numeric value
+# 1 - ERROR
+# 2 - WARN
+# 3 - INFO
+# 4 - DEBUG
+_get_log_level() {
+  idx=0
+  for level in "${LOG_LEVELS[@]}"; do 
+    if [[ "$level" == "${1:-}" ]]; then 
+      echo $idx
+      return 0
+    fi
+    ((idx++))
+  done 
+  return 1
+}
+
+# Strip any coloring or brackegs from a log level
+_striplevel() {
+  echo "${1:-}"|sed 's/\x1B\[[0-9;]*[JKmsu]//g'|tr -d '[' |tr -d ']'
+}
+
+# based on the numeric log level of this log message
+# and the threshold set by the current user, function, script
+# do we echo or just log?  If threshold set to WARN, it 
+# means we echo WARN and ERROR, log everything
+_to_echo() {
+  this_log=$(get_log_level "${1:-}")
+  threshold=$(get_log_level "${2:-}")
+  if le "$this_log" "$threshold"; then 
+    return 0
+  fi
+  return 1
+}
+
+# return something resembling user@term - terminfo
+# for iterm, terminfo will be the profile name unless Default 
+# then, and other local termainls, TERM_SESSION_ID
+# for ssh, this will be user@host - tty
+_user_term_info() {
+  local uterm
+  local uterminfo
+  if [ -n "$SSH_CLIENT" ]; then 
+    uterm=$(
+      [[ "${SSH_CLIENT}" =~ ([!-~]+)[[:space:]] ]] && 
+      echo "${BASH_REMATCH[1]}"
+    ) || uterm="$SSH_CLIENT" # just in case
+    uterminfo="$SSH_TTY"
+  elif [ -n "$TERM_PROGRAM" ]; then 
+    uterm="$TERM_PROGRAM"
+    if [ -n "$ITERM_PROFILE" ] && [[ "$ITERM_PROFILE" != "Default" ]]; then 
+      uterminfo="$ITERM_PROFILE"
+    else
+      uterminfo="$TERM_SESSION_ID"
+    fi
+  fi
+  printf "%s@%s:%s\n" "$USER" "$uterm" "$uterminfo"
+  return $?
+}
+
+#      TIMESTAMP [FUNCTION] [LEVEL] PID FILENAME:LINENO
+LOGFMT="%12s [%s] %s %s %s"
+
+# Log to both stderr and a file (see above).  Should be called using
+# wrapper functions below, not directly
+_log() {
+  local lineno
+  local wherefrom
+  local funcname
+  local ts=$(fsts)
+  local pid="$$"
+  srcp="${BASH_SOURCE[1]}"
+  src=$(basename "$srcp")
+  local level="$1"
+  shift
+  # we opportunistically get the lineno if we can
+  if is_int "$1"; then 
+    err_in_func="$1"
+    shift
+  fi
+  local message="$@"
+  if [ -z "$LOGFILE" ]; then 
+    LOGFILE="$LOGDIR/$srcbn.log"
+  fi
+  # if called by struct error the FUNCNAME indices are off by 1
+  if [[ "${FUNCNAME[*]}" == *"_struct_err"* ]]; then 
+    findex=2
+  else 
+    findex=1
+  fi
+  if [ "${#FUNCNAME[@]}" -gt $findex ]; then 
+    funcname="${FUNCNAME[$findex]}"
+    if [ -n "$err_in_func" ]; then
+      # total hack 
+      func_line=$(grep -n "$funcname" "$srcp"|cut -d":" -f1)
+      err_line=$((func_line + $err_in_func - 1))
+      src+=":$err_line"; shift
+    fi
+
+  # otherwise, we were called from top level scope of a file other 
+  # than this or invoked directly from the terminal
+  else
+    funcname="${FUNCNAME[$findex-1]} invoked from global" 
+    if [[ "${BASH_SOURCE[0]}" == "${BASH_SOURCE[1]}" ]] || [[ "${#BASH_SOURCE[@]}" == 1 ]]; then 
+      # we don't want the _log function to silently die under any circumstance
+      src=$(_user_term_info) || src="$USER@$SHELL"
+    fi
+  fi
+
+  printf -v line_leader "$LOGFMT" "$ts" "$funcname" "$level" "pid: ${pid}" "$src" 
+  (
+     this_level=$(striplevel "$level")
+    if to_echo $this_level $LEVEL; then 
+      #exec 3>&1 
+      # remove coloring when going to logfile 
+      echo "$line_leader $message${RST}" 2>&1 | sed 's/\x1B\[[0-9;]*[JKmsu]//g' | tee -a "$LOGFILE" 
+    else
+      echo "$line_leader $message${RST}" | sed 's/\x1B\[[0-9;]*[JKmsu]//g' >> "$LOGFILE"
+    fi
+  )
+  return 0
+}
+
+# trap unhandled errors
+trap 'echo "$LINENO $BASH_COMMAND ${BASH_SOURCE[*]} ${BASH_LINENO[*]} ${FUNCNAME[*]}"' ERR
+
+# Templates for colored stderr messages
+printf -v E "%s[%s]" $ERR "ERROR"
+printf -v W "%s[%s]" $WRN "WARN"
+printf -v I "%s[%s]" $INF "INFO"
+printf -v B "%s[%s]" $DBG "DEBUG"
+
+# err() { 
+#   _log $E "$@"; return $?
+# }
+
+# implementing log levels selectively for simplicity and to avoid
+# namespace collisions, i.e. with the info command
+alias err='_log "$E" "$LINENO"'
+alias warn='_log "$W" "$LINENO"'
+alias debug='_log "$D" "$LINENO"'
+
+################# helper functions for catching and printing
+# errors with less boilerplate (though possibly making it 
+# slightly more arcane).  an experiment
+
+# print status, takes a return code
+_prs() {
+  s=$1
+  printf "${STAT}\$?:$RST %d " "$s"
+}
+
+# print variables, takes either a list of variable names
+# (the strings, not the vars themselves) or looks in a 
+# global array ${logvars[@]} for same
+_prvars() {
+  if [ $# -gt 0 ]; then 
+    for arg in "$@"; do 
+      logvars+=( "$arg" )
+    done
+  fi
+  for varname in "${logvars[@]}"; do 
+    n=$varname
+    v="${!n}"
+    # this should gracefully handle declare -a
+    # TODO: handle declare -A
+    if [ "${#v[@]}" -gt 1 ]; then 
+      printf "${VAR}%s=( ${RST}" "$n"
+      printf "%s " "${v[@]}"
+      printf "${VAR})"
+    fi
+    printf "${VAR}%s:${RST} %s " "$n" "$v"
+  done     
+  logvars=()
+  return 0
+}
+
+# prints command, arguments, and output
+_prcao() {
+  c="${1:-}"
+  a="${2:-}"
+  o=$(echo "${3:-}"|xargs)
+  e=$(echo "${4:-}"|xargs)
+  printf "${CMD}cmd:$RST %s ${CMD}args:$RST %s ${CMD}stdout:$RST %s ${CMD}stderr:$RST %s " "$c" "$a" "$o" "$e"
+}
+
+# print a structured err, when the command with arguments, 
+# other relevant vars, exit status, and output, says all that needs
+# to be said
+# Args: return code, command, args, output, stderr
+_struct_err() {
+  ret=$1
+  cmd=$2
+  args=$3
+  out=$4
+  err=$5
+  retm=$(_prs "$ret")
+  varsm=$(_prvars)
+  com=$(_prcao "$cmd" "$args" "$out" "$err")
+  printf -v err_msg "%s %s %s" "$retm" "$varsm" "$com"
+  err "$err_msg"
+}
+
+# runs a command, wrapping err handling
+# args: command to run, args
+# on success, returns 0 and echos the child back to the parent
+# on failure, calls _struct_err, which outputs error to stderr
+# and to \$LOGFILE
+_lc() {
+  cmd="$1"; shift
+  #info "_lc: $cmd $@"
+  {
+      IFS=$'\n' read -r -d '' err;
+      IFS=$'\n' read -r -d '' out;
+      IFS=$'\n' read -r -d '' ret;
+  } < <((printf '\0%s\0%d\0' "$($cmd $@)" "${?}" 1>&2) 2>&1)
+  if [ $ret -gt 0 ]; then 
+    _struct_err "$ret" "$cmd" "$@" "$out" "$err"
+    return $ret
+  else
+    echo "$out" && return 0
+  fi
+}
+##################### end logging code #########################################
+
+# TODO do these belong in .bashrc or .bash_aliases?
 alias vsc="vim $HOME/.ssh/config"
 alias pau="ps auwx"
 alias paug="ps auwx|grep "
@@ -9,18 +280,12 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
-shopt -s expand_aliases
-set -E
-trap 'echo "$LINENO $BASH_COMMAND ${BASH_SOURCE[*]} ${BASH_LINENO[*]} ${FUNCNAME[*]}"' ERR
+MODERN_BASH="4.3"
 
+# TODO use is_function?
 if ! declare -F "exists" > /dev/null 2>&1; then
   source "$D/existence.sh"
 fi
-
-warn() { 
-  echo "$@" 
-} # until we merge in logging
-alias error=warn
 
 # A slightly more convenient and less tedious way to print
 # to stderr, canonical in existence # TODO, check namerefs on resource
@@ -59,8 +324,11 @@ function util_env_load() {
   local xl=false # -x
   local ku=false # -k
   local lb=false # -l
+  local bsu=false
   local iu=false # -i
+  local mb=false
   local md=false # -d
+  local bc=false
   local bs=false # -b
   while [ $# -gt 0 ]; do
     case "${1:-}" in
@@ -227,6 +495,8 @@ function gpgic() {
 FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
 printf -v FSTSFMT '%s_%%H%%M%%S' "$FSDATEFMT" # our preferred ts fmt for files/folders
 LAST_DATEFMT="%a %b %e %k:%M" # used by the "last" command
+PSTSFMT="%a %b %e %T %Y" # date given by (among others) ps -p$pid -o'lstart' ex: Thu Dec 26 21:17:01 2024
+USCLOCKTIMEFMT="%k:%M %p"
 HISTTIMEFORMAT="$FSTS"
 
 function fsdate() {
@@ -304,14 +574,80 @@ function what_os() {
   if is_linux; then echo 'GNU/Linux'; return 0; fi
 }
 
+_localize_ps_time() {
+  local e=(
+    [0]="N\A"
+    [1]="mismatched date formats, expecting $PSTSFMT"
+    [2]="unreachable code $FUNCNAME $LINENO"
+    [3]="getting clocktime failed"
+    [4]="converting time to array failed"
+    [5]="converting time to FSTSFMT failed"
+  )
+  local then="${1:-}"
+
+  # split on spaces into arrays
+  read -ra now <<< $(date +"$PSTSFMT") #|| err "${e[4]}"; return 4
+  read -ra then <<< $(echo "$then") #|| err "${e[4]}"; return 4
+  # sanity check, make sure we have the same number of fields
+
+  [ ${#now[@]} -eq ${#then[@]} ] || { err "${e[1]}"; return 1; }
+  # which fields should look like Thu Dec 26 21:17:01 2024
+
+  # correct args for mac vs linux
+  case $(what_os) in 
+    MacOS)
+      date_args=(-j -f "$PSTSFMT")
+      ;;
+    "GNU/Linux")
+      date_args=(-d)
+      ;;
+  esac
+
+  # we only need these for one condition, but error handling
+  # outside the conditional is cleaner
+  mnow=$(date "${date_args[@]}" "${now[*]}" +"%s") || \
+    { err "${e[5]}"; return 5; }
+  mthen=$(date "${date_args[@]}" "${then[*]}" +"%s") || \
+    { err "${e[5]}"; return 5; }
+
+  # we'll use US clock time a couple of places
+  clocktime=$(date "${date_args[@]}" "${then[*]}" +"$USCLOCKTIMEFMT") || \
+    { err "${e[3]}"; return 3; }
+
+  # case 1: today, in which case, we only want the clock time 
+  if [[ "${now[@]:0:3}" == "${then[@]:0:3}" ]]; then
+    echo "$clocktime"; return 0
+
+  # case 2: within the last week, we want the day and the time
+  elif [ $(( $(( mnow - mthen )) / $(( 60 * 60 * 24 )) )) -lt 7 ]; then
+    # using the name of the array as a variable is a shortcut to 
+    # its first item
+    echo "$then at $clocktime"; return 0
+
+  # case 3: the process was started in a different year, 
+  #         display Thu Dec 26 2024 at ct
+  elif [ "${now[@]:5:5}" -ne "${then[@]:5:5}" ]; then 
+    echo "${then[@]:0:3} ${then[@]:-1} at $clocktime"
+    return 0
+
+  else
+    # case 4: "normal" display Thu Dec 26 at ct
+    echo "${then[@]:0:3} at $clocktime"
+    return 0
+  fi
+  # should be unreachable
+  err "${e[2]}"; return 2
+}
+
 function pidinfo() {
-  local line="$(ps awux | grep ${1:-})"
-  local dirtyname="$(echo \"$line\" | awk -F':' '{print$NF}')"
-  echo $dirtyname
-  local name="${dirtyname:6}"
-  local cpu="$(echo \"$line\"|awk '{print$3}')"
-  local mem="$(echo \"$line\"|awk '{print$4}')"
-  local started="$(echo \"$line\"|awk '{print$9}')"
+  local pid="${1:-}"
+  # favoring readability over performance
+  local name="$(ps -p$pid -ocommand=)"
+  if string_contains "/" "$name"; then name=$(basename "$name"); fi
+  local cpu="$(ps -p$pid -o'%cpu=')"
+  local mem="$(ps -p$pid -o'%mem=')"
+  local started="$(ps -p$pid -olstart=)"
+  localized=$(_localize_ps_time "$started")
   IFS='' read -r -d '' pidinfo <<"EOF"
  Process: %s
    PID: %s
@@ -319,7 +655,8 @@ function pidinfo() {
    Current RAM: %s %%
    Started at: %s
 EOF
-  printf "$pidinfo" "$name" "$cpu" "$mem" "$started"
+  # for field in "$localized"; do pidinfo+=" %s"; done
+  printf "$pidinfo" "$pid" "$name" "$cpu" "$mem" "$localized"
 }
 
 function add_permanent_bash_alias_to_bashrc() {
@@ -684,7 +1021,7 @@ function namerefs_bashscript_add() {
   # case: global function names
   _names=$(function_finder)
 
-  # get variables declared as local for exclusion (this may ressult in false positives)
+  # get variables declared as local for exclusion (this may result in false positives)
   declare -ga localvars
   declare -a localvarlines
   localvarlines=( $(grep '^[[:space:]]*local [[:alnum:]]*_*[[:alnum:]]*' "$script") )
@@ -756,103 +1093,7 @@ function namerefs_bashscript_add() {
   printf ")\n" >> "$script"
 }
 
-
-
-# find wrappers for common operation modes, even when they vary by OS.
-# This is the kind of thing that should normally go in osutil, but
-# there is something useful about seeing the differences side-by-side
-# and not having to be concerned that any troubleshooting might be OS
-# specific.  We capture the args just like as if we were running the
-# real find and populate our changes into the args dict in an order that
-# shouldn't disrupt the original intention.  To ease troubleshooting,
-# we export three globals on run:
-# [L,M,C]FIND_IN - $@ array as it was passed to the function
-# [L,M,C]FIND_RUN - full command as it was run, including any local
-#                   alteration to handles; but nothing external, pipelines, etc
-# [L,M,C]FIND_STACK - the call stack ${FUNCNAME[@]} at execution
-#
-# (TODO: would it be useful to keep in-memory
-# histories in global arrays?)
-COMPOSABLE_FINDS=( "cfind" "lfind" )
-
-function compose_find() {
-set -x
-  caller="${FUNCNAME[1]}"
-  to_compose=( "$@" )
-  local -n run_args="${caller^^}_RUN"
-  caller_args=("${run_args[@]:1}")
-  composed=false
-  declare -A called
-  # jacob told me that I am a candidate, do you know what that means?
-  for candidate in "${COMPOSABLE_FINDS[@]}"; do
-    if [[ "$candidate" != "$caller" ]]; then
-      if [[ "${to_compose[*]}" == *"$candidate"* ]]; then
-        # candidate is in the call stack
-        composed=true
-        called["$candidate"]="$caller"
-        caller="$candidate"
-        run_args=( $(eval "${candidate}_args" "${run_args[@]}") )
-      fi
-    fi
-  done
-  # let us do a little validation; our wrong side of the tracks unit tests
-  if $composed; then
-    if [[ "${caller_args[*]}" == "${run_args[*]}" ]]; then
-      se "find should be composed but only found args from ${FUNCNAME[1]}"
-      se "should have found:"
-      for caller in "${!called[@]}"; do
-        se "$caller : ${called[$caller]}"
-      done
-      return 2
-    fi
-    declare -a missing_caller_args
-    for caller in "${!called[@]}"; do
-      if [[ "$caller" == "${FUNCNAME[1]}" ]]; then
-        local_caller_args=( "${caller_args[@]}" )
-      else
-        local_caller_args=( $"${caller^^}_RUN" )
-      fi
-      for arg in "${local_caller_args[@]}"; do
-        if [[ "${run_args[*]}" != *"$arg"* ]]; then
-          missing_caller_args+=( "$arg" )
-        fi
-      done
-      if gt ${#missing_caller_args[@]} 0; then
-        se "all caller_args should have been in \$run_args, but $caller were missing:"
-        se "${missing_caller_args[@}}"
-        return 3
-      fi
-    done
-  fi
-  find "${run_args[@]:1}"
-  return $?
-}
-
-function find_composed_of() {
-set -x
-  caller="${FUNCNAME[1]}"
-  in_args="${caller^^}_IN"
-  declare -a new_args
-  for arg in "${in_args[@]}"; do
-    if [[ "$arg" != "find" ]] && [[ "$arg" != "$caller" ]]; then
-      if [[ "${COMPOSABLE_FINDS[@]}" != *"$arg"* ]]; then
-        new_args+=( "$arg" )
-      else
-        composed=true
-        to_compose+=( "$arg" )
-      fi
-    fi
-  done
-  in_args=( "${new_args[@]}" )
-  if gt ${#to_compose[@]} 0; then
-    echo "${to_compose[@]}"
-    return 0
-  fi
-  return 1
-}
-
-
-# If for any sourced file, you'd like to be able to undo the
+# If for any sourced file, you'd like to be able to undo the 
 # changes to  your environment after it's sourced, track the
 # namerefs (variable, function, etc names) in an array named
 # sourcename_namerefs where the sourced filename is
@@ -977,7 +1218,6 @@ function path_prepend() {
   fi
 }
 
-
 function printcolrange() {
   input="${1:-}"
   start="${2:-}"
@@ -1017,49 +1257,8 @@ function is_older_than_1_wk() {
   return 1
 }
 
-function update_ssh_ip() {
-  host="${1:-}"
-  octet="${2:-}"
-  out=$(grep -A2 "$host" $HOME/.ssh/config)
-  local IFS=$'\n'
-  for line in out; do
-    line=$(echo $line |xargs)
-    ip=$(grep "hostname" <<< "$line" | awk '{print$2}')
-  done
-  printf -v sedexpr "s/%s/%s/g" "$ip" "10.1.1.$octet"
-  sed -i "$sedexpr" "$HOME/.ssh/config"
-}
-
-# this only kinda sorta works IIRC
-# Intended to grab ip or hostname values from the nearest source possible
-# starting with /etc/hosts, .ssh/config, then out to dig, other place
-# echo hostname or ip from host alias to the console no explicit return
-function hn () {
-  if [ $# -eq 0 ]; then
-    >&2 printf "give me a list of hosts to get ips for"
-    return 1;
-  fi
-
-  IPR='^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.){3}(25[0-5]|(2[0-4]|1\d|[1-9]|)\d)$'
-
-  # get hosts from ssh config
-  for h in $(echo $@| tr " " "\n"); do
-    SSHOST="$(grep -A2 $h $HOME/.ssh/config|grep hostname)"
-    if [ $? -ne 0 ]; then
-      IP="$(echo $SSHOST|grep '$IPR')"
-      if [ $? -ne 0 ]; then
-        echo "$h: $IP"
-      fi
-    fi
-    if [ -n "$IP" ]; then
-      dig $h
-    fi
-    IP=""
-  done
-}
-
-# does a best effort search of a bash source file $2
-# and attemtps to determine if the given function $1
+# does a best effort search of a bash source file $2 
+# and attemtps to determine if the given function $1 
 # is called in that file, returns 0 if so and echos
 # the surrounding code to the console, 1 if not found
 # or indeterminite
@@ -1089,7 +1288,12 @@ function startswith() {
 }
 
 function symlink_child_dirs () {
-   undo_dir="$CACHE/com.trustdarkness.utilsh"
+  if [ -n "$CACHE" ]; then
+    undo_dir="$CACHE/com.trustdarkness.utilsh"
+  else
+    err "no \$CACHE in env."
+    return 1
+  fi
   help() {
     >&2 printf "Specify a target parent directory whose children\n"
     >&2 printf "should be symlinked into the desitination directory:\n"
@@ -1185,9 +1389,8 @@ function symlink_child_dirs () {
   fi
 }
 
-# thats too long to type though.
-alias scd="symlink_child_dirs"
-
+# find the most recent file in dir given by $1 that matches 
+# search term $2 (optional)
 function most_recent() {
   local dir="${1:-.}"
   local sterm="${2:-}"
@@ -1241,10 +1444,7 @@ function ghc () {
   cd $f
 }
 
-function gits() {
-  git status
-}
-
+# because apparently sometimes i can't remember
 function is_my_git_repo() {
   local dir="${1:-}"
   if [ -d "$(pwd)/${dir}" ]; then
@@ -1387,6 +1587,7 @@ function user_feedback() {
   local subject
   local message
   local detritus
+  local errors=()
   if [[ $# -gt 1 ]]; then
     subject="${1:-}"
     message="${2:-}"
@@ -1421,7 +1622,6 @@ function user_feedback() {
   }
   bold=$(tput bold)
   normal=$(tput sgr0)
-  declare -a errors
   case $- in
     *i*)
       printf "${bold}$subject${normal} -- $message"
@@ -1481,14 +1681,15 @@ function i() {
   return $?
 }
 
+# TODO: deprecate
 function install_util_load() {
-  if undefined "sai"; then
+  if undefined "sau"; then
     source "$D/installutil.sh"
   fi
   i
   return $?
 }
-alias siu="source $D/installutil.sh"
+
 alias viu="vim $D/installutil.sh && siu"
 
 # so we dont load all that nonsense into the env, but the super
@@ -1507,8 +1708,3 @@ fi
 
 # for other files to avoid re-sourcing
 UTILSH=true
-
-
-_utilsh_fs() {
-  declare -f
-}
