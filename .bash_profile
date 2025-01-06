@@ -17,12 +17,11 @@ if [[ $(uname) == "Darwin" ]]; then
   if [ -z "$MACPROFILED" ]; then
     source "$D/macprofile.sh"
   fi
-elif [[ "$DESKTOP_SESSION" == "plasma" ]]; then
-  source "$D/kutil.sh"
 else
-
-
   d=$(date +"%Y%m%d")
   mkdir -p "$HOME/.local/share/bash_histories/$d"
   cp -r "$HOME/.bash_history*" "$HOME/.local/share/bash_histories/$d"
+fi
+if [[ "$DESKTOP_SESSION" == "plasma" ]]; then
+  source "$D/kutil.sh"
 fi
