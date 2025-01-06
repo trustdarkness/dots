@@ -1,9 +1,8 @@
-#e!/usr/bin/env bash
-if ! declare -F is_function > /dev/null 2>&1; then
-  is_function() {
-    ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
-  }
-fi
+#!/usr/bin/env bash
+declare -F is_function > /dev/null 2>&1 || is_function() {
+  ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
+}
+export -f is_function
 
 shopt -s direxpand
 shopt -s cdable_vars
@@ -31,8 +30,8 @@ function detect_d() {
   if [ -z $DEBUG ] || $DEBUG; then
     >&2 printf ".bashrc sourced from ${BASH_SOURCE[@]}\n"
   fi
-  if [[ "${BASH_SOURCE[0]}" == ".bashrc" ]]; then 
-    if [ -f "$(pwd)/util.sh" ]; then 
+  if [[ "${BASH_SOURCE[0]}" == ".bashrc" ]]; then
+    if [ -f "$(pwd)/util.sh" ]; then
       D=$(pwd)
       export D
       return 0
@@ -41,7 +40,7 @@ function detect_d() {
     : # REALBASHRC=$(readlink ${BASH_SOURCE[0]})
     # D=$(dirname $REALBASHRC)
   fi
-  if [ -z "$D" ]; then 
+  if [ -z "$D" ]; then
     >&2 printf "no luck finding D, please set"
     return 1
   fi
@@ -63,7 +62,7 @@ EDITOR=vim
 RSYNCOPTS="-rlutUPv"
 
 function vimc() { # TODO: input validation
-  if command=$(type -p "${1:-}"); then 
+  if command=$(type -p "${1:-}"); then
     vim "$command"
   fi
 }
@@ -86,10 +85,10 @@ function symlinks_setup() {
       ln -sf "$D/.bash_profile" "$HOME/.bash_profile"
     fi
   fi
-  if ! [ -d "$HOME/.local/bin" ]; then 
+  if ! [ -d "$HOME/.local/bin" ]; then
     mkdir -p "$HOME/.local/bin"
   fi
-  if [[ $(uname) == "Darwin" ]] && ! [ -L "$HOME/.local/bin/bellicose" ]; then 
+  if [[ $(uname) == "Darwin" ]] && ! [ -L "$HOME/.local/bin/bellicose" ]; then
     ln -sf "$D/bellicose.sh" "$HOME/.local/bin/bellicose"
   fi
   if ! [ -L "$HOME/.local/sourced" ]; then
@@ -128,73 +127,73 @@ case "$TERM" in
     xterm-color|*-256color) color_prompt=yes;;
 esac
 
-# enable color support of ls and also add handy aliases
-if [ -x /usr/bin/dircolors ]; then
-    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
-    alias ls='ls --color=auto'
-    alias grep='grep --color=auto'
-    alias fgrep='fgrep --color=auto'
-fi
+# # enable color support of ls and also add handy aliases
+# if [ -x /usr/bin/dircolors ]; then
+#     test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+#     alias ls='ls --color=auto'
+#     alias grep='grep --color=auto'
+#     alias fgrep='fgrep --color=auto'
+# fi
 
-# https://unix.stackexchange.com/questions/148/colorizing-your-terminal-and-shell-environment
-function _colorman() {
-  env \
-    LESS_TERMCAP_mb=$'\e[1;35m' \
-    LESS_TERMCAP_md=$'\e[1;34m' \
-    LESS_TERMCAP_me=$'\e[0m' \
-    LESS_TERMCAP_se=$'\e[0m' \
-    LESS_TERMCAP_so=$'\e[7;40m' \
-    LESS_TERMCAP_ue=$'\e[0m' \
-    LESS_TERMCAP_us=$'\e[1;33m' \
-    LESS_TERMCAP_mr=$(tput rev) \
-    LESS_TERMCAP_mh=$(tput dim) \
-    LESS_TERMCAP_ZN=$(tput ssubm) \
-    LESS_TERMCAP_ZV=$(tput rsubm) \
-    LESS_TERMCAP_ZO=$(tput ssupm) \
-    LESS_TERMCAP_ZW=$(tput rsupm) \
-    GROFF_NO_SGR=1 \
-      "$@"
-}
-alias man="LANG=C _colorman man"
-function perldoc() { command perldoc -n less "$@" |man -l -; }
+# # https://unix.stackexchange.com/questions/148/colorizing-your-terminal-and-shell-environment
+# function _colorman() {
+#   env \
+#     LESS_TERMCAP_mb=$'\e[1;35m' \
+#     LESS_TERMCAP_md=$'\e[1;34m' \
+#     LESS_TERMCAP_me=$'\e[0m' \
+#     LESS_TERMCAP_se=$'\e[0m' \
+#     LESS_TERMCAP_so=$'\e[7;40m' \
+#     LESS_TERMCAP_ue=$'\e[0m' \
+#     LESS_TERMCAP_us=$'\e[1;33m' \
+#     LESS_TERMCAP_mr=$(tput rev) \
+#     LESS_TERMCAP_mh=$(tput dim) \
+#     LESS_TERMCAP_ZN=$(tput ssubm) \
+#     LESS_TERMCAP_ZV=$(tput rsubm) \
+#     LESS_TERMCAP_ZO=$(tput ssupm) \
+#     LESS_TERMCAP_ZW=$(tput rsupm) \
+#     GROFF_NO_SGR=1 \
+#       "$@"
+# }
+# alias man="LANG=C _colorman man"
+# function perldoc() { command perldoc -n less "$@" |man -l -; }
 
-if type grc grcat >/dev/null 2>&1; then
-  colourify() {  # using this as a function allows easier calling down lower
-    if [[ -t 1 || -n "$CLICOLOR_FORCE" ]]
-      then ${GRC:-grc} -es --colour=auto "$@"
-      else "$@"
-    fi
-  }
+# if type grc grcat >/dev/null 2>&1; then
+#   colourify() {  # using this as a function allows easier calling down lower
+#     if [[ -t 1 || -n "$CLICOLOR_FORCE" ]]
+#       then ${GRC:-grc} -es --colour=auto "$@"
+#       else "$@"
+#     fi
+#   }
 
-  # loop through known commands plus all those with named conf files
-  for cmd in g++ head ld ping6 tail traceroute6 `locate grc/conf.`; do
-    cmd="${cmd##*grc/conf.}"  # we want just the command
-    type "$cmd" >/dev/null 2>&1 && alias "$cmd"="colourify $cmd"
-  done
+#   # loop through known commands plus all those with named conf files
+#   for cmd in g++ head ld ping6 tail traceroute6 `locate grc/conf.`; do
+#     cmd="${cmd##*grc/conf.}"  # we want just the command
+#     type "$cmd" >/dev/null 2>&1 && alias "$cmd"="colourify $cmd"
+#   done
 
-  # This needs run-time detection. We even fake the 'command not found' error.
-  configure() {
-    if [[ -x ./configure ]]; then
-      colourify ./configure "$@"
-    else
-      echo "configure: command not found" >&2
-      return 127
-    fi
-  }
+#   # This needs run-time detection. We even fake the 'command not found' error.
+#   configure() {
+#     if [[ -x ./configure ]]; then
+#       colourify ./configure "$@"
+#     else
+#       echo "configure: command not found" >&2
+#       return 127
+#     fi
+#   }
 
-  unalias ll 2>/dev/null
-  ll() {
-    if [[ -n "$CLICOLOR_FORCE" || -t 1 ]]; then  # re-implement --color=auto
-      ls -l --color=always "$@" |grcat conf.ls
-      return ${PIPESTATUS[0]} ${pipestatus[1]} # exit code of ls via bash or zsh
-    fi
-    ls -l "$@"
-  }
-fi
+#   unalias ll 2>/dev/null
+#   ll() {
+#     if [[ -n "$CLICOLOR_FORCE" || -t 1 ]]; then  # re-implement --color=auto
+#       ls -l --color=always "$@" |grcat conf.ls
+#       return ${PIPESTATUS[0]} ${pipestatus[1]} # exit code of ls via bash or zsh
+#     fi
+#     ls -l "$@"
+#   }
+# fi
 
 
-# colored GCC warnings and errors
-GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
+# # colored GCC warnings and errors
+# GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
 # for pre, post, and non-powerline setup
 PS1="\[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[$(tput sgr0)\]$ "
@@ -255,7 +254,7 @@ function powerline_disable() {
   export PS1="$pPS1"
 }
 
-if [[ $(uname) != "Darwin" ]]; then 
+if [[ $(uname) != "Darwin" ]]; then
   PROMPT_COMMAND='history -a'
 fi
 function h() {
@@ -294,7 +293,7 @@ function history_rm_range() {
 }
 
 function history_rm_last() {
-  if history_rm_range -2 -1; then 
+  if history_rm_range -2 -1; then
     return 0
   fi
   return 1
@@ -360,7 +359,7 @@ IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 GRC_ALIASES=true
 [[ -s "/etc/profile.d/grc.sh" ]] && source /etc/grc.sh
 
-if [ -f "$HOME/.localrc" ]; then 
+if [ -f "$HOME/.localrc" ]; then
   source "$HOME/.localrc"
 fi
 

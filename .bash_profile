@@ -6,21 +6,23 @@ if ! declare -F is_function; then
 fi
 export -f is_function
 
-d=$(date +"%Y%m%d")
-mkdir -p "$HOME/.local/share/bash_histories/$d"
-cp -r "$HOME/.bash_history*" "$HOME/.local/share/bash_histories/$d"
-
 source $HOME/.bashrc
 
-if [[ $(uname) == "Darwin" ]] then 
+if [[ $(uname) == "Darwin" ]]; then
   # since .bash_profile doesn't work the same on MacOS as other *nix's
   # macprofile is for run-once-per-session things.  It sets an env var
-  # via launchctl called MACPROFILED, so we can skip sourcing it in 
+  # via launchctl called MACPROFILED, so we can skip sourcing it in
   # subsequent sourcings of .bash_profile
   MACPROFILED=$(launchctl getenv MACPROFILED)
   if [ -z "$MACPROFILED" ]; then
     source "$D/macprofile.sh"
   fi
-elif [[ "$DESKTOP_SESSION" == "plasma" ]]; then 
+elif [[ "$DESKTOP_SESSION" == "plasma" ]]; then
   source "$D/kutil.sh"
+else
+
+
+  d=$(date +"%Y%m%d")
+  mkdir -p "$HOME/.local/share/bash_histories/$d"
+  cp -r "$HOME/.bash_history*" "$HOME/.local/share/bash_histories/$d"
 fi
