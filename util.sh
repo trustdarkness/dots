@@ -2,38 +2,38 @@
 
 # This file contains generally os-agnostic (POSIX-ish, though also WSL)
 # functions and utilities that shouldn't be too annoying to keep handy
-# in the env of an interactive sessionn, but also as a sort of personal 
-# stdlib for inclusion in scripts.  If a script is something I think 
-# others might want to check out and use it, I try to make it self 
+# in the env of an interactive sessionn, but also as a sort of personal
+# stdlib for inclusion in scripts.  If a script is something I think
+# others might want to check out and use it, I try to make it self
 # contained, as things in this file do reference specific bits of my setup
-# that others won't have, however, I've tried to make it relatively 
+# that others won't have, however, I've tried to make it relatively
 # safe for that use case as well YMMV and there shall be no expectations,
 # warranty, liability, etc, should you break something.
-# 
+#
 # github.com/trustdarkness
 # GPLv2 if it should matter
 # Most things should work on old versions of bash, but really bash 4.2+ reqd
-# 
-# OS detection and loading of os-specific utils is toward the botton, 
-# line 170+ish at the time of writing. 
+#
+# OS detection and loading of os-specific utils is toward the botton,
+# line 170+ish at the time of writing.
 #####################  internal logging and bookkeeping funcs
 #############################################################
- 
+
 shopt -s expand_aliases
 
 # colors for logleveled output to stderr
 TS=$(tput setaf 3) # yellow
 DBG=$(tput setaf 6) # cyan
 INF=$(tput setaf 2) # green
-WRN=$(tput setaf 208) # orange 
+WRN=$(tput setaf 208) # orange
 ERR=$(tput setaf 1) # red
 STAT=$(tput setaf 165) # pink
 VAR=$(tput setaf 170) # lightpink
 CMD=$(tput setaf 36) # aqua
 MSG=$(tput setaf 231) # barely yellow
 RST=$(tput sgr0) # reset
- 
-if [ -n "$XDG_STATE_HOME" ]; then 
+
+if [ -n "$XDG_STATE_HOME" ]; then
   LOGDIR="$XDG_STATE_HOME/com.trustdarkness.dots"
 else
   LOGDIR="$HOME/Library/Logs/com.trustdarkness.dots"
@@ -51,13 +51,13 @@ LOG_LEVELS=( ERROR WARN INFO DEBUG )
 # 4 - DEBUG
 _get_log_level() {
   idx=0
-  for level in "${LOG_LEVELS[@]}"; do 
-    if [[ "$level" == "${1:-}" ]]; then 
+  for level in "${LOG_LEVELS[@]}"; do
+    if [[ "$level" == "${1:-}" ]]; then
       echo $idx
       return 0
     fi
     ((idx++))
-  done 
+  done
   return 1
 }
 
@@ -68,33 +68,33 @@ _striplevel() {
 
 # based on the numeric log level of this log message
 # and the threshold set by the current user, function, script
-# do we echo or just log?  If threshold set to WARN, it 
+# do we echo or just log?  If threshold set to WARN, it
 # means we echo WARN and ERROR, log everything
 _to_echo() {
-  this_log=$(get_log_level "${1:-}")
-  threshold=$(get_log_level "${2:-}")
-  if le "$this_log" "$threshold"; then 
+  this_log=$(_get_log_level "${1:-}")
+  threshold=$(_get_log_level "${2:-}")
+  if le "$this_log" "$threshold"; then
     return 0
   fi
   return 1
 }
 
 # return something resembling user@term - terminfo
-# for iterm, terminfo will be the profile name unless Default 
+# for iterm, terminfo will be the profile name unless Default
 # then, and other local termainls, TERM_SESSION_ID
 # for ssh, this will be user@host - tty
 _user_term_info() {
   local uterm
   local uterminfo
-  if [ -n "$SSH_CLIENT" ]; then 
+  if [ -n "$SSH_CLIENT" ]; then
     uterm=$(
-      [[ "${SSH_CLIENT}" =~ ([!-~]+)[[:space:]] ]] && 
+      [[ "${SSH_CLIENT}" =~ ([!-~]+)[[:space:]] ]] &&
       echo "${BASH_REMATCH[1]}"
     ) || uterm="$SSH_CLIENT" # just in case
     uterminfo="$SSH_TTY"
-  elif [ -n "$TERM_PROGRAM" ]; then 
+  elif [ -n "$TERM_PROGRAM" ]; then
     uterm="$TERM_PROGRAM"
-    if [ -n "$ITERM_PROFILE" ] && [[ "$ITERM_PROFILE" != "Default" ]]; then 
+    if [ -n "$ITERM_PROFILE" ] && [[ "$ITERM_PROFILE" != "Default" ]]; then
       uterminfo="$ITERM_PROFILE"
     else
       uterminfo="$TERM_SESSION_ID"
@@ -120,46 +120,46 @@ _log() {
   local level="$1"
   shift
   # we opportunistically get the lineno if we can
-  if is_int "$1"; then 
+  if is_int "$1"; then
     err_in_func="$1"
     shift
   fi
   local message="$@"
-  if [ -z "$LOGFILE" ]; then 
+  if [ -z "$LOGFILE" ]; then
     LOGFILE="$LOGDIR/$srcbn.log"
   fi
   # if called by struct error the FUNCNAME indices are off by 1
-  if [[ "${FUNCNAME[*]}" == *"_struct_err"* ]]; then 
+  if [[ "${FUNCNAME[*]}" == *"_struct_err"* ]]; then
     findex=2
-  else 
+  else
     findex=1
   fi
-  if [ "${#FUNCNAME[@]}" -gt $findex ]; then 
+  if [ "${#FUNCNAME[@]}" -gt $findex ]; then
     funcname="${FUNCNAME[$findex]}"
     if [ -n "$err_in_func" ]; then
-      # total hack 
+      # total hack
       func_line=$(grep -n "$funcname" "$srcp"|cut -d":" -f1)
       err_line=$((func_line + $err_in_func - 1))
       src+=":$err_line"; shift
     fi
 
-  # otherwise, we were called from top level scope of a file other 
+  # otherwise, we were called from top level scope of a file other
   # than this or invoked directly from the terminal
   else
-    funcname="${FUNCNAME[$findex-1]} invoked from global" 
-    if [[ "${BASH_SOURCE[0]}" == "${BASH_SOURCE[1]}" ]] || [[ "${#BASH_SOURCE[@]}" == 1 ]]; then 
+    funcname="${FUNCNAME[$findex-1]} invoked from global"
+    if [[ "${BASH_SOURCE[0]}" == "${BASH_SOURCE[1]}" ]] || [[ "${#BASH_SOURCE[@]}" == 1 ]]; then
       # we don't want the _log function to silently die under any circumstance
       src=$(_user_term_info) || src="$USER@$SHELL"
     fi
   fi
 
-  printf -v line_leader "$LOGFMT" "$ts" "$funcname" "$level" "pid: ${pid}" "$src" 
+  printf -v line_leader "$LOGFMT" "$ts" "$funcname" "$level" "pid: ${pid}" "$src"
   (
-     this_level=$(striplevel "$level")
-    if to_echo $this_level $LEVEL; then 
-      #exec 3>&1 
-      # remove coloring when going to logfile 
-      echo "$line_leader $message${RST}" 2>&1 | sed 's/\x1B\[[0-9;]*[JKmsu]//g' | tee -a "$LOGFILE" 
+     this_level=$(_striplevel "$level")
+    if _to_echo $this_level $LEVEL; then
+      #exec 3>&1
+      # remove coloring when going to logfile
+      echo "$line_leader $message${RST}" 2>&1 | sed 's/\x1B\[[0-9;]*[JKmsu]//g' | tee -a "$LOGFILE"
     else
       echo "$line_leader $message${RST}" | sed 's/\x1B\[[0-9;]*[JKmsu]//g' >> "$LOGFILE"
     fi
@@ -167,16 +167,13 @@ _log() {
   return 0
 }
 
-# trap unhandled errors
-trap 'echo "$LINENO $BASH_COMMAND ${BASH_SOURCE[*]} ${BASH_LINENO[*]} ${FUNCNAME[*]}"' ERR
-
 # Templates for colored stderr messages
 printf -v E "%s[%s]" $ERR "ERROR"
 printf -v W "%s[%s]" $WRN "WARN"
 printf -v I "%s[%s]" $INF "INFO"
 printf -v B "%s[%s]" $DBG "DEBUG"
 
-# err() { 
+# err() {
 #   _log $E "$@"; return $?
 # }
 
@@ -187,7 +184,7 @@ alias warn='_log "$W" "$LINENO"'
 alias debug='_log "$D" "$LINENO"'
 
 ################# helper functions for catching and printing
-# errors with less boilerplate (though possibly making it 
+# errors with less boilerplate (though possibly making it
 # slightly more arcane).  an experiment
 
 # print status, takes a return code
@@ -197,26 +194,26 @@ _prs() {
 }
 
 # print variables, takes either a list of variable names
-# (the strings, not the vars themselves) or looks in a 
+# (the strings, not the vars themselves) or looks in a
 # global array ${logvars[@]} for same
 _prvars() {
-  if [ $# -gt 0 ]; then 
-    for arg in "$@"; do 
+  if [ $# -gt 0 ]; then
+    for arg in "$@"; do
       logvars+=( "$arg" )
     done
   fi
-  for varname in "${logvars[@]}"; do 
+  for varname in "${logvars[@]}"; do
     n=$varname
     v="${!n}"
     # this should gracefully handle declare -a
     # TODO: handle declare -A
-    if [ "${#v[@]}" -gt 1 ]; then 
+    if [ "${#v[@]}" -gt 1 ]; then
       printf "${VAR}%s=( ${RST}" "$n"
       printf "%s " "${v[@]}"
       printf "${VAR})"
     fi
     printf "${VAR}%s:${RST} %s " "$n" "$v"
-  done     
+  done
   logvars=()
   return 0
 }
@@ -230,7 +227,7 @@ _prcao() {
   printf "${CMD}cmd:$RST %s ${CMD}args:$RST %s ${CMD}stdout:$RST %s ${CMD}stderr:$RST %s " "$c" "$a" "$o" "$e"
 }
 
-# print a structured err, when the command with arguments, 
+# print a structured err, when the command with arguments,
 # other relevant vars, exit status, and output, says all that needs
 # to be said
 # Args: return code, command, args, output, stderr
@@ -260,7 +257,7 @@ _lc() {
       IFS=$'\n' read -r -d '' out;
       IFS=$'\n' read -r -d '' ret;
   } < <((printf '\0%s\0%d\0' "$($cmd $@)" "${?}" 1>&2) 2>&1)
-  if [ $ret -gt 0 ]; then 
+  if [ $ret -gt 0 ]; then
     _struct_err "$ret" "$cmd" "$@" "$out" "$err"
     return $ret
   else
@@ -290,19 +287,19 @@ fi
 # A slightly more convenient and less tedious way to print
 # to stderr, canonical in existence # TODO, check namerefs on resource
 if ! is_declared "se"; then
-  # Args: 
+  # Args:
   #  Anything it recieves gets echoed back.  If theres
   #  no newline in the input, it is added. if there are substitutions
-  #  for printf in $1, then $1 is treated as format string and 
+  #  for printf in $1, then $1 is treated as format string and
   #  $:2 are treated as substitutions
-  # No explicit return code 
+  # No explicit return code
   function se() {
     if [[ "$*" == *'%'* ]]; then
       >&2 printf "${1:-}" $:2
     else
       >&2 printf "$@"
     fi
-    if ! [[ "$*" == *'\n'* ]]; then 
+    if ! [[ "$*" == *'\n'* ]]; then
       >&2 printf '\n'
     fi
   }
@@ -314,7 +311,7 @@ fi
 # TODO: create teardown that remove all namerefs added by setup
 function util_env_load() {
   # this represents all the possible sources at the moment, but only
-  # including as options as needed, otherwise it would be taking an 
+  # including as options as needed, otherwise it would be taking an
   # already silly thing and making it ridiculous.
   local exu=true # -e
   local up=false # -u
@@ -334,7 +331,7 @@ function util_env_load() {
     case "${1:-}" in
       "-e"|"--existence")
         exu=true
-        shift 
+        shift
         ;;
       "-f"|"--filesystemarray")
         fsau=true
@@ -376,7 +373,7 @@ function util_env_load() {
         ;;
       *)
         echo "Boo.  ${1:-} does not exist"
-        shift 
+        shift
         ;;
     esac
   done
@@ -404,7 +401,7 @@ function util_env_load() {
   if undefined "sau" && $iu; then
     install_util_load
   fi
-  if undefined "term_bootstrap" && $bs; then 
+  if undefined "term_bootstrap" && $bs; then
     source "$D/bootstraps.sh"
   fi
 }
@@ -418,14 +415,14 @@ dgrep() {
     shift
   done
   sterm="${1:-}"
-  if [ -z "$D" ]; then 
-    if confirm_yes "D not in env, do you want to search PATH?"; then 
+  if [ -z "$D" ]; then
+    if confirm_yes "D not in env, do you want to search PATH?"; then
       #TODO
       :
     fi
   fi
   total_found=0
-  for item in "$D"/*; do 
+  for item in "$D"/*; do
     # if there are ever more exceptions, make this more visible
     { [ -f "$item" ] && [[ "$item" != *LICENSE ]] && file=$item; } || continue
     found=$(grep -n ${grepargs[@]} "$sterm" "$file"); ret=$?||true
@@ -438,7 +435,7 @@ dgrep() {
       ((total_found+=$(echo "$found"|wc -l|xargs)))
     fi
   done
-  if [ $total_found -gt 0 ]; then 
+  if [ $total_found -gt 0 ]; then
     return 0
   fi
   return 1
@@ -594,7 +591,7 @@ _localize_ps_time() {
   # which fields should look like Thu Dec 26 21:17:01 2024
 
   # correct args for mac vs linux
-  case $(what_os) in 
+  case $(what_os) in
     MacOS)
       date_args=(-j -f "$PSTSFMT")
       ;;
@@ -614,19 +611,19 @@ _localize_ps_time() {
   clocktime=$(date "${date_args[@]}" "${then[*]}" +"$USCLOCKTIMEFMT") || \
     { err "${e[3]}"; return 3; }
 
-  # case 1: today, in which case, we only want the clock time 
+  # case 1: today, in which case, we only want the clock time
   if [[ "${now[@]:0:3}" == "${then[@]:0:3}" ]]; then
     echo "$clocktime"; return 0
 
   # case 2: within the last week, we want the day and the time
   elif [ $(( $(( mnow - mthen )) / $(( 60 * 60 * 24 )) )) -lt 7 ]; then
-    # using the name of the array as a variable is a shortcut to 
+    # using the name of the array as a variable is a shortcut to
     # its first item
     echo "$then at $clocktime"; return 0
 
-  # case 3: the process was started in a different year, 
+  # case 3: the process was started in a different year,
   #         display Thu Dec 26 2024 at ct
-  elif [ "${now[@]:5:5}" -ne "${then[@]:5:5}" ]; then 
+  elif [ "${now[@]:5:5}" -ne "${then[@]:5:5}" ]; then
     echo "${then[@]:0:3} ${then[@]:-1} at $clocktime"
     return 0
 
@@ -700,30 +697,30 @@ bash_shebang_validator() {
       { "$BASH_COMMAND failed with ret $ret"; return 9; }
     if [ $ret -eq 0 ]; then
       # this is now an array but we bastardized the functionality to pop
-      # off the first word and so we'll just treat it like variable 
+      # off the first word and so we'll just treat it like variable
       shebangcmd="${to_test%% *}"
       bangcmd="${shebangcmd:2}"
-      if ! [ -x "$bangcmd" ] || ! [ -s "$bangcmd" ]; then 
+      if ! [ -x "$bangcmd" ] || ! [ -s "$bangcmd" ]; then
         return 2
       fi
-      if [[ "$bangcmd" != *'env' ]]; then 
+      if [[ "$bangcmd" != *'env' ]]; then
         return 3
       fi
     fi
-    if [ -n "$bangcmd" ]; then 
+    if [ -n "$bangcmd" ]; then
       testout=$($bangcmd "VARNAME=value" "bash" "-c" 'echo $VARNAME'); ret=$?
       if [[ "$testout" == "value" ]]; then return 0; fi
       # if the test succeeds, we should never reach the next line
       error "expected first part of shebang with spaces to be env, but got $bangcmd"
       return 6
     fi
-    return 4 
+    return 4
   }
   bash_script="${1:-}"
   she_bang=$(head -n 1 "${bash_script}") || \
     { se "failed to head $bash_script"; return 6; }
-  if [[ "$she_bang" == *' '* ]]; then 
-    # valid shebangs for bash scripts with a space should call env 
+  if [[ "$she_bang" == *' '* ]]; then
+    # valid shebangs for bash scripts with a space should call env
     # to later call bash; split on space
     IFS=' ' read -r -a shebang_components <<< "${she_bang}"
     sheenv="${shebang_components[0]}"
@@ -738,14 +735,14 @@ bash_shebang_validator() {
   else
     bashend="$she_bang"
   fi
-  if [[ "$bashend" == *'bash' ]]; then 
+  if [[ "$bashend" == *'bash' ]]; then
     return 0
   else
-    [[ "$bashend" =~ $BASH_WITH_VERSION_REGEX ]] && return 0 
+    [[ "$bashend" =~ $BASH_WITH_VERSION_REGEX ]] && return 0
     error "bash does not appear to be in shebang $she_bang of $bash_script"
-    return 5 
+    return 5
   fi
-} 
+}
 
 # given a filename, return an alphanumeric (plus underscores) version
 function slugify() {
@@ -753,12 +750,12 @@ function slugify() {
   ext=
   unset slugified # if this is needed, should be copied into the local namespace
   declare -gA slugified
-  if string_contains "/" "$name"; then 
+  if string_contains "/" "$name"; then
     dn=$(dirname "$name")
     name=$(basename "$name")
   fi
   old_name="$name"
-  if [[ "${name}" =~ ^[\w,\s-]+[\.[A-Za-z]]+ ]]; then 
+  if [[ "${name}" =~ ^[\w,\s-]+[\.[A-Za-z]]+ ]]; then
     ext="${name##*.}"
     name="${name%.*}"
   fi
@@ -781,7 +778,7 @@ function_finder() {
   unset files
   local dirs
   unset dirs
-  optspec="ld:f:F:wh"
+  optspec="ld:f:F:nwh"
   unset OPTIND
   unset optchar
   while getopts "${optspec}" optchar; do
@@ -803,6 +800,9 @@ function_finder() {
     w)
       wide=true
       ;;
+    n)
+      nested=true
+      ;;
 	  h)
       usage
       return 0
@@ -822,14 +822,14 @@ function_finder() {
 
   _dir_or_file() {
     local to_test="${1:-}"
-    if [ -d "$to_test" ]; then 
+    if [ -d "$to_test" ]; then
       have_dirs=true
       dirs+=( "$to_test" )
       return 0
     elif [ -s "$to_test" ]; then
       have_files=true
       files+=( "$to_test" )
-      return 0 
+      return 0
     else
       return 1
     fi
@@ -847,7 +847,7 @@ function_finder() {
 
 
     while IFS= read -r line; do
-      arr+=( "$line" ) 
+      arr+=( "$line" )
     done < <(pcre2grep --null -n "$BASH_FUNCTION_PCREREGEX" "$filename")
   }
   _process_line() {
@@ -855,28 +855,34 @@ function_finder() {
     if [[ "$line" == "#"* ]]; then return 1; fi
     processed=$(echo "$line"|
       sed 's/function //g'| # remove any function keywords
-      sed 's/\(\h*\)\h*{//g'|
-      sed 's/\(.*\) || //g'|
-      sed 's/()//g') # remove parens and brackets
+      sed 's/\(\h*\)\h*{//g'| # remove parens and brackets
+      sed 's/\(.*\) || //g'| # remove any || and leading
+      sed 's/(\h*)//g') | # remove just parens if brackets on newline
+      sed 's/\#.*//g' # remove trailing comments
                               # TODO: will need to be updated
-                              # if we still want to lazily 
+                              # if we still want to lazily
                               # support c
+    # if ! $nested; then
+    #   if [[ "$processed" =~ ^\h ]]; then
+    #     processed=''
+    #   fi
+    # fi
     if [ -n "$processed" ]; then echo "$processed"; return 0; fi
     return 1
   }
 
   util_env_load -e -f
   # we assume either filname or function for positional args
-  for arg in "$@"; do 
+  for arg in "$@"; do
     script="${1:-}"
     functions=()
     # this is silly
     _dir_or_file "$script" || functions+=( "$script" )
   done
-  if $have_dirs; then 
-    for dir in "${dirs[@]}"; do 
-      for filename in "$dir"/*; do 
-        if in_array "${filename#*.}" "ff_supported_types"; then 
+  if $have_dirs; then
+    for dir in "${dirs[@]}"; do
+      for filename in "$dir"/*; do
+        if in_array "${filename#*.}" "ff_supported_types"; then
           have_files=true
           abspath=$(realpath "$filename")
           files+=( "$abspath" )
@@ -884,8 +890,8 @@ function_finder() {
       done
     done
   fi
-  if $have_files; then 
-    for filepath in "${files[@]}"; do 
+  if $have_files; then
+    for filepath in "${files[@]}"; do
       bn=$(basename "$filepath")
       dn=$(dirname "$filepath")
       { swd=$(pwd); cd "${dn}"; } || { error "couldn't cd to $dn"; return 5; }
@@ -895,7 +901,7 @@ function_finder() {
   fi
 
   i=0
-  if $wide; then 
+  if $wide; then
     pager=column
   else
     pager=cat # essentially a noop
@@ -905,15 +911,15 @@ function_finder() {
     echo "$oname"
     local -n arr="$name"
     # se "${arr[*]}"
-    for linefunction in "${arr[@]}"; do 
-      lineno=$(echo "$linefunction" | cut -d":" -f1) 
+    for linefunction in "${arr[@]}"; do
+      lineno=$(echo "$linefunction" | cut -d":" -f1)
       fline=$(echo "$linefunction" | cut -d":" -f2)
-      { fname=$(_process_line "$fline") && 
+      { fname=$(_process_line "$fline") &&
         { if $flinenos; then
             printf "%4d " "$lineno"
           fi
           printf "%s\n" "$fname"
-          ((i++)) } 
+          ((i++)) }
       } || continue
     done | $pager
     echo
@@ -965,8 +971,8 @@ print_function() {
   while IFS= read -r line; do
     nums_names+=( "$line" )
   done < <(function_finder -l "$filepath"|grep "$function_name")
-  if [ "${#nums_names[@]}" -gt 0 ]; then 
-    for num_name in "${nums_names[@]}"; do 
+  if [ "${#nums_names[@]}" -gt 0 ]; then
+    for num_name in "${nums_names[@]}"; do
       num=$(echo "$num_name" | awk '{print$1}')
       name=$(echo "$num_name" | awk '{print$2}')
       if ! is_int "$num"; then
@@ -1003,6 +1009,11 @@ print_function() {
 
 }
 
+BASH_VARNAME_REGEX='[A-z0-9_]+'
+BASH_LOCAL_PREFIX='^\h*local\h+([[-][A-z]]*|\h*)\h*'
+printf -v BASH_LOCAL_VAR_PCREREGEX '%s%s.*' "$BASH_LOCAL_PREFIX" "$BASH_VARNAME_REGEX"
+printf -v BASH_LOCAL_VAR_SED_EXTRACT_NAME2_REGEX '[ \t]*local[ \t]+([[-][A-z] ]*|[ \t]*)\(%s\).*' "$BASH_VARNAME_REGEX"
+
 function namerefs_bashscript_add() {
   script="${1:-}"
   if ! is_bash_script; then
@@ -1016,24 +1027,34 @@ function namerefs_bashscript_add() {
   fi
 
   # our main container for names
-  declare -a _names
+  declare -ga _names
 
   # case: global function names
-  _names=$(function_finder)
+  _names=$(function_finder "$script")
 
   # get variables declared as local for exclusion (this may result in false positives)
   declare -ga localvars
   declare -a localvarlines
-  localvarlines=( $(grep '^[[:space:]]*local [[:alnum:]]*_*[[:alnum:]]*' "$script") )
-  for line in "${localvarlines[@]}"; do
-    wequal=$(echo "$line"|grep "=")
-    if [ $? -eq 0 ]; then
-      # we're expecting something like "local foo=bar" and we want foo
-      localvars+=( $(echo "$wequal" | awk '{print$1}' |awk -F'=' '{print$1}') )
-    else
-      localvars+=( $(echo "$line" | awk '{print$2}') )
+  printf -v sedstr 's/%s/One: \\1/g' "$BASH_LOCAL_VAR_SED_EXTRACT_NAME2_REGEX"
+  while IFS= read -r matchedline; do
+    # printf "($matchedline) "
+    lname=$(echo "$matchedline"| sed 's/.*local//g'| # remove local
+                                        sed 's/-[A-z]//g') # remove any flags
+    if [[ "$lname" == *'='* ]]; then
+      lname=$(echo "$lname" | cut -d'=' -f1)
     fi
-  done
+    localvars+=( "$lname" )
+  done < <(pcre2grep --null "$BASH_LOCAL_VAR_PCREREGEX" "$script")
+  # localvarlines=( $(grep '^[[:space:]]*local[[:space:]]*[[-][[:alpha:]]]*[[:space:]]*[[[:alnum:]][_]]*' "$script") )
+  # for line in "${localvarlines[@]}"; do
+  #   wequal=$(echo "$line"|grep "=")
+  #   if [ $? -eq 0 ]; then
+  #     # we're expecting something like "local foo=bar" and we want foo
+  #     localvars+=( $(echo "$wequal" | awk '{print$1}' |awk -F'=' '{print$1}') )
+  #   else
+  #     localvars+=( $(echo "$line" | awk '{print$2}') )
+  #   fi
+  # done
 
   # case variables declared by assignment
   declare -a vars
@@ -1059,7 +1080,7 @@ function namerefs_bashscript_add() {
 
   noextbasename=$(basename "$script"|sed 's/.sh//g')
   expected_name="NAMEREFS_${noextbasename^^}"
-  existing_namerefs="$(grep '^NAMEREFS_[[A-z]]=(.*)$')"
+  existing_namerefs="$(grep -E '^NAMEREFS_[A-z]+\=\(.*\)$' "${script}")"
   if [ $? -eq 0 ]; then
     name=$(echo "$existing_namerefs"|awk -F'=' '{print$1}')
     if [[ "$name" == "$expected_name" ]]; then
@@ -1072,7 +1093,8 @@ function namerefs_bashscript_add() {
   if undefined "$expected_name"; then
     declare -a "$expected_name"
   fi
-  local -n script_namerefs=("${!expected_name[@]}")
+  local -n script_namerefs="$expected_name"
+
   script_namerefs+=( $_names )
   # make sure we're quoted for printing
   declare -a out_namerefs
@@ -1084,7 +1106,7 @@ function namerefs_bashscript_add() {
     fi
   done
   # remove the original reference
-  sed -i 's/^NAMEREFS_[[A-z]]=(.*)$//g' "$script"
+  sed -ri.bak 's/^NAMEREFS_[A-z]+\=\(.*\)$//g' "$script"
   # add it in a nice-to-look-at format:
   printf "\n\n${expected_name}=(" >> "$script"
   for quoted_nameref in "${out_namerefs[@]}"; do
@@ -1093,7 +1115,7 @@ function namerefs_bashscript_add() {
   printf ")\n" >> "$script"
 }
 
-# If for any sourced file, you'd like to be able to undo the 
+# If for any sourced file, you'd like to be able to undo the
 # changes to  your environment after it's sourced, track the
 # namerefs (variable, function, etc names) in an array named
 # sourcename_namerefs where the sourced filename is
@@ -1257,8 +1279,8 @@ function is_older_than_1_wk() {
   return 1
 }
 
-# does a best effort search of a bash source file $2 
-# and attemtps to determine if the given function $1 
+# does a best effort search of a bash source file $2
+# and attemtps to determine if the given function $1
 # is called in that file, returns 0 if so and echos
 # the surrounding code to the console, 1 if not found
 # or indeterminite
@@ -1389,7 +1411,7 @@ function symlink_child_dirs () {
   fi
 }
 
-# find the most recent file in dir given by $1 that matches 
+# find the most recent file in dir given by $1 that matches
 # search term $2 (optional)
 function most_recent() {
   local dir="${1:-.}"
@@ -1575,7 +1597,9 @@ function get_cache_for_OS () {
     "MacOS")
       CACHE="$HOME/Library/Application Support/Caches"
       OSUTIL="$D/macutil.sh"
-      alias sosutil="source $D/macutil.sh"
+      function sosutil() {
+        source $D/macutil.sh
+      }
       alias vosutil="vim $D/macutil.sh && vosutil"
       ;;
   esac
@@ -1706,5 +1730,6 @@ if undefined "sai"; then
   }
 fi
 
-# for other files to avoid re-sourcing
-UTILSH=true
+_utilsh_fs() {
+  function_finder -f "$D/util.sh"
+}
