@@ -2,38 +2,174 @@
 
 # This file contains generally os-agnostic (POSIX-ish, though also WSL)
 # functions and utilities that shouldn't be too annoying to keep handy
-# in the env of an interactive sessionn, but also as a sort of personal 
-# stdlib for inclusion in scripts.  If a script is something I think 
-# others might want to check out and use it, I try to make it self 
+# in the env of an interactive sessionn, but also as a sort of personal
+# stdlib for inclusion in scripts.  If a script is something I think
+# others might want to check out and use it, I try to make it self
 # contained, as things in this file do reference specific bits of my setup
-# that others won't have, however, I've tried to make it relatively 
+# that others won't have, however, I've tried to make it relatively
 # safe for that use case as well YMMV and there shall be no expectations,
 # warranty, liability, etc, should you break something.
-# 
+#
 # github.com/trustdarkness
 # GPLv2 if it should matter
 # Most things should work on old versions of bash, but really bash 4.2+ reqd
-# 
-# OS detection and loading of os-specific utils is toward the botton, 
-# line 170+ish at the time of writing. 
+#
+# OS detection and loading of os-specific utils is toward the botton,
+# line 170+ish at the time of writing.
 #####################  internal logging and bookkeeping funcs
 #############################################################
- 
+
 shopt -s expand_aliases
+source "$D/loader.sh"
+path_append "$D"
 
 # colors for logleveled output to stderr
 TS=$(tput setaf 3) # yellow
 DBG=$(tput setaf 6) # cyan
 INF=$(tput setaf 2) # green
-WRN=$(tput setaf 208) # orange 
+WRN=$(tput setaf 208) # orange
 ERR=$(tput setaf 1) # red
 STAT=$(tput setaf 165) # pink
 VAR=$(tput setaf 170) # lightpink
 CMD=$(tput setaf 36) # aqua
 MSG=$(tput setaf 231) # barely yellow
 RST=$(tput sgr0) # reset
- 
-if [ -n "$XDG_STATE_HOME" ]; then 
+
+# preferred format strings for date for storing on the filesystem
+FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
+printf -v FSTSFMT '%s_%%H%%M%%S' "$FSDATEFMT" # our preferred ts fmt for files/folders
+LAST_DATEFMT="%a %b %e %k:%M" # used by the "last" command
+PSTSFMT="%a %b %e %T %Y" # date given by (among others) ps -p$pid -o'lstart' ex: Thu Dec 26 21:17:01 2024
+USCLOCKTIMEFMT="%k:%M %p"
+HISTTIMEFORMAT="$FSTS"
+
+function fsdate() {
+  date +"${FSDATEFMT}"
+}
+
+function fsts_to_fsdate() {
+  date -d -f "$FSTSFMT" "${1:-}" "$FSDATEFMT"
+}
+
+function fsts() {
+  date +"${FSTSFMT}"
+}
+
+function is_fsts() {
+  fsts_to_unixtime $@ > /dev/null 2>&1
+  return $?
+}
+
+function is_fsdate() {
+  date "+$FSDATEFMT" -d "${1:-}" > /dev/null 2>&1
+  return $?
+}
+
+function fsts_to_unixtime() {
+  if is_mac; then
+    date -jf "$FSTSFMT" "${1:-}" +%s
+  else
+    date -d -f "$FSTSFMT" "${1:-}" +"%s"
+  fi
+  return $?
+}
+
+# To help common bash gotchas with [ -eq ], etc, this function simply
+# takes something we hope to be an int (arg1) and returns 0 if it is
+# 1 otherwise
+function is_int() {
+  local string="${1:-}"
+  case $string in
+    ''|*[!0-9]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# Args: first term larger int than second term.
+#     if first term is "". we treat it as 0
+function gt() {
+  term1="${1:-}"
+  term2="${2:-}"
+  if is_int ${term1}; then
+    if is_int ${term2}; then
+      if [ ${term1} -gt ${term2} ]; then
+        return 0
+      else
+        return 1
+      fi
+    fi
+  elif [[ "${term1}" == "" ]]; then
+    return 1
+  fi
+}
+
+# Args: first term we hope is less than the second.
+# returns 0 if it is, 1 otherwise. if first term is "", return 1
+function lt() {
+  term1="${1:-}"
+  term2="${2:-}"
+  if is_int ${term1}; then
+    if is_int ${term2}; then
+      if [ ${term1} -lt ${term2} ]; then
+        return 0
+      else
+        return 1
+      fi
+    fi
+  elif [[ "${term1}" == "" ]]; then
+    return 1
+  fi
+}
+
+# Args: first term we hope is less than the second.
+# returns 0 if it is, 1 otherwise. if first term is "", return 1
+function le() {
+  term1="${1:-}"
+  term2="${2:-}"
+  if is_int ${term1}; then
+    if is_int ${term2}; then
+      if [ ${term1} -le ${term2} ]; then
+        return 0
+      else
+        return 1
+      fi
+    fi
+  elif [[ "${term1}" == "" ]]; then
+    return 1
+  fi
+}
+
+function boolean_or {
+  for b in "$@"; do
+    # se "testing ${b}"
+    if [ -n "${b}" ]; then
+      if is_int ${b}; then
+        if [ ${b} -eq 0 ]; then
+          return 0
+        fi
+      else
+        if ${b}; then
+          return 0
+        fi
+      fi
+    fi
+  done
+  return 1
+}
+
+# Templates for colored stderr messages
+printf -v E "%s[%s]" $ERR "ERROR"
+printf -v W "%s[%s]" $WRN "WARN"
+printf -v I "%s[%s]" $INF "INFO"
+printf -v B "%s[%s]" $DBG "DEBUG"
+
+# implementing log levels selectively for simplicity and to avoid
+# namespace collisions, i.e. with the info command
+alias err='_log "$E" "$LINENO"'
+alias warn='_log "$W" "$LINENO"'
+alias debug='_log "$B" "$LINENO"'
+
+if [ -n "$XDG_STATE_HOME" ]; then
   LOGDIR="$XDG_STATE_HOME/com.trustdarkness.dots"
 else
   LOGDIR="$HOME/Library/Logs/com.trustdarkness.dots"
@@ -51,13 +187,13 @@ LOG_LEVELS=( ERROR WARN INFO DEBUG )
 # 4 - DEBUG
 _get_log_level() {
   idx=0
-  for level in "${LOG_LEVELS[@]}"; do 
-    if [[ "$level" == "${1:-}" ]]; then 
+  for level in "${LOG_LEVELS[@]}"; do
+    if [[ "$level" == "${1:-}" ]]; then
       echo $idx
       return 0
     fi
     ((idx++))
-  done 
+  done
   return 1
 }
 
@@ -68,33 +204,33 @@ _striplevel() {
 
 # based on the numeric log level of this log message
 # and the threshold set by the current user, function, script
-# do we echo or just log?  If threshold set to WARN, it 
+# do we echo or just log?  If threshold set to WARN, it
 # means we echo WARN and ERROR, log everything
 _to_echo() {
-  this_log=$(get_log_level "${1:-}")
-  threshold=$(get_log_level "${2:-}")
-  if le "$this_log" "$threshold"; then 
+  this_log=$(_get_log_level "${1:-}")
+  threshold=$(_get_log_level "${2:-}")
+  if le "$this_log" "$threshold"; then
     return 0
   fi
   return 1
 }
 
 # return something resembling user@term - terminfo
-# for iterm, terminfo will be the profile name unless Default 
+# for iterm, terminfo will be the profile name unless Default
 # then, and other local termainls, TERM_SESSION_ID
 # for ssh, this will be user@host - tty
 _user_term_info() {
   local uterm
   local uterminfo
-  if [ -n "$SSH_CLIENT" ]; then 
+  if [ -n "$SSH_CLIENT" ]; then
     uterm=$(
-      [[ "${SSH_CLIENT}" =~ ([!-~]+)[[:space:]] ]] && 
+      [[ "${SSH_CLIENT}" =~ ([!-~]+)[[:space:]] ]] &&
       echo "${BASH_REMATCH[1]}"
     ) || uterm="$SSH_CLIENT" # just in case
     uterminfo="$SSH_TTY"
-  elif [ -n "$TERM_PROGRAM" ]; then 
+  elif [ -n "$TERM_PROGRAM" ]; then
     uterm="$TERM_PROGRAM"
-    if [ -n "$ITERM_PROFILE" ] && [[ "$ITERM_PROFILE" != "Default" ]]; then 
+    if [ -n "$ITERM_PROFILE" ] && [[ "$ITERM_PROFILE" != "Default" ]]; then
       uterminfo="$ITERM_PROFILE"
     else
       uterminfo="$TERM_SESSION_ID"
@@ -105,13 +241,12 @@ _user_term_info() {
 }
 
 #      TIMESTAMP [FUNCTION] [LEVEL] PID FILENAME:LINENO
-LOGFMT="%12s [%s] %s %s %s"
+LOGFMT="%20s [%s] %s %s %s"
 
 # Log to both stderr and a file (see above).  Should be called using
 # wrapper functions below, not directly
 _log() {
   local lineno
-  local wherefrom
   local funcname
   local ts=$(fsts)
   local pid="$$"
@@ -119,47 +254,63 @@ _log() {
   src=$(basename "$srcp")
   local level="$1"
   shift
+  if [ -z "$LEVEL" ]; then
+    local LEVEL=WARN
+  fi
   # we opportunistically get the lineno if we can
-  if is_int "$1"; then 
+  if is_int "$1"; then
     err_in_func="$1"
     shift
   fi
   local message="$@"
-  if [ -z "$LOGFILE" ]; then 
-    LOGFILE="$LOGDIR/$srcbn.log"
+  if [ -z "$LOGFILE" ]; then
+    if [[ "$srcp" == "environment" ]]; then
+      LOGFILE="$LOGDIR/util.sh.log"
+    else
+      LOGFILE="$LOGDIR/$src.log"
+    fi
   fi
   # if called by struct error the FUNCNAME indices are off by 1
-  if [[ "${FUNCNAME[*]}" == *"_struct_err"* ]]; then 
-    findex=2
-  else 
-    findex=1
-  fi
-  if [ "${#FUNCNAME[@]}" -gt $findex ]; then 
-    funcname="${FUNCNAME[$findex]}"
+  # if [[ "${FUNCNAME[*]}" == *"_struct_err"* ]]; then
+  #   findex=2
+  # else
+  #   findex=1
+  # fi
+  # if [ "${#FUNCNAME[@]}" -gt $findex ]; then
+  funcname="${FUNCNAME[1]}"
+  if [ -n "$funcname" ]; then
     if [ -n "$err_in_func" ]; then
-      # total hack 
-      func_line=$(grep -n "$funcname" "$srcp"|cut -d":" -f1)
-      err_line=$((func_line + $err_in_func - 1))
-      src+=":$err_line"; shift
+      if [[ "$srcp" != main ]] && [[ "${FUNCNAME[*]}" != *'lineno_in_func_in_file'* ]]; then
+        #err_line=$(lineno_in_func_in_file -l "$err_in_func" -F "$funcname" -f "$srcp") &
+        #child=$!
+        #( sleep 2 && kill $child > /dev/null 2>&1 ) &
+        #wait $child
+        is_int "$err_line" || err_line=$err_in_func
+        src+=":$err_line";
+
+      fi
     fi
 
-  # otherwise, we were called from top level scope of a file other 
+  # otherwise, we were called from top level scope of a file other
   # than this or invoked directly from the terminal
   else
-    funcname="${FUNCNAME[$findex-1]} invoked from global" 
-    if [[ "${BASH_SOURCE[0]}" == "${BASH_SOURCE[1]}" ]] || [[ "${#BASH_SOURCE[@]}" == 1 ]]; then 
+    funcname="${FUNCNAME[$findex-1]} invoked from global"
+    if [[ "${BASH_SOURCE[0]}" == "${BASH_SOURCE[1]}" ]] || [[ "${#BASH_SOURCE[@]}" == 1 ]]; then
       # we don't want the _log function to silently die under any circumstance
       src=$(_user_term_info) || src="$USER@$SHELL"
     fi
   fi
-
-  printf -v line_leader "$LOGFMT" "$ts" "$funcname" "$level" "pid: ${pid}" "$src" 
+  this_level=$(_striplevel "$level")
+  if [[ "$this_level" == 'DEBUG' ]]; then
+    message="$(_prvars) $message"
+  fi
+  printf -v line_leader "$LOGFMT" "$ts" "$funcname" "$level" "pid: ${pid}" "$src"
   (
-     this_level=$(striplevel "$level")
-    if to_echo $this_level $LEVEL; then 
-      #exec 3>&1 
-      # remove coloring when going to logfile 
-      echo "$line_leader $message${RST}" 2>&1 | sed 's/\x1B\[[0-9;]*[JKmsu]//g' | tee -a "$LOGFILE" 
+
+    if _to_echo "$this_level" "$LEVEL"; then
+      #exec 3>&1
+      # remove coloring when going to logfile
+      echo "$line_leader $message${RST}" 2>&1 | sed 's/\x1B\[[0-9;]*[JKmsu]//g' | tee -a "$LOGFILE"
     else
       echo "$line_leader $message${RST}" | sed 's/\x1B\[[0-9;]*[JKmsu]//g' >> "$LOGFILE"
     fi
@@ -168,26 +319,18 @@ _log() {
 }
 
 # trap unhandled errors
-trap 'echo "$LINENO $BASH_COMMAND ${BASH_SOURCE[*]} ${BASH_LINENO[*]} ${FUNCNAME[*]}"' ERR
+#trap 'echo "$LINENO $BASH_COMMAND ${BASH_SOURCE[*]} ${BASH_LINENO[*]} ${FUNCNAME[*]}"' ERR
 
-# Templates for colored stderr messages
-printf -v E "%s[%s]" $ERR "ERROR"
-printf -v W "%s[%s]" $WRN "WARN"
-printf -v I "%s[%s]" $INF "INFO"
-printf -v B "%s[%s]" $DBG "DEBUG"
 
-# err() { 
+
+# err() {
 #   _log $E "$@"; return $?
 # }
 
-# implementing log levels selectively for simplicity and to avoid
-# namespace collisions, i.e. with the info command
-alias err='_log "$E" "$LINENO"'
-alias warn='_log "$W" "$LINENO"'
-alias debug='_log "$D" "$LINENO"'
+
 
 ################# helper functions for catching and printing
-# errors with less boilerplate (though possibly making it 
+# errors with less boilerplate (though possibly making it
 # slightly more arcane).  an experiment
 
 # print status, takes a return code
@@ -197,27 +340,29 @@ _prs() {
 }
 
 # print variables, takes either a list of variable names
-# (the strings, not the vars themselves) or looks in a 
+# (the strings, not the vars themselves) or looks in a
 # global array ${logvars[@]} for same
 _prvars() {
-  if [ $# -gt 0 ]; then 
-    for arg in "$@"; do 
+
+  if [ $# -gt 0 ]; then
+    for arg in "$@"; do
       logvars+=( "$arg" )
     done
   fi
-  for varname in "${logvars[@]}"; do 
+  for varname in "${logvars[@]}"; do
     n=$varname
     v="${!n}"
     # this should gracefully handle declare -a
     # TODO: handle declare -A
-    if [ "${#v[@]}" -gt 1 ]; then 
+    if [ "${#v[@]}" -gt 1 ]; then
       printf "${VAR}%s=( ${RST}" "$n"
       printf "%s " "${v[@]}"
       printf "${VAR})"
     fi
     printf "${VAR}%s:${RST} %s " "$n" "$v"
-  done     
+  done
   logvars=()
+  set +x
   return 0
 }
 
@@ -230,43 +375,43 @@ _prcao() {
   printf "${CMD}cmd:$RST %s ${CMD}args:$RST %s ${CMD}stdout:$RST %s ${CMD}stderr:$RST %s " "$c" "$a" "$o" "$e"
 }
 
-# print a structured err, when the command with arguments, 
+# print a structured err, when the command with arguments,
 # other relevant vars, exit status, and output, says all that needs
 # to be said
 # Args: return code, command, args, output, stderr
-_struct_err() {
-  ret=$1
-  cmd=$2
-  args=$3
-  out=$4
-  err=$5
-  retm=$(_prs "$ret")
-  varsm=$(_prvars)
-  com=$(_prcao "$cmd" "$args" "$out" "$err")
-  printf -v err_msg "%s %s %s" "$retm" "$varsm" "$com"
-  err "$err_msg"
-}
+# _struct_err() {
+#   ret=$1
+#   cmd=$2
+#   args=$3
+#   out=$4
+#   err=$5
+#   retm=$(_prs "$ret")
+#   varsm=$(_prvars)
+#   com=$(_prcao "$cmd" "$args" "$out" "$err")
+#   printf -v err_msg "%s %s %s" "$retm" "$varsm" "$com"
+#   err "$err_msg"
+# }
 
 # runs a command, wrapping err handling
 # args: command to run, args
 # on success, returns 0 and echos the child back to the parent
 # on failure, calls _struct_err, which outputs error to stderr
 # and to \$LOGFILE
-_lc() {
-  cmd="$1"; shift
-  #info "_lc: $cmd $@"
-  {
-      IFS=$'\n' read -r -d '' err;
-      IFS=$'\n' read -r -d '' out;
-      IFS=$'\n' read -r -d '' ret;
-  } < <((printf '\0%s\0%d\0' "$($cmd $@)" "${?}" 1>&2) 2>&1)
-  if [ $ret -gt 0 ]; then 
-    _struct_err "$ret" "$cmd" "$@" "$out" "$err"
-    return $ret
-  else
-    echo "$out" && return 0
-  fi
-}
+# _lc() {
+#   cmd="$1"; shift
+#   #info "_lc: $cmd $@"
+#   {
+#       IFS=$'\n' read -r -d '' err;
+#       IFS=$'\n' read -r -d '' out;
+#       IFS=$'\n' read -r -d '' ret;
+#   } < <((printf '\0%s\0%d\0' "$($cmd $@)" "${?}" 1>&2) 2>&1)
+#   if [ $ret -gt 0 ]; then
+#     _struct_err "$ret" "$cmd" "$@" "$out" "$err"
+#     return $ret
+#   else
+#     echo "$out" && return 0
+#   fi
+# }
 ##################### end logging code #########################################
 
 # TODO do these belong in .bashrc or .bash_aliases?
@@ -290,19 +435,19 @@ fi
 # A slightly more convenient and less tedious way to print
 # to stderr, canonical in existence # TODO, check namerefs on resource
 if ! is_declared "se"; then
-  # Args: 
+  # Args:
   #  Anything it recieves gets echoed back.  If theres
   #  no newline in the input, it is added. if there are substitutions
-  #  for printf in $1, then $1 is treated as format string and 
+  #  for printf in $1, then $1 is treated as format string and
   #  $:2 are treated as substitutions
-  # No explicit return code 
+  # No explicit return code
   function se() {
     if [[ "$*" == *'%'* ]]; then
       >&2 printf "${1:-}" $:2
     else
       >&2 printf "$@"
     fi
-    if ! [[ "$*" == *'\n'* ]]; then 
+    if ! [[ "$*" == *'\n'* ]]; then
       >&2 printf '\n'
     fi
   }
@@ -314,7 +459,7 @@ fi
 # TODO: create teardown that remove all namerefs added by setup
 function util_env_load() {
   # this represents all the possible sources at the moment, but only
-  # including as options as needed, otherwise it would be taking an 
+  # including as options as needed, otherwise it would be taking an
   # already silly thing and making it ridiculous.
   local exu=true # -e
   local up=false # -u
@@ -334,7 +479,7 @@ function util_env_load() {
     case "${1:-}" in
       "-e"|"--existence")
         exu=true
-        shift 
+        shift
         ;;
       "-f"|"--filesystemarray")
         fsau=true
@@ -376,7 +521,7 @@ function util_env_load() {
         ;;
       *)
         echo "Boo.  ${1:-} does not exist"
-        shift 
+        shift
         ;;
     esac
   done
@@ -404,7 +549,7 @@ function util_env_load() {
   if undefined "sau" && $iu; then
     install_util_load
   fi
-  if undefined "term_bootstrap" && $bs; then 
+  if undefined "term_bootstrap" && $bs; then
     source "$D/bootstraps.sh"
   fi
 }
@@ -418,14 +563,14 @@ dgrep() {
     shift
   done
   sterm="${1:-}"
-  if [ -z "$D" ]; then 
-    if confirm_yes "D not in env, do you want to search PATH?"; then 
+  if [ -z "$D" ]; then
+    if confirm_yes "D not in env, do you want to search PATH?"; then
       #TODO
       :
     fi
   fi
   total_found=0
-  for item in "$D"/*; do 
+  for item in "$D"/*; do
     # if there are ever more exceptions, make this more visible
     { [ -f "$item" ] && [[ "$item" != *LICENSE ]] && file=$item; } || continue
     found=$(grep -n ${grepargs[@]} "$sterm" "$file"); ret=$?||true
@@ -438,7 +583,7 @@ dgrep() {
       ((total_found+=$(echo "$found"|wc -l|xargs)))
     fi
   done
-  if [ $total_found -gt 0 ]; then 
+  if [ $total_found -gt 0 ]; then
     return 0
   fi
   return 1
@@ -489,45 +634,6 @@ function gpgvc() {
 
 function gpgic() {
   gpg --import < <(xclip -o)
-}
-
-# preferred format strings for date for storing on the filesystem
-FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
-printf -v FSTSFMT '%s_%%H%%M%%S' "$FSDATEFMT" # our preferred ts fmt for files/folders
-LAST_DATEFMT="%a %b %e %k:%M" # used by the "last" command
-PSTSFMT="%a %b %e %T %Y" # date given by (among others) ps -p$pid -o'lstart' ex: Thu Dec 26 21:17:01 2024
-USCLOCKTIMEFMT="%k:%M %p"
-HISTTIMEFORMAT="$FSTS"
-
-function fsdate() {
-  date +"${FSDATEFMT}"
-}
-
-function fsts_to_fsdate() {
-  date -d -f "$FSTSFMT" "${1:-}" "$FSDATEFMT"
-}
-
-function fsts() {
-  date +"${FSTSFMT}"
-}
-
-function is_fsts() {
-  fsts_to_unixtime $@ > /dev/null 2>&1
-  return $?
-}
-
-function is_fsdate() {
-  date "+$FSDATEFMT" -d "${1:-}" > /dev/null 2>&1
-  return $?
-}
-
-function fsts_to_unixtime() {
-  if is_mac; then
-    date -jf "$FSTSFMT" "${1:-}" +%s
-  else
-    date -d -f "$FSTSFMT" "${1:-}" +"%s"
-  fi
-  return $?
 }
 
 function colnum() {
@@ -594,7 +700,7 @@ _localize_ps_time() {
   # which fields should look like Thu Dec 26 21:17:01 2024
 
   # correct args for mac vs linux
-  case $(what_os) in 
+  case $(what_os) in
     MacOS)
       date_args=(-j -f "$PSTSFMT")
       ;;
@@ -614,19 +720,19 @@ _localize_ps_time() {
   clocktime=$(date "${date_args[@]}" "${then[*]}" +"$USCLOCKTIMEFMT") || \
     { err "${e[3]}"; return 3; }
 
-  # case 1: today, in which case, we only want the clock time 
+  # case 1: today, in which case, we only want the clock time
   if [[ "${now[@]:0:3}" == "${then[@]:0:3}" ]]; then
     echo "$clocktime"; return 0
 
   # case 2: within the last week, we want the day and the time
   elif [ $(( $(( mnow - mthen )) / $(( 60 * 60 * 24 )) )) -lt 7 ]; then
-    # using the name of the array as a variable is a shortcut to 
+    # using the name of the array as a variable is a shortcut to
     # its first item
     echo "$then at $clocktime"; return 0
 
-  # case 3: the process was started in a different year, 
+  # case 3: the process was started in a different year,
   #         display Thu Dec 26 2024 at ct
-  elif [ "${now[@]:5:5}" -ne "${then[@]:5:5}" ]; then 
+  elif [ "${now[@]:5:5}" -ne "${then[@]:5:5}" ]; then
     echo "${then[@]:0:3} ${then[@]:-1} at $clocktime"
     return 0
 
@@ -678,16 +784,25 @@ function add_permanent_bash_alias_to_bashrc() {
 }
 
 function is_bash_script() {
-  if [ -z "$script" ] || ! [ -f "$script" ]; then
-    return 1
+  script="${1:-}"
+  [ -n "$script" ] || { err "provide a filename"; return 1; }
+  if [ -f "$script" ]; then
+    bash_shebang_validator "$script"
+    return $?
+  else
+    err "$script does not seem to be a file, try full path?"
+    return 2
   fi
-  head -n1 "$script" | grep "bash$" > /dev/null 2>&1
-  return $?
 }
 
 VALID_POSIXPATH_EL_CHARS='\w\-. '
 printf -v VALID_POSIXPATHS_REGEX '[\/*%s]+' "$VALID_POSIXPATH_EL_CHARS";
-BASH_FUNCTION_PCREREGEX='(function [A-z0-9_]+ *\(\) +{|[A-z0-9_]+ *\(\) +{|[A-z0-9_]+ +{)'
+BASH_FUNCTION_WITH_NAME_PCREREGEX='(function %s *\(\) +{|%s *\(\) +{|%s +{)'
+
+function_regex() {
+  printf -v "${1:-}" "$BASH_FUNCTION_WITH_NAME_PCREREGEX" "${2:-}" "${2:-}" "${2:-}"
+}
+function_regex BASH_FUNCTION_PCREREGEX "[A-z0-9_]+"
 _BWVR='^bash[_-]{0,1}(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|'
 _BWVR+='[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*'
 _BWVR+='[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
@@ -696,34 +811,34 @@ BASH_WITH_VERSION_REGEX="$_BWVR"
 bash_shebang_validator() {
   _env_ok() {
     to_test="${1:-}"
-    { pcregrep "\#\!$VALID_POSIXPATHS_REGEX" < <(echo "$to_test"); ret=$?; } ||
+    { pcregrep "\#\!$VALID_POSIXPATHS_REGEX" > /dev/null 2>&1 < <(echo "$to_test"); ret=$?; } ||
       { "$BASH_COMMAND failed with ret $ret"; return 9; }
     if [ $ret -eq 0 ]; then
       # this is now an array but we bastardized the functionality to pop
-      # off the first word and so we'll just treat it like variable 
+      # off the first word and so we'll just treat it like variable
       shebangcmd="${to_test%% *}"
       bangcmd="${shebangcmd:2}"
-      if ! [ -x "$bangcmd" ] || ! [ -s "$bangcmd" ]; then 
+      if ! [ -x "$bangcmd" ] || ! [ -s "$bangcmd" ]; then
         return 2
       fi
-      if [[ "$bangcmd" != *'env' ]]; then 
+      if [[ "$bangcmd" != *'env' ]]; then
         return 3
       fi
     fi
-    if [ -n "$bangcmd" ]; then 
+    if [ -n "$bangcmd" ]; then
       testout=$($bangcmd "VARNAME=value" "bash" "-c" 'echo $VARNAME'); ret=$?
       if [[ "$testout" == "value" ]]; then return 0; fi
       # if the test succeeds, we should never reach the next line
       error "expected first part of shebang with spaces to be env, but got $bangcmd"
       return 6
     fi
-    return 4 
+    return 4
   }
   bash_script="${1:-}"
   she_bang=$(head -n 1 "${bash_script}") || \
     { se "failed to head $bash_script"; return 6; }
-  if [[ "$she_bang" == *' '* ]]; then 
-    # valid shebangs for bash scripts with a space should call env 
+  if [[ "$she_bang" == *' '* ]]; then
+    # valid shebangs for bash scripts with a space should call env
     # to later call bash; split on space
     IFS=' ' read -r -a shebang_components <<< "${she_bang}"
     sheenv="${shebang_components[0]}"
@@ -734,34 +849,35 @@ bash_shebang_validator() {
       warn "$w";
       return 7;
     }
-    echo "bashend: $bashend"
+    # echo "bashend: $bashend"
   else
     bashend="$she_bang"
   fi
-  if [[ "$bashend" == *'bash' ]]; then 
+  if [[ "$bashend" == *'bash' ]]; then
     return 0
   else
-    [[ "$bashend" =~ $BASH_WITH_VERSION_REGEX ]] && return 0 
+    [[ "$bashend" =~ $BASH_WITH_VERSION_REGEX ]] && return 0
     error "bash does not appear to be in shebang $she_bang of $bash_script"
-    return 5 
+    return 5
   fi
-} 
+}
 
 # given a filename, return an alphanumeric (plus underscores) version
-function slugify() {
+# with no dots, suitable for variable names
+function _vslugify() {
   name="${1:-}"
   ext=
   unset slugified # if this is needed, should be copied into the local namespace
   declare -gA slugified
-  if string_contains "/" "$name"; then 
+  if string_contains "/" "$name"; then
     dn=$(dirname "$name")
     name=$(basename "$name")
   fi
   old_name="$name"
-  if [[ "${name}" =~ ^[\w,\s-]+[\.[A-Za-z]]+ ]]; then 
-    ext="${name##*.}"
-    name="${name%.*}"
-  fi
+  # if [[ "${name}" =~ ^[\w,\s-]+[\.[A-Za-z]]+ ]]; then
+  #   ext="${name##*.}"
+  #   name="${name%.*}"
+  # fi
   slugified_name=$(echo "$name"| sed 's/^\./_/g'| sed 's/ /_/g' |sed 's/[^[:alnum:]\t]//g')
   if [ -n "$ext" ]; then slugified_name="$slugified_name.$ext"; fi
   slugified["$slugified_name"]="$old_name"
@@ -770,158 +886,225 @@ function slugify() {
 }
 
 function_finder() {
+  l=$((LINENO-1))
+  usage() {
+    cat <<-'EOF'
+function_finder - prints functions declared in a bash script
+
+Args:
+  -f filename of bash script to search in
+  -F (optional) function name to search for, can be specified
+     more than once to find multiple functions
+  -l print line numbers of function declarations
+  -L only print the line numbers
+  -n include nested functions (false if not speicified)
+  -w wide display mode, prints functions in columns instead
+     of one per line
+  -h print this text
+EOF
+  }
   unset ffs
   ffs=()
+  oargs=( "$@" )
+  local pcre2grepopts=('-n' '--null')
   local flinenos=false
+  local onlylinenos=false
+  declare -ga functions
+  functions=()
   local nested=false
-  local have_dirs=false
-  local have_files=false
-  local wide=false
-  local files
+  local pager="cat"
   unset files
-  local dirs
-  unset dirs
-  optspec="ld:f:F:wh"
+  declare -ga files
+  files=()
+  optspec="nlLf:F:wh"
   unset OPTIND
   unset optchar
   while getopts "${optspec}" optchar; do
-	local OPTIND
-	case "${optchar}" in
-	  l)
-      flinenos=true
-      ;;
-    d)
-      dirs+=( "${OPTARG}" )
-      have_dirs=true
-      ;;
-    f)
-      filepath="${OPTARG}"
-      ;;
-    F)
-      function_name="${OPTARG}"
-      ;;
-    w)
-      wide=true
-      ;;
-	  h)
-      usage
-      return 0
-      ;;
-	  *)
-      usage
-      return 1
-      ;;
-	esac
+    case "${optchar}" in
+      l)
+        flinenos=true
+        ;;
+      L)
+        onlylinenos=true
+        flinenos=true
+        ;;
+      n)
+        nested=true
+        ;;
+      f)
+        file="${OPTARG}"
+        ;;
+      F)
+        functions+=("${OPTARG}")
+        ;;
+      w)
+        pager="column"
+        ;;
+      h)
+        usage
+        return 0
+        ;;
+      *)
+        usage
+        return 1
+        ;;
+    esac
   done
-  shift $(($OPTIND - 1))
+  shift $(($OPTIND -1))
   local _argc_post=$1
+  array_to_set "functions"
 
-  # supported filetypes for the moment will be bash and c, but may expoand
-  # over time
-  ff_supported_types=( "sh" "c" )
-
-  _dir_or_file() {
-    local to_test="${1:-}"
-    if [ -d "$to_test" ]; then 
-      have_dirs=true
-      dirs+=( "$to_test" )
-      return 0
-    elif [ -s "$to_test" ]; then
-      have_files=true
-      files+=( "$to_test" )
-      return 0 
-    else
-      return 1
-    fi
-  }
-
-  _functions_in_file() {
-    filename="${1:-}"
-    filebn=$(basename "$filename")
-    slugged=$(slugify "$filebn")
-    unset "linesfunctions_in_$slugged"
-    declare -ga "linesfunctions_in_$slugged"
-    declare -n arr="linesfunctions_in_$slugged"
-    # local arr="${!nref}"
-    ffs+=("linesfunctions_in_$slugged")
-
-
+  _pfunctions_to_array() {
     while IFS= read -r line; do
-      arr+=( "$line" ) 
-    done < <(pcre2grep --null -n "$BASH_FUNCTION_PCREREGEX" "$filename")
+      funcdef=$(echo "$line" | sed "s/\($func_name\)\([(].*\)/\1/g")
+      [ -n "$funcdef" ] && funcs_in_file+=( "$funcdef" )
+    done < <(pcre2grep ${pcre2grepopts[@]} "$func_regex" "$file"); ret=$?;
+    return $ret
   }
+
   _process_line() {
     line="${1:-}"
-    if [[ "$line" == "#"* ]]; then return 1; fi
+    if [[ "$line" == "#"* ]]; then return 2; fi
+    if ! $nested && [[ "$line" == " "* ]]; then return 3; fi
     processed=$(echo "$line"|
       sed 's/function //g'| # remove any function keywords
       sed 's/\(\h*\)\h*{//g'|
       sed 's/\(.*\) || //g'|
+      sed 's/\#.*//g'|
       sed 's/()//g') # remove parens and brackets
                               # TODO: will need to be updated
-                              # if we still want to lazily 
+                              # if we still want to lazily
                               # support c
     if [ -n "$processed" ]; then echo "$processed"; return 0; fi
     return 1
   }
-
-  util_env_load -e -f
-  # we assume either filname or function for positional args
-  for arg in "$@"; do 
-    script="${1:-}"
-    functions=()
-    # this is silly
-    _dir_or_file "$script" || functions+=( "$script" )
-  done
-  if $have_dirs; then 
-    for dir in "${dirs[@]}"; do 
-      for filename in "$dir"/*; do 
-        if in_array "${filename#*.}" "ff_supported_types"; then 
-          have_files=true
-          abspath=$(realpath "$filename")
-          files+=( "$abspath" )
-        fi
-      done
-    done
-  fi
-  if $have_files; then 
-    for filepath in "${files[@]}"; do 
-      bn=$(basename "$filepath")
-      dn=$(dirname "$filepath")
-      { swd=$(pwd); cd "${dn}"; } || { error "couldn't cd to $dn"; return 5; }
-      _functions_in_file "$bn" && cd "$swd" || \
-        { warn "no functions found in $filepath";  }
-    done
-  fi
-
+  array_to_set "functions"
   i=0
-  if $wide; then 
-    pager=column
-  else
-    pager=cat # essentially a noop
-  fi
-  for name in "${ffs[@]}"; do
-    oname=${slugified[$(echo "$name" |cut -d"_" -f3-)]}
-    echo "$oname"
-    local -n arr="$name"
-    # se "${arr[*]}"
-    for linefunction in "${arr[@]}"; do 
-      lineno=$(echo "$linefunction" | cut -d":" -f1) 
+  unset funcs_in_file
+  funcs_in_file=()
+  if [ -f "${file}" ]; then
+    if [ "${#functions[@]}" -gt 0 ]; then
+      for func_name in "${functions[@]}"; do
+        function_regex func_regex "$func_name"
+        _pfunctions_to_array
+      done
+    else
+      func_regex="$BASH_FUNCTION_PCREREGEX"
+      _pfunctions_to_array
+    fi
+    for linefunction in "${funcs_in_file[@]}"; do
+      lineno=$(echo "$linefunction" | cut -d":" -f1)
       fline=$(echo "$linefunction" | cut -d":" -f2)
-      { fname=$(_process_line "$fline") && 
+      { fname=$(_process_line "$fline") &&
         { if $flinenos; then
-            printf "%4d " "$lineno"
+            printf "%d " "$lineno"
           fi
-          printf "%s\n" "$fname"
-          ((i++)) } 
+          if ! $onlylinenos; then
+            printf "%s\n" "$fname"
+          fi
+          ((i++)) }
       } || continue
     done | $pager
-    echo
-  done
+  fi
+  echo
+}
 
+loader-add() {
+  # deprecate
+  util_env_load -u
+  printf -v fargs '"$@"'
+  printf -v fret '"$?"'
+  bashlib="${1:-}"
+  if ! is_absolute "$bashlib"; then
+    abspath=$(realpath "$bashlib")
+    if [[ "$abspath" == "$(realpath "$D/$bashlib"])" ]]; then
+      bashlib="$D/$bashlib"
+    else
+      bashlib="$abspath"
+    fi
+  fi
+  loaderlib="$D/loader.sh"
+  if ! is_bash_script "$bashlib"; then
+    err "Usage: loader_add -some -flags <some_bashlib.sh>"
+    return 1
+  fi
+  preamble_text="$bashlib function loaders begin here"
+  epilogue_text="$bashlib function loaders end here"
+  if plline=$(grep -n "$preamble_text" "$loaderlib"); then
+    llline=$(grep -n "$epilogue_text" "$loaderlib")
+    range=""
+    if is_int "$plline" && is_int "$llline"; then
+      for line in "${plline}" "${llline}"; do
+        range+=$(echo "$line" | cut -d":" -f"1")
+        if [[ "$range" == *','* ]]; then
+          range+='d';
+        else
+          ((range--))
+          range+=','
+        fi
+      done
+      echo "$range"
+      cy="$bashlib is already present in loader.sh "
+      cy+="replace current contents?"
+      if confirm_yes "$cy"; then
+        sed -i.bak "$range" "$loaderlib"
+      else
+        return 2
+      fi
+    else
+      err "error in format of existing $loaderlib, please investigate"
+      return 3
+    fi
+  fi
+  echo " " >> $loaderlib
+  echo "######## $preamble_text ########" >> $loaderlib
+  functions_in_bashlib=($(function_finder -f "$bashlib"))
+  failures=0
+  for fname in "${functions_in_bashlib[@]}"; do
+############
+    cat <<-EOF >> $loaderlib || ((failures++))
+declare -F "$fname" > /dev/null 2>&1 || $fname() {
+  unset -f ${functions_in_bashlib[@]}; source "$bashlib"; $fname $fargs
+  return $fret
+}
+
+EOF
+############
+  done
+    cat <<-EOF >> $loaderlib || ((failures++))
+_unset_$(_vslugify $(basename $bashlib))_fs() {
+  unset -f ${functions_in_bashlib[@]};
+  return $fret
+}
+
+EOF
+  echo "######## $epilogue_text ##########" >> $loaderlib
+  if [ $failures -eq 0 ]; then
+    se "$((${#functions_in_bashlib[@]}+1)) function declarations added to $loaderlib"
+  else
+    se "$(( $((${#functions_in_bashlib[@]}+1)) - failures)) added.  $failures failed."
+  fi
+  return $failures
 }
 
 print_function() {
+  usage() {
+    cat <<-'EOF'
+print_function - prints the full function definition for a given name
+
+Args:
+  -f filename to find function in (if not specified, will try from env)
+  -l include line numbers
+  -h print this text
+
+Ex:
+ $ print_function -f bash_script.sh my_fancy_function
+
+ function my_fancy_function() {
+   echo foo
+ }
+EOF
+  }
   filepath=
   flinenos=false
   optspec="lf:h"
@@ -935,7 +1118,7 @@ print_function() {
         ;;
       f)
         filepath="$OPTARG"
-        [ -f "$filepath" ] || error "no file at $filepath"; return 2;
+        [ -f "$filepath" ] || { error "no file at $filepath"; return 2; }
         ;;
       h)
         usage
@@ -962,44 +1145,27 @@ print_function() {
     declare -pf "$function_name"
     return $?
   fi
-  while IFS= read -r line; do
-    nums_names+=( "$line" )
-  done < <(function_finder -l "$filepath"|grep "$function_name")
-  if [ "${#nums_names[@]}" -gt 0 ]; then 
-    for num_name in "${nums_names[@]}"; do 
-      num=$(echo "$num_name" | awk '{print$1}')
-      name=$(echo "$num_name" | awk '{print$2}')
-      if ! is_int "$num"; then
-        # logvars=(num_name num name filepath function_name); debug
-        error "couldn't parse line number from function_finder"
-        return 4
-      fi
+  if declare_lineno=$(function_finder -L -f "$filepath" -F "$function_name"|xargs); then
 
-      alllines=$(wc -l "$filepath"| awk '{print$1}')
-      tailtop=$((alllines-num))
-      endline=$((num+$(tail -n "$tailtop" "$filepath"|grep -n -m 1 '^}$'| cut -d ":" -f 1)))
-      if ! is_int "$endline"; then
-        #logvars=(num_name num name endline filepath function_name); debug
-        error "couldn't parse line number from function_finder"
-        return 4
-      fi
-      #logvars=(flinenos num_name num name alllines tailtop endline filepath function_name); debug
-      if $flinenos; then
-        # printf -v awkvars 'FNR==%d,FNR==%d' "$num" "$endline"
-        # printf -v awkcmd '%s {print FNR ":" $0}' "$awkvars"
-        # awk "$awkcmd" "$filepath"; return $?
-        sed -n "$num,${endline}{=;p};${endline}q" "$filepath"| sed '{N; s/\n/ /}';
-      else
-        sed -n "$num,${endline}p;${endline}q" "$filepath"
-      fi
-      echo
-    done
+    alllines=$(wc -l "$filepath"| awk '{print$1}')
+    tailtop=$((alllines-declare_lineno))
+    endline=$((declare_lineno+$(tail -n "$tailtop" "$filepath"|grep -n -m 1 '^}$'| cut -d ":" -f 1)+1))
+    if ! is_int "$endline"; then
+      error "couldn't parse line number from function_finder"
+      return 4
+    fi
+    if $flinenos; then
+      sed -n "$declare_lineno,${endline}{=;p};${endline}q" "$filepath"| sed '{N; s/\n/ /}';
+    else
+      sed -n "$declare_lineno,${endline}p;${endline}q" "$filepath"
+    fi
+    echo
+
   else
     bn=$(basename "$filepath")
     error "couldn't find definition for $function_name at the top level of $bn"
     return 3
   fi
-  #logvars=(flinenos num_name num name alllines tailtop endline filepath function_name); debug
 
 }
 
@@ -1093,7 +1259,7 @@ function namerefs_bashscript_add() {
   printf ")\n" >> "$script"
 }
 
-# If for any sourced file, you'd like to be able to undo the 
+# If for any sourced file, you'd like to be able to undo the
 # changes to  your environment after it's sourced, track the
 # namerefs (variable, function, etc names) in an array named
 # sourcename_namerefs where the sourced filename is
@@ -1198,26 +1364,6 @@ in-path() {
   return 0
 }
 
-# Appends Arg1 to the shell's PATH and exports
-function path_append() {
-  to_add="${1:-}"
-  if [ -d "${to_add}" ]; then
-    if ! [[ "${PATH}" == *"${to_add}"* ]]; then
-      export PATH="${PATH}:${to_add}"
-    fi
-  fi
-}
-
-# Prepends Arg1 to the shell's PATH and exports
-function path_prepend() {
-  to_add="${1:-}"
-  if [ -d "${to_add}" ]; then
-    if ! [[ "${PATH}" == *"${to_add}"* ]]; then
-      export PATH="${to_add}:${PATH}"
-    fi
-  fi
-}
-
 function printcolrange() {
   input="${1:-}"
   start="${2:-}"
@@ -1257,8 +1403,8 @@ function is_older_than_1_wk() {
   return 1
 }
 
-# does a best effort search of a bash source file $2 
-# and attemtps to determine if the given function $1 
+# does a best effort search of a bash source file $2
+# and attemtps to determine if the given function $1
 # is called in that file, returns 0 if so and echos
 # the surrounding code to the console, 1 if not found
 # or indeterminite
@@ -1389,7 +1535,7 @@ function symlink_child_dirs () {
   fi
 }
 
-# find the most recent file in dir given by $1 that matches 
+# find the most recent file in dir given by $1 that matches
 # search term $2 (optional)
 function most_recent() {
   local dir="${1:-.}"
@@ -1474,89 +1620,6 @@ function is_alpha_char() {
   return 1
 }
 
-# To help common bash gotchas with [ -eq ], etc, this function simply
-# takes something we hope to be an int (arg1) and returns 0 if it is
-# 1 otherwise
-function is_int() {
-  local string="${1:-}"
-  case $string in
-    ''|*[!0-9]*) return 1 ;;
-    *) return 0 ;;
-  esac
-}
-
-# Args: first term larger int than second term.
-#     if first term is "". we treat it as 0
-function gt() {
-  term1="${1:-}"
-  term2="${2:-}"
-  if is_int ${term1}; then
-    if is_int ${term2}; then
-      if [ ${term1} -gt ${term2} ]; then
-        return 0
-      else
-        return 1
-      fi
-    fi
-  elif [[ "${term1}" == "" ]]; then
-    return 1
-  fi
-}
-
-# Args: first term we hope is less than the second.
-# returns 0 if it is, 1 otherwise. if first term is "", return 1
-function lt() {
-  term1="${1:-}"
-  term2="${2:-}"
-  if is_int ${term1}; then
-    if is_int ${term2}; then
-      if [ ${term1} -lt ${term2} ]; then
-        return 0
-      else
-        return 1
-      fi
-    fi
-  elif [[ "${term1}" == "" ]]; then
-    return 1
-  fi
-}
-
-# Args: first term we hope is less than the second.
-# returns 0 if it is, 1 otherwise. if first term is "", return 1
-function le() {
-  term1="${1:-}"
-  term2="${2:-}"
-  if is_int ${term1}; then
-    if is_int ${term2}; then
-      if [ ${term1} -le ${term2} ]; then
-        return 0
-      else
-        return 1
-      fi
-    fi
-  elif [[ "${term1}" == "" ]]; then
-    return 1
-  fi
-}
-
-function boolean_or {
-  for b in "$@"; do
-    # se "testing ${b}"
-    if [ -n "${b}" ]; then
-      if is_int ${b}; then
-        if [ ${b} -eq 0 ]; then
-          return 0
-        fi
-      else
-        if ${b}; then
-          return 0
-        fi
-      fi
-    fi
-  done
-  return 1
-}
-
 function sata_bus_scan() {
   sudo sh -c 'for i in $(seq 0 4); do echo "0 0 0" > /sys/class/scsi_host/host$i/scan; done'
 }
@@ -1579,7 +1642,7 @@ function get_cache_for_OS () {
       alias vosutil="vim $D/macutil.sh && vosutil"
       ;;
   esac
-  export cache
+  export CACHE
 }
 get_cache_for_OS
 
@@ -1705,6 +1768,113 @@ if undefined "sai"; then
     unset -f sai sas sauu; i; sauu "$@"
   }
 fi
+
+lineno_in_func_in_file() {
+  _usage() {
+    echo "lineno_func_in_file \$LINENO \${FUNCNAME} filename_with_decl"
+  }
+  oargs=( "$@" )
+  optspec="l:f:F:?h"
+  local lineno
+  local function
+  local file
+  unset OPTIND
+  unset optchar
+  while getopts "${optspec}" optchar; do
+    case "${optchar}" in
+      l)
+        lineno="${OPTARG}"
+        ;;
+      f)
+        file="${OPTARG}"
+        ;;
+      F)
+        function="${OPTARG}"
+        ;;
+      h|?)
+        # TODO: implement
+        echo "help! TODO"
+        ;;
+    esac
+  done
+  shift $(($OPTIND - 1))
+  if [ -z "$lineno" ] || [ -z "$function" ] || [ -z "$file" ]; then
+    while [ $# -gt 0 ]; do
+      if is_int "${1:-}"; then
+        lineno="${1:-}"; shift
+      elif [ -f "${1:-}" ]; then
+        file="${1:-}"; shift
+      else
+        function="${1:-}"
+      fi
+    done
+  fi
+  if ! is_int "$lineno" || ! [ -f "$file" ]; then
+    err "malformed input: $FUNCNAME ${oargs[@]}"; _usage; return 1
+  fi
+  local start_of_function=$(function_finder -L -f "$file" -F "$function")
+  echo "$((lineno+start_of_function))"
+  return $?
+}
+
+set_log_ERROR() {
+
+  if [[ "$(trap)" == *'RETURN'* ]]; then
+    # if there's a return trap set, we can't have function calls in any other
+    # trap or infinite recurse
+    trap 'echo "$LINENO $BASH_COMMAND ${BASH_SOURCE[*]} ${BASH_LINENO[*]} ${FUNCNAME[*]}"' ERR
+  else
+    trap '{ [ -n "$FUNCNAME" ] && echo "${BASH_SOURCE[1]}:$(reallineno "$LINENO") returned $?"; } || echo "$BASH_COMMAND returned $?"' ERR
+  fi
+}
+
+set_log_WARN() {
+  trap
+  set_log_ERROR
+  alias fline='function_finder -L -f $BASH_SOURCE -F $FUNCNAME'
+  trap 'printf "$INF"; [ -n "$FUNCNAME" ] && echo "$BASH_SOURCE:$(fline) $FUNCNAME $?"; [ -n "$BASH_COMMAND" ] && echo "$BASH_COMMAND: $?"; printf "$RST"' RETURN
+}
+
+set_log_DEBUG() {
+  trap
+  set_log_ERROR
+  declare -ga sourcerers
+  declare -ga sourcerees
+function source() {
+  if [[ "$LEVEL" == DEBUG ]]; then debug "$(caller) fcall: source $@"; fi
+  sourcerers+=( "${BASH_SOURCE[0]}" )
+  sourcerees+=( "${3:-}" )
+  if [ $# -gt 2 ]; then
+    if [ -f "${3:-}" ]; then
+      src="${BASH_SOURCE[0]}"
+      #echo "sff $src $2"
+      if [ -n "${2:-}" ]; then
+        lineno=$(reallineno "${1:-}") || lineno="${1:-}"
+      fi
+      echo "$src:$lineno sourced ${3:-}"
+      builtin source "${3:-}"
+      return $?
+    fi
+  else
+    warn "debuggable source incorrectly called"
+    builtin source "$@"
+    return $?
+  fi
+}
+  export -f source
+  alias source='\source $LINENO $FUNCNAME'
+  alias fline='function_finder -L -f $BASH_SOURCE -F $FUNCNAME'
+  # preexec() {
+  #   echo "executing $@"
+  #   echo "history $(date '+%Y-%m-%d.%H:%M:%S')\t$(hostname)\t$(pwd)\t$1"
+  # }
+  # trap 'printf "TD$INF" && [ -n "$FUNCNAME" ] && echo "$BASH_SOURCE $FUNCNAME $?" && printf "$RST" || { printf "TD$INF"; [ -n "$BASH_COMMAND" ] && echo "$BASH_COMMAND: $?"; printf "$RST"; }' RETURN
+  # #trap 'printf "$WRN"; [ -n "$FUNCNAME" ] && echo "$BASH_SOURCE:$(function_finder -L -f $BASH_SOURCE -F $FUNCNAME) $FUNCNAME $?"; [ -n "$BASH_COMMAND" ] && echo "$BASH_COMMAND: $?"; printf "$RST"' DEBUG
+}
+
+_utilsh_fs() {
+  function_finder "$D/util.sh"
+}
 
 # for other files to avoid re-sourcing
 UTILSH=true
