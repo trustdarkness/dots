@@ -1,11 +1,11 @@
 #!/bin/bash
 #
-# Interactive, simple prompts that allow asking a user 
+# Interactive, simple prompts that allow asking a user
 # if its ok to continue.  Slightly modified, but essentially
 # as writtin on stackexchange were I found it in 2023. Any
 # license concerns should be deferred to the original authors.
 # If that's you, and you prefer I remove this code, please
-# inform the repo author and I will do so as soon as I am 
+# inform the repo author and I will do so as soon as I am
 # able.
 #
 # $Id$
@@ -56,10 +56,10 @@ function confirm_yes_default_no() {
   userkey=$(get_keypress "${1:-(y/N)}")
   input_confirmed=false
   while ! $input_confirmed; do
-    if ! [[ $userkey =~ Yy.* ]]; then 
-      if [[ $userkey =~ Nn.* ]]; then 
+    if ! [[ $userkey =~ Yy.* ]]; then
+      if [[ $userkey =~ Nn.* ]]; then
         input_confirmed=true
-        return 1 
+        return 1
       else
         echo "Please type Y or y to continue, N or n (or ctrl-c) will exit"
         userkey=$(get_keypress "continue? (y/N)")
@@ -117,28 +117,28 @@ function choices() {
 
     Args:
       -a | --with-actions if specified, implies that the positional
-                          nameref arg refers to an associative 
+                          nameref arg refers to an associative
                           array where keys are prompts and vals
-                          are eval'able actions to execute.  This 
+                          are eval'able actions to execute.  This
                           function will execute the action on your
                           behalf in such cases.
-      -s | --separator    nameref should generally be an array or 
-                          associative array, but if needs be, a 
+      -s | --separator    nameref should generally be an array or
+                          associative array, but if needs be, a
                           string is ok too, -s implies such and takes
                           an argument indicating the field separator,
                           defaults to \0, can be passed directly from
                           find -print0
       -c | --continue     add a continue option
       -e | --exit         add an exit option
-      -r | --return       overrides exit and returns instead, text 
-                          is the same \(exit to the user, but 
+      -r | --return       overrides exit and returns instead, text
+                          is the same \(exit to the user, but
                           assuming were in a function not a script
                           we return)
 
-      -h | -? | --help 		Prints this text.  
+      -h | -? | --help 		Prints this text.
 
       the script will detect if the array is associative or not, and
-      act accordingly.  If youre providing strings and theres a 
+      act accordingly.  If youre providing strings and theres a
       second nameref, well assume its actions, separated by the same
       field separator.
 
@@ -156,7 +156,7 @@ EOF
   ucontinue=false
   ureturn=false
   uexit=false
-  while [ $? -gt 0 ]; do 
+  while [ $# -gt 0 ]; do
     case "${1:-}" in
       'a'|'--with-actions')
         actions=true
@@ -164,7 +164,7 @@ EOF
         ;;
       's'|'--separator')
         separator="${2:-}"
-        shift 
+        shift
         shift
         ;;
       "-c"|"--continue")
@@ -182,32 +182,32 @@ EOF
       "-h"|"-?"|"--help")
         help
         shift
-        ;;  
+        ;;
         *)
         help
         ;;
     esac
-  done    
+  done
   local unknown="${1:-}"
-  if [ -n "${unknown}" ]; then 
-    if tru $DEBUG; then 
+  if [ -n "${unknown}" ]; then
+    if tru $DEBUG; then
       declareopts=$(declare -p "${unknown}")
       se "declareopts: $declareopts unknown: $unknown"
     fi
 
     # TODO: how to handle -A
-    if string_contains "\-a" "$declareopts"; then 
+    if string_contains "\-a" "$declareopts"; then
       prompts_name=$1[@]
       debug "$prompts_name"
       prompts_arr=("${!prompts_name}") # we know this is an array
       debug "-a ${#prompts_arr[@]}"
-    elif [ ${#unknown[@]} -eq 1 ]; then 
+    elif [ ${#unknown[@]} -eq 1 ]; then
       # arg1 is a string
       prompts_arr=()
       prompts="${unknown}"
       printf -v s '%s' "${separator}"
       local IFS=$"$s"
-      for prompt in $prompts; do 
+      for prompt in $prompts; do
         prompts_arr+=("$prompt")
       done
     fi
@@ -216,20 +216,20 @@ EOF
     # character entry viable when more than 9 choices
     declare -a a
     a=()
-    for x in {a..z}; do 
+    for x in {a..z}; do
       a+=("$x")
     done
     pctr=0
     # TODO: stdout seems fucked here, so using stderr for ui
     # which is probably bad for whatever else that means.
-    for prompt in "${prompts_arr[@]}"; do 
+    for prompt in "${prompts_arr[@]}"; do
       se "${a[$pctr]}. $prompt"
       ((pctr++))
     done
-    if $ucontinue; then 
+    if $ucontinue; then
       ((pctr++))
       se "${a[$pctr]}. Continue, doing nothing."
-    fi     
+    fi
     if boolean_or $uexit $ureturn; then
       ((pctr++))
       se "${a[$pctr]}. Terminate execution and exit."
@@ -244,12 +244,12 @@ EOF
       done
       se " "
       actions="${2:-}"
-      if [ -n "$actions" ]; then 
+      if [ -n "$actions" ]; then
         local IFS=$"$s"
         actr=0
         completed=false
-        for action in "$actions"; do 
-          
+        for action in "$actions"; do
+
           if [ $actr -eq $chosen ]; then
             eval "$action"
             completed=true
@@ -257,18 +257,18 @@ EOF
           ((actr++))
         done
         if ! $completed; then
-          if $ucontinue; then 
+          if $ucontinue; then
             ((actr++))
-            if [ $actr -eq $chosen ]; then 
+            if [ $actr -eq $chosen ]; then
               echo "$((actr))"
               return "$((actr))"
             fi
           fi
-          if boolean_or $ureturn $uexit; then 
-            if [ $actr -eq $chosen ]; then 
-              if $uexit; then 
+          if boolean_or $ureturn $uexit; then
+            if [ $actr -eq $chosen ]; then
+              if $uexit; then
                 exit 0;
-              elif $ureturn; then 
+              elif $ureturn; then
                 echo "$((actr))"
                 return "$((actr))"
               fi # endif uexit
