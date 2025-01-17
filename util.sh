@@ -318,17 +318,6 @@ _log() {
   return 0
 }
 
-# trap unhandled errors
-#trap 'echo "$LINENO $BASH_COMMAND ${BASH_SOURCE[*]} ${BASH_LINENO[*]} ${FUNCNAME[*]}"' ERR
-
-
-
-# err() {
-#   _log $E "$@"; return $?
-# }
-
-
-
 ################# helper functions for catching and printing
 # errors with less boilerplate (though possibly making it
 # slightly more arcane).  an experiment
@@ -343,7 +332,6 @@ _prs() {
 # (the strings, not the vars themselves) or looks in a
 # global array ${logvars[@]} for same
 _prvars() {
-
   if [ $# -gt 0 ]; then
     for arg in "$@"; do
       logvars+=( "$arg" )
@@ -362,7 +350,6 @@ _prvars() {
     printf "${VAR}%s:${RST} %s " "$n" "$v"
   done
   logvars=()
-  set +x
   return 0
 }
 
@@ -1169,6 +1156,11 @@ EOF
 
 }
 
+BASH_VARNAME_REGEX='[A-z0-9_]+'
+BASH_LOCAL_PREFIX='^\h*local\h+([[-][A-z]]*|\h*)\h*'
+printf -v BASH_LOCAL_VAR_PCREREGEX '%s%s.*' "$BASH_LOCAL_PREFIX" "$BASH_VARNAME_REGEX"
+printf -v BASH_LOCAL_VAR_SED_EXTRACT_NAME2_REGEX '[ \t]*local[ \t]+([[-][A-z] ]*|[ \t]*)\(%s\).*' "$BASH_VARNAME_REGEX"
+
 function namerefs_bashscript_add() {
   script="${1:-}"
   if ! is_bash_script; then
@@ -1182,24 +1174,34 @@ function namerefs_bashscript_add() {
   fi
 
   # our main container for names
-  declare -a _names
+  declare -ga _names
 
   # case: global function names
-  _names=$(function_finder)
+  _names=$(function_finder "$script")
 
   # get variables declared as local for exclusion (this may result in false positives)
   declare -ga localvars
   declare -a localvarlines
-  localvarlines=( $(grep '^[[:space:]]*local [[:alnum:]]*_*[[:alnum:]]*' "$script") )
-  for line in "${localvarlines[@]}"; do
-    wequal=$(echo "$line"|grep "=")
-    if [ $? -eq 0 ]; then
-      # we're expecting something like "local foo=bar" and we want foo
-      localvars+=( $(echo "$wequal" | awk '{print$1}' |awk -F'=' '{print$1}') )
-    else
-      localvars+=( $(echo "$line" | awk '{print$2}') )
+  printf -v sedstr 's/%s/One: \\1/g' "$BASH_LOCAL_VAR_SED_EXTRACT_NAME2_REGEX"
+  while IFS= read -r matchedline; do
+    # printf "($matchedline) "
+    lname=$(echo "$matchedline"| sed 's/.*local//g'| # remove local
+                                        sed 's/-[A-z]//g') # remove any flags
+    if [[ "$lname" == *'='* ]]; then
+      lname=$(echo "$lname" | cut -d'=' -f1)
     fi
-  done
+    localvars+=( "$lname" )
+  done < <(pcre2grep --null "$BASH_LOCAL_VAR_PCREREGEX" "$script")
+  # localvarlines=( $(grep '^[[:space:]]*local[[:space:]]*[[-][[:alpha:]]]*[[:space:]]*[[[:alnum:]][_]]*' "$script") )
+  # for line in "${localvarlines[@]}"; do
+  #   wequal=$(echo "$line"|grep "=")
+  #   if [ $? -eq 0 ]; then
+  #     # we're expecting something like "local foo=bar" and we want foo
+  #     localvars+=( $(echo "$wequal" | awk '{print$1}' |awk -F'=' '{print$1}') )
+  #   else
+  #     localvars+=( $(echo "$line" | awk '{print$2}') )
+  #   fi
+  # done
 
   # case variables declared by assignment
   declare -a vars
@@ -1225,7 +1227,7 @@ function namerefs_bashscript_add() {
 
   noextbasename=$(basename "$script"|sed 's/.sh//g')
   expected_name="NAMEREFS_${noextbasename^^}"
-  existing_namerefs="$(grep '^NAMEREFS_[[A-z]]=(.*)$')"
+  existing_namerefs="$(grep -E '^NAMEREFS_[A-z]+\=\(.*\)$' "${script}")"
   if [ $? -eq 0 ]; then
     name=$(echo "$existing_namerefs"|awk -F'=' '{print$1}')
     if [[ "$name" == "$expected_name" ]]; then
@@ -1238,7 +1240,8 @@ function namerefs_bashscript_add() {
   if undefined "$expected_name"; then
     declare -a "$expected_name"
   fi
-  local -n script_namerefs=("${!expected_name[@]}")
+  local -n script_namerefs="$expected_name"
+
   script_namerefs+=( $_names )
   # make sure we're quoted for printing
   declare -a out_namerefs
@@ -1250,7 +1253,7 @@ function namerefs_bashscript_add() {
     fi
   done
   # remove the original reference
-  sed -i 's/^NAMEREFS_[[A-z]]=(.*)$//g' "$script"
+  sed -ri.bak 's/^NAMEREFS_[A-z]+\=\(.*\)$//g' "$script"
   # add it in a nice-to-look-at format:
   printf "\n\n${expected_name}=(" >> "$script"
   for quoted_nameref in "${out_namerefs[@]}"; do
@@ -1638,7 +1641,9 @@ function get_cache_for_OS () {
     "MacOS")
       CACHE="$HOME/Library/Application Support/Caches"
       OSUTIL="$D/macutil.sh"
-      alias sosutil="source $D/macutil.sh"
+      function sosutil() {
+        source $D/macutil.sh
+      }
       alias vosutil="vim $D/macutil.sh && vosutil"
       ;;
   esac
@@ -1873,8 +1878,6 @@ function source() {
 }
 
 _utilsh_fs() {
-  function_finder "$D/util.sh"
+  function_finder -f "$D/util.sh"
 }
 
-# for other files to avoid re-sourcing
-UTILSH=true
