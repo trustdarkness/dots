@@ -11,7 +11,7 @@ function restore() {
     echo "A simple wrapper function to restore from a backup dir on a"
     echo "fresh install.  Default is to replace existing items, creating"
     echo "a backup.  We can also merge/update."
-    echo " " 
+    echo " "
     echo "To work properly the following vars must be set to paths"
     echo "containing data to be restored:"
     echo " - OLDHOME, user files organized as they should be pulled into"
@@ -30,12 +30,12 @@ function restore() {
     d="${2:-}"
     if ! is_function can_i_write; then
       util_env_load -f
-    fi 
-    if can_i_write "$d"; then 
+    fi
+    if can_i_write "$d"; then
       cp -avr "$s" "$d"
       ret=$?
     else
-      if confirm_yes "$(whoami) can't write to $d, use sudo?"; then 
+      if confirm_yes "$(whoami) can't write to $d, use sudo?"; then
         sudo cp -avr "$s" "$d"
         ret=$?
       else
@@ -48,7 +48,7 @@ function restore() {
 
   do_restore() {
     LOC="${1:-}"
-    if [ $global -eq 1 ]; then 
+    if [ $global -eq 1 ]; then
       BK="${OLDSYS}"
     elif [ $etc -eq 1 ]; then
       BK="${OLDETC}"
@@ -60,13 +60,13 @@ function restore() {
       return 1
     fi
     new="$BK/$LOC"
-    if [ $global -eq 0 ] && [ $etc -eq 0 ]; then 
+    if [ $global -eq 0 ] && [ $etc -eq 0 ]; then
       old="$HOME/$LOC"
       prerestorebak="$HOME/.bak"
-    elif [ $etc -eq 1 ]; then 
+    elif [ $etc -eq 1 ]; then
       old="/etc/$LOC"
       prerestorebak="$HOME/.etcprerestorebak"
-    fi  
+    fi
     if [ $merge -ne 1 ]; then
       if [ -d "$BK" ]; then
         if stringContains "/" "$LOC"; then
@@ -86,13 +86,13 @@ function restore() {
         old_parent=$(dirname "$old")
         confirm_yes "restoring $new to $old_parent... ok?"
         echo
-        if [ -d "$old" ]; then 
+        if [ -d "$old" ]; then
           echo "Backing up existing $old to .bak"
           if ! our_copy "$old" "$prerestorebak"; then
             return $?
           fi
         fi
-        
+
         our_copy "$new" "$old_parent"
         return $?
       else
@@ -107,7 +107,7 @@ function restore() {
   }
 
 
-  
+
   args=$(getopt -o nemch --long nonpersonalized,etc,merge,help -- "$@")
   if [[ $? -gt 0 ]]; then
     help
@@ -117,7 +117,7 @@ function restore() {
     case $1 in
       -n|--nonpersonalized)
         global=1
-        shift 
+        shift
         ;;
       -m|--merge)
         merge=1
@@ -141,47 +141,18 @@ function restore() {
   set -- ${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}
   failures=0
 
-  if ! declare -F "confirm_yes" > /dev/null 2>&1; then 
+  if ! declare -F "confirm_yes" > /dev/null 2>&1; then
     source "$D/user_prompts.sh"
   fi
-  if [ -z "$OLDHOME" ]; then 
+  if [ -z "$OLDHOME" ]; then
     echo "Please export OLDHOME=/path/to/pold/homedir"
     return 1
   fi
 
   for loc in "${POSITIONAL_ARGS[@]}"; do
-    if ! do_restore "${loc}"; then 
+    if ! do_restore "${loc}"; then
         ((failures++))
     fi
   done
   return ${failures}
 }
-
-_restore_autocomplete() {
-  local cur
-  cur=${COMP_WORDS[COMP_CWORD]}
-  COMPREPLY=( $(compgen -f $OLDHOME/$cur | cut -d"/" -f5 ) )
-}
-complete -o filenames -F _restore_autocomplete restore
-
-function lsbke() {
-  ls "${OLDETC}"/"${1:-}"
-}
-
-_lsbke_autocomplete() {
-  local cur
-  cur=${COMP_WORDS[COMP_CWORD]}
-  COMPREPLY=( $(compgen -f ${OLDETC}/$cur | cut -d"/" -f5 ) )
-}
-complete -o filenames -F _lsbke_autocomplete lsbke
-
-function lsbkh() {
-  ls "${OLDHOME}"/"${1:-}"
-}
-
-_lsbkh_autocomplete() {
-  local cur
-  cur=${COMP_WORDS[COMP_CWORD]}
-  COMPREPLY=( $(compgen -f ${OLDHOME}/$cur | cut -d"/" -f5 ) )
-}
-complete -o filenames -F _lsbkh_autocomplete lsbkh

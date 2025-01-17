@@ -1,59 +1,61 @@
 #!/usr/bin/env bash
+
+[ "$0" = "$BASH_SOURCE" ] && BASH_KIND_ENV=own || BASH_KIND_ENV=sourced;
+
+# theres not really an easy way to use this in a substitution to solve the
+# problem it's intended to solve, so it's mostly here as a reminder.
+PRINTFDASH='\x2D'
+
+set -E
+set -o history
+set -o pipefail
+
+SHOPTS=(
+  direxpand
+  cdable_vars
+  cdspell
+  cmdhist
+  dirspell
+  dotglob
+  expand_aliases
+  extglob
+  failglob
+  globstar
+  gnu_errfmt
+  histappend
+  histreedit
+  histverify
+  lithist
+  progcomp
+  progcomp_alias
+  shift_verbose
+)
+
+for opt in "${SHOPTS[@]}"; do
+  shopt -s "$opt"
+done
+
 declare -F is_function > /dev/null 2>&1 || is_function() {
   ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
 }
 export -f is_function
 
-shopt -s direxpand
-shopt -s cdable_vars
+alias reallineno='[ -n "$FUNCNAME" ] && lineno_in_func_in_file -f "${BASH_SOURCE[0]}" -F "$FUNCNAME" -l'
+alias funcsourceline='[ -n "$BASH_SOURCE" ] && [ -n "$FUNCNAME" ] && { printf "[$FUNCNAME] $BASH_SOURCE" && [ -n "$LINENO" ] && echo ":$(reallineno $LINENO)"; }'
 
-if [ -z "${D}" ]; then
-  if [ -d "$HOME/src/github/dots" ]; then
-  export D="$HOME/src/github/dots"
-   else
-    detect_d
-  fi
-fi
-
+SBRC=true
 case $- in
     *i*)
-      SBRC=true
+      source "$D/util.sh"
+      sosutil
       #set -x
       ;;
   *)
-  return
+  # if the file is called instead of sourced, return will fail
+  { [[ "$BASH_KIND_ENV" == sourced ]] && return 0; } || exit 0;
   ;;
 esac
 
-function detect_d() {
-  # -z || here for first run conditions
-  if [ -z $DEBUG ] || $DEBUG; then
-    >&2 printf ".bashrc sourced from ${BASH_SOURCE[@]}\n"
-  fi
-  if [[ "${BASH_SOURCE[0]}" == ".bashrc" ]]; then
-    if [ -f "$(pwd)/util.sh" ]; then
-      D=$(pwd)
-      export D
-      return 0
-    fi
-  else
-    : # REALBASHRC=$(readlink ${BASH_SOURCE[0]})
-    # D=$(dirname $REALBASHRC)
-  fi
-  if [ -z "$D" ]; then
-    >&2 printf "no luck finding D, please set"
-    return 1
-  fi
-}
-
-# avoid prepending path if our changes are already there,
-# but be sure that brew installed bash in /usr/local/bin
-# is caught before the system bash in /bin
-if [[ "${PATH}" != "*.local/sourced*" ]]; then
-  PATHRC="$PATH"
-  PATH="$HOME/bin:$HOME/.local/bin:/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin:$HOME/Applications:/usr/sbin:/opt/bin:$PATH:$HOME/.local/sourced"
-  export PATH
-fi
 
 # see requires_modern_bash below
 NO_BASH_VERSION_WARNING=false
@@ -72,6 +74,7 @@ function resolve_symlink() {
   test -L "$1" && ls -l "$1" | awk -v SYMLINK="$1" '{ SL=(SYMLINK)" -> "; i=index($0, SL); s=substr($0, i+length(SL)); print s }'
 }
 
+# TODO is this necessary?  maybe runonce?
 function symlinks_setup() {
   self=$(resolve_symlink "$HOME/.bashrc")
   if [[ "$self" != "$D/.bashrc" ]]; then
@@ -88,17 +91,8 @@ function symlinks_setup() {
   if ! [ -d "$HOME/.local/bin" ]; then
     mkdir -p "$HOME/.local/bin"
   fi
-  if [[ $(uname) == "Darwin" ]] && ! [ -L "$HOME/.local/bin/bellicose" ]; then
-    ln -sf "$D/bellicose.sh" "$HOME/.local/bin/bellicose"
-  fi
-  if ! [ -L "$HOME/.local/sourced" ]; then
-    ln -sf $HOME/.local/bin $HOME/.local/sourced
-  fi
-  if ! [ -L "$HOME/.globals" ]; then
-    ln -sf "$D/.globals" "$HOME/"
-  fi
 }
-symlinks_setup
+#symlinks_setup
 
 # don't put duplicate lines or lines starting with space in the history.
 # See bash(1) for more options
@@ -110,6 +104,7 @@ shopt -s histappend
 # for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
 HISTSIZE=1000000
 HISTFILESIZE=2000000
+# HISTTIMEFORMAT is set to $FSTSFMT in util.sh
 
 # check the window size after each command and, if necessary,
 # update the values of LINES and COLUMNS.
@@ -127,79 +122,13 @@ case "$TERM" in
     xterm-color|*-256color) color_prompt=yes;;
 esac
 
-# # enable color support of ls and also add handy aliases
-# if [ -x /usr/bin/dircolors ]; then
-#     test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
-#     alias ls='ls --color=auto'
-#     alias grep='grep --color=auto'
-#     alias fgrep='fgrep --color=auto'
-# fi
-
-# # https://unix.stackexchange.com/questions/148/colorizing-your-terminal-and-shell-environment
-# function _colorman() {
-#   env \
-#     LESS_TERMCAP_mb=$'\e[1;35m' \
-#     LESS_TERMCAP_md=$'\e[1;34m' \
-#     LESS_TERMCAP_me=$'\e[0m' \
-#     LESS_TERMCAP_se=$'\e[0m' \
-#     LESS_TERMCAP_so=$'\e[7;40m' \
-#     LESS_TERMCAP_ue=$'\e[0m' \
-#     LESS_TERMCAP_us=$'\e[1;33m' \
-#     LESS_TERMCAP_mr=$(tput rev) \
-#     LESS_TERMCAP_mh=$(tput dim) \
-#     LESS_TERMCAP_ZN=$(tput ssubm) \
-#     LESS_TERMCAP_ZV=$(tput rsubm) \
-#     LESS_TERMCAP_ZO=$(tput ssupm) \
-#     LESS_TERMCAP_ZW=$(tput rsupm) \
-#     GROFF_NO_SGR=1 \
-#       "$@"
-# }
-# alias man="LANG=C _colorman man"
-# function perldoc() { command perldoc -n less "$@" |man -l -; }
-
-# if type grc grcat >/dev/null 2>&1; then
-#   colourify() {  # using this as a function allows easier calling down lower
-#     if [[ -t 1 || -n "$CLICOLOR_FORCE" ]]
-#       then ${GRC:-grc} -es --colour=auto "$@"
-#       else "$@"
-#     fi
-#   }
-
-#   # loop through known commands plus all those with named conf files
-#   for cmd in g++ head ld ping6 tail traceroute6 `locate grc/conf.`; do
-#     cmd="${cmd##*grc/conf.}"  # we want just the command
-#     type "$cmd" >/dev/null 2>&1 && alias "$cmd"="colourify $cmd"
-#   done
-
-#   # This needs run-time detection. We even fake the 'command not found' error.
-#   configure() {
-#     if [[ -x ./configure ]]; then
-#       colourify ./configure "$@"
-#     else
-#       echo "configure: command not found" >&2
-#       return 127
-#     fi
-#   }
-
-#   unalias ll 2>/dev/null
-#   ll() {
-#     if [[ -n "$CLICOLOR_FORCE" || -t 1 ]]; then  # re-implement --color=auto
-#       ls -l --color=always "$@" |grcat conf.ls
-#       return ${PIPESTATUS[0]} ${pipestatus[1]} # exit code of ls via bash or zsh
-#     fi
-#     ls -l "$@"
-#   }
-# fi
-
-
-# # colored GCC warnings and errors
-# GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
-
-# for pre, post, and non-powerline setup
-PS1="\[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[$(tput sgr0)\]$ "
-
-# keep PS1 in env for powerline_disable
-pPS1="$PS1"
+# enable color support of ls and also add handy aliases
+if [ -x /usr/bin/dircolors ]; then
+    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+    alias ls='ls --color=auto'
+    alias grep='grep --color=auto'
+    alias fgrep='fgrep --color=auto'
+fi
 
 # some more ls aliases
 if type exa >/dev/null 2>&1; then
@@ -211,10 +140,40 @@ alias la='ls -A'
 alias l='ls -CF'
 alias tac='tail -r'
 
-# theres not really an easy way to use this in a substitution to solve the
-# problem it's intended to solve, so it's mostly here as a reminder.
-PRINTFDASH='\x2D'
+GREEN="$(tput setaf 46)"
+YELLOW="$(tput setaf 220)"
+BLUE="$(tput setaf 39)"
+RED="$(tput setaf 1)"
+PINK="$(tput setaf 165)"
+RST="$(tput sgr0)"
 
+# colored GCC warnings and errors
+GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
+
+# for pre, post, and non-powerline setup
+PS1="$PINK[\@] \[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[\]$ "
+
+# keep PS1 in env for powerline_disable
+pPS1="$PS1"
+
+ps4_prompt() {
+  local bminusc="bec:-c $BASH_EXECUTION_STRING "
+  local bc="bc: $BASH_COMMAND "
+  lineno='$LINENO '
+  func='${FUNCNAME[0]} '
+  bline='${BASH_LINENO[0]} '
+  bsrcup='${BASH_SOURCE[0]} '
+  bsrc='${BASH_SOURCE[0]}'
+  ss='$BASH_SUBSHELL '
+  sl='$SHLVL '
+  cllr='$(caller)'
+  PROGNAME=$(basename $0)
+  pn='${PROGNAME}'
+  cat < <({
+  printf "%s%s: %s - caller: %s\n" "$bminusc" "$bc" "$lineno" "$cllr"
+  printf "⎯sl:%sss:%s $(funcsourceline) >" "$sl" "$ss"  #"$bsrcup" "$bline" "$bsrc"
+  })
+}
 
 function powerline_init() {
   if [[ $(uname) == "Darwin" ]] && [[ "$(launchctl getenv POWERLINE)" == "TRUE" ]] || [[ "$PL_SHELL" == "true" ]]; then
@@ -255,7 +214,7 @@ function powerline_disable() {
 }
 
 if [[ $(uname) != "Darwin" ]]; then
-  PROMPT_COMMAND='history -a'
+  PROMPT_COMMAND='last_exit=$?; history -a'
 fi
 function h() {
   history | grep "${1:-}"
@@ -265,31 +224,34 @@ function h() {
 # set -x, as it creates a lot of noise
 function setxdebug() {
   export DEBUG=true
+  export LEVEL=DEBUG
   powerline_disable
-  export PS1='$? > '
-  export PS4='$LINENO: '
-  _update_ps1
-  if ! type -p _init_completion; then
-    setcompletion
+  date=$(fsdate)
+  xdebug_f="$LOGDIR/xdebug_$date"
+  if ! [ -f "$xdebug_f" ]; then
+    mkdir -p "$LOGDIR"
+    touch "$xdebug_f"
   fi
-  trap -- '_lp_reset_runtime;preexec_invoke_exec' DEBUG
+  exec 99> "$xdebug_f"
+  BASH_XTRACEFD=99
+  export PS4="$(ps4_prompt)"
   set -x
 }
 
 function unsetxdebug() {
   set +x
-  unset DEBUG
+  DEBUG= ; unset DEBUG
   powerline_init
 }
 
 function history_rm_range() {
-    start=$1
-    end=$2
-    count=$(( end - start ))
-    while [ $count -ge 0 ] ; do
-        history -d $start
-        ((count--))
-    done
+  start=$1
+  end=$2
+  count=$(( end - start ))
+  while [ $count -ge 0 ] ; do
+      history -d $start
+      ((count--))
+  done
 }
 
 function history_rm_last() {
@@ -340,6 +302,7 @@ function setcompletion() {
   fi
 }
 
+# aliases generally here instead of .bash_aliases
 # Add an "alert" alias for long running commands.  Use like so:
 #   sleep 10; alert
 alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
@@ -353,16 +316,15 @@ alias sex="source $D/existence.sh" # heh
 alias vex="vim $D/existence && sex"
 alias mrsync="rsync $RSYNCOPTS"
 
+# And a few globals
 ## convenient regex to use with -v when grepping across many files
 IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
-
-GRC_ALIASES=true
-[[ -s "/etc/profile.d/grc.sh" ]] && source /etc/grc.sh
+export GH="$HOME/src/github"
 
 if [ -f "$HOME/.localrc" ]; then
   source "$HOME/.localrc"
 fi
 
-if ! is_function "util_env_load"; then
-  source $D/util.sh
-fi
+_bashrc_fs() {
+  function_finder "$HOME/.bashrc"
+}
