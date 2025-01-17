@@ -25,3 +25,7 @@ fi
 if [[ "$DESKTOP_SESSION" == "plasma" ]]; then
   source "$D/kutil.sh"
 fi
+
+_bash_profile_fs() {
+  function_finder -f "$D/.bash_profile"
+}
