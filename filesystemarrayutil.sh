@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 function superblock_zero() {
-  if ! declare -F "confirm_yes" > /dev/null 2>&1; then 
+  if ! declare -F "confirm_yes" > /dev/null 2>&1; then
     source "$D/user_prompts.sh"
   fi
   mdadm_zero_string="%s mdadm zero superblocks on"
@@ -10,7 +10,7 @@ function superblock_zero() {
   word=${1}
   declare -ga disks
   disks=()
-  for (( i=0; i<${#word}; i++ )); do 
+  for (( i=0; i<${#word}; i++ )); do
     char=${word:$i:1}
     disk="/dev/sd${char}"
     stat "$disk"
@@ -19,14 +19,14 @@ function superblock_zero() {
     mdadm_zero_string+=" %s"
     dd_zero_string+=" %s"
   done
-  if gt $failures 0; then 
+  if gt $failures 0; then
     echo "can't find disks for your input."
     return $failures
   fi
   if [[ ${1:-} == "-y" ]]; then
-    command="echo" 
+    command="echo"
     preamble=""
-  else 
+  else
     command="confirm_yes"
     preamble="(confirm)"
   fi
@@ -34,9 +34,9 @@ function superblock_zero() {
     printf -v string "$mdadm_zero_string" "$preamble" "${disks[@]}"
     $command "$string"
     echo
-    if [ $? -eq 0 ]; then 
+    if [ $? -eq 0 ]; then
       sudo mdadm --zero-superblock "${disks[@]}"
-      if [ $? -gt 0 ]; then 
+      if [ $? -gt 0 ]; then
         echo "mdadm exited status $?"
         return 1
       fi
@@ -46,8 +46,8 @@ function superblock_zero() {
     printf -v string "$dd_zero_string" "$preamble" "${disks[@]}"
     $command "$string"
     echo
-    if [ $? -eq 0 ]; then 
-      for disk in "${disks[@]}"; do 
+    if [ $? -eq 0 ]; then
+      for disk in "${disks[@]}"; do
         echo "clearing MBR on $disk"
         sudo dd if=/dev/zero of=$disk bs=512 count=1
       done
@@ -62,13 +62,13 @@ function in_array() {
   needle="${1:-}"
   haystack_name=$2[@]
   haystack=("${!haystack_name}")
-  if [[ "${haystack[*]}" == *"$needle"* ]]; then 
+  if [[ "${haystack[*]}" == *"$needle"* ]]; then
     return 0
   fi
   return 1
 }
 
-# you can't pass arrays around as args in bash, but if you do 
+# you can't pass arrays around as args in bash, but if you do
 # a global declare you can copy it out of the env
 declare -a dirarray
 function finddir_array() {
@@ -78,7 +78,7 @@ function finddir_array() {
     case "${1:-}" in
       "-d"|"--maxdepth")
         depth="${2:-${depth}}"
-        shift 
+        shift
         shift
         ;;
       "-s"|"--set")
@@ -109,13 +109,13 @@ function finddir_array() {
   dirarray=()
   findargs=( "${dir}" )
   if [ -d "${dir}" ]; then
-    if ! [[ "${depth}" == "-1"  ]]; then 
+    if ! [[ "${depth}" == "-1"  ]]; then
       findargs+=( "-maxdepth" "${depth}" )
     fi
     if "${set}"; then
       while IFS= read -r -d $'\0'; do
         dirarray+=("$REPLY") # REPLY is the default
-      done < <(find "${findargs[@]}" -print0 2> /dev/null |sort -uz) 
+      done < <(find "${findargs[@]}" -print0 2> /dev/null |sort -uz)
     else
       while IFS= read -r -d $'\0'; do
         dirarray+=("$REPLY") # REPLY is the default
@@ -135,7 +135,7 @@ function find_array() {
     case "${1:-}" in
       "-d"|"--maxdepth")
         depth="${2:-}"
-        shift 
+        shift
         shift
         ;;
       "-s"|"--set")
@@ -147,8 +147,8 @@ function find_array() {
         return 0
         ;;
       *)
-        POSITIONAL_ARGS+=("${1-}") 
-        shift 
+        POSITIONAL_ARGS+=("${1-}")
+        shift
         ;;
     esac
   done
@@ -169,13 +169,13 @@ function find_array() {
     se "  -h|-?|--help  prints this text"
   }
   findarray=()
-  if ! [[ "${depth}" == "-1"  ]]; then 
+  if ! [[ "${depth}" == "-1"  ]]; then
     findargs+=( "-maxdepth" "${depth}" )
   fi
   if "${set}"; then
     while IFS= read -r -d $'\0'; do
       findarray+=("$REPLY") # REPLY is the default
-    done < <(find "${findargs[@]}" -print0 2> /dev/null |sort -uz) 
+    done < <(find "${findargs[@]}" -print0 2> /dev/null |sort -uz)
   else
     while IFS= read -r -d $'\0'; do
       findarray+=("$REPLY") # REPLY is the default
@@ -187,12 +187,12 @@ function find_array() {
 # Assume all arguments (count unknown) are path fragments that may be a single
 # word or phrase (which we'll treat as atomic, as though its an actual space in
 # the file or folder name).  Separators are "/" and only "/".  Value is returned
-# as a single quoted path string.  
+# as a single quoted path string.
 # TODO: add options to specify separator
 #       add flag for escaped instead of quoted return
 function assemble_bash_safe_path() {
   components=()
-  for arg in "$@"; do 
+  for arg in "$@"; do
     IFS='/' read -r -a components <<< "${arg}"
   done
   printf "'/%s'" "${components[@]%/}"
@@ -215,22 +215,22 @@ function string_to_safe_filename() {
 }
 
 # Takes the name of an array (not the array itself) as arg1
-# and echos a stringified version back to the console, optionally 
+# and echos a stringified version back to the console, optionally
 # separating elements with Arg2 and replacing spaces with Arg3
 function stringify() {
   name=$1[@]
   element_separator="${2:-' '}"
   space_replacer="${3:=' '}"
   array=("${!name}")
-  if [ -n "${space_replacer}" ]; then 
+  if [ -n "${space_replacer}" ]; then
     newarray=()
-    for el in "${array[@]}"; do 
+    for el in "${array[@]}"; do
       printf -v sedstring 's/" "/%s/' "${space_replacer}"
       newarray+=( $(echo "${el}"|sed "${sedstring}") )
     done
     array=( "${newarray[@]}" )
   fi
-  
+
   echo "${array[*]// /${separator}}"
 }
 
@@ -238,7 +238,7 @@ function quoted_stringify() {
   name=$1[@]
   array=("${!name}")
   out=""
-  for el in "${array[@]}"; do 
+  for el in "${array[@]}"; do
     printf -v out '%s "%s"' "$out" "$el"
   done
   echo "$out"
@@ -253,7 +253,7 @@ most_recent_in_dir() {
   explainer="arg 2 should be an int in the range 1-9\n"
   explainer+="(numbered column returned by ls -l, space separated)"
   local field="${2:-9}"
-  if ! [[ $(seq 1 9) == *${field}* ]]; then 
+  if ! [[ $(seq 1 9) == *${field}* ]]; then
     se "${explainer}"
   fi
   printf -v awkprint '{print$%s}' ${field}
@@ -273,26 +273,29 @@ most_recent_char_replaced_separated() {
   local space_replacer="${3:-$default_space_replacer}"
   readarray -d"$filename_separator" files < <(echo "${char_replaced_separated_files}")
   # https://stackoverflow.com/questions/5885934/bash-function-to-find-newest-file-matching-pattern
-  for file in "${files}"; do 
+  for file in "${files}"; do
     file="$(echo ${file}|tr "$space_replacer" ' '|sed 's/|//g')"
     stat -f "%m%t%N" "${file}"
   done | sort -rn | head -1 | cut -f2-
 }
 
-################################ Friendly note: 
+function array_to_set() {
+  local -n to_sort="${1:-}"
+  #to_sort=("${!name}")
+  SORTED=()
+  if gt "${#to_sort[@]}" 0; then
+    readarray -t SORTED < <(for item in "${to_sort[@]}"; do
+      { [ -n "$item" ] && printf '%s\0' "$item"; } || continue
+    done | sort -z|xargs -0n1|sort -u)
+  fi
+  to_sort=("${SORTED[@]}")
+}
+
+################################ Friendly note:
 # the following functions were written assuming you can pass arrays around
 # to functions in bash, which, SURPRISE! you can't.  You can pass by reference
 # and when I have time or the need for one of these silly things arises, I will
 # rewrite them to do so (and, hopefully, work like they say they do)
-
-function sort_array() {
-  to_sort="${1:-}"
-  SORTED=()
-  if gt "${#to_sort[@]}" 0; then 
-    readarray -t SORTED < <(printf '%s\0' "${to_sort[@]}"| sort -z|xargs -0n1)
-  fi
-  echo "${SORTED[@]}"
-}
 
 # https://unix.stackexchange.com/questions/104837/intersection-of-two-arrays-in-bash#104848
 function array_intersection() {
@@ -324,7 +327,7 @@ function strip_paths() {
   echo "${STRIPPED[@]}"
 }
 
-# given sorted arrays A and B of plugins with absolute paths, return an array of plugins of 
+# given sorted arrays A and B of plugins with absolute paths, return an array of plugins of
 # the same type (vst, vst3 or au) and the same plugin name with the absolute paths
 # as originally present in array A
 function same_plugin_same_type_diff_location() {
@@ -365,6 +368,9 @@ function fix_filenames() {
 # recursively below the provided directory
 # returns 0 if readable, return code of can_i_do if not
 function can_i_read() {
+  if [[ "${1:-}" == \-v ]]; then
+    _ci_verbose=true; shift
+  fi
   can_i_do "${1:-}" 555 $2
 }
 
@@ -372,19 +378,22 @@ function can_i_read() {
 # recursively below the provided directory
 # returns 0 if writeable, return code of can_i_do if not
 function can_i_write() {
+  if [[ "${1:-}" == \-v ]]; then
+    _ci_verbose=true; shift
+  fi
   dir="${1:-$(pwd)}"
-  if [ -d "$dir" ]; then 
+  if [ -d "$dir" ]; then
     whoowns=$(ls -alh "$dir"|head -n2|tail -n1|awk '{print$3}')
     if [[ "${whoowns}" == "$(whoami)" ]]; then
-      can_i_do "$dir" 200 
+      can_i_do "$dir" 200
       return $?
     else
       grpowns=$(ls -alh "$dir"|head -n2|tail -n1|awk '{print$4}')
       if [[ "${grpowns}" == "$(whoami)" ]]; then
-        can_i_do "$dir" 020 
+        can_i_do "$dir" 020
         return $?
       else
-        can_i_do "$dir" 002 
+        can_i_do "$dir" 002
         return $?
       fi
     fi
@@ -395,43 +404,52 @@ function can_i_write() {
 
 # uses find to determine if the current user has given permissions
 # recursively below the provided directory
-# Args: 
+#
+# Args:
+#   -v verbose, show Permission denieds from find
+# Positional Args:
 #  1 - directory name
 #  2 - umask
 #  3 - depth - defaults to all
 # returns 0 if perms match, 127 if unable to write basedir, 1 otherwise
 function can_i_do() {
+  if [[ "${1:-}" == \-v ]]; then
+    _ci_verbose=true; shift
+  fi
   local dir="${1:-}"
   local mask="${2:-}"
   local depth="${3:-all}"
-  if [ -d "${dir}" ]; then 
-    local ts="$(date '+%Y%m%d %H:%M:%S')"
+  if [ -d "${dir}" ]; then
+    local ts="$(fsts)"
     local tempfile="/tmp/permcheck-${ts}"
     local temppid="/tmp/pid-${ts}"
     local tempfin="/tmp/fin-${ts}"
     (
-    echo $$ > "${temppid}"
-    printf -v dashmask "\x2D%d" "$mask"
-    if is_int "${depth}"; then
-      find "${dir}" -depth "${depth}" -perm "$dashmask" 2>&1 > "${tempfile}"
-    elif [[ "${depth}" == "all" ]]; then 
-      find "${dir}" -perm "$dashmask" 2>&1 > "${tempfile}"
-    else
-      >&2 printf "couldn't understand your third parameter, which should be "
-      >&2 printf "depth, either an int or \"all\""
-      return 1
-    fi
-    echo $? > "${tempfin}"
+      echo $$ > "${temppid}"
+      printf -v dashmask "\x2D%d" "$mask"
+      if is_int "${depth}"; then
+        find "${dir}" -depth "${depth}" -perm "$dashmask" > "${tempfile}"  2>&1
+      elif [[ "${depth}" == "all" ]]; then
+        find "${dir}" -perm "$dashmask" > "${tempfile}"  2>&1
+      else
+        >&2 printf "couldn't understand your third parameter, which should be "
+        >&2 printf "depth, either an int or \"all\""
+        return 1
+      fi
+      echo $? > "${tempfin}"
     )
-    while ! test -f "${tempfin}"; do 
+    while ! test -f "${tempfin}"; do
       sleep 1
       cat "${tempfile}"|grep "Permission denied"
-      if [ $? -eq 0 ]; then 
+      if [ $? -eq 0 ]; then
         kill $(cat "${temppid}")
         return 127
       fi
     done
     if [ -f "${tempfin}" ]; then
+      if tru $_ci_verbose; then
+        cat "${tempfile}"|grep "Permission denied"
+      fi
       return $(cat "${tempfin}")
     fi
     return 0
