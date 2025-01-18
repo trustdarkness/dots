@@ -13,8 +13,8 @@ kde_theme_paths=(
 )
 
 function qdbus_detect_and_install() {
-  if ! type -p qdbus-qt5 2>&1 > /dev/null; then 
-    if ! is_function qdbus_bootstrap; then 
+  if ! type -p qdbus-qt5 2>&1 > /dev/null; then
+    if ! is_function qdbus_bootstrap; then
       util_env_load -b
     fi
     qdbus_bootstrap
@@ -57,7 +57,7 @@ function kontd() {
 
 function vimkp() {
   name="${1:-Please provide a name for an existing (or new) profile}"
-  vim ".local/share/konsole/${name}.profile"
+  vim "$HOME/.local/share/konsole/${name}.profile"
 }
 
 alias skprofile="konsession setProfile td"
@@ -65,11 +65,11 @@ alias vkprofile="vim .local/share/konsole/td.profile && skprofile"
 
 function list_kwin_commands() {
   qdbus_detect_and_install
-  for service in $(qdbus "org.kde.*"); do 
+  for service in $(qdbus "org.kde.*"); do
     echo "* $service"
-    for path in $(qdbus "$service"); do 
+    for path in $(qdbus "$service"); do
       echo "** $path"
-      for item in $(qdbus "$service" "$path"); do 
+      for item in $(qdbus "$service" "$path"); do
         echo "- $item"
       done
     done
@@ -77,7 +77,7 @@ function list_kwin_commands() {
 }
 
 function killkactivity() {
-  # cache sudo 
+  # cache sudo
   runnning=$(sudo $PS kactivitymanagerd)
   if ! [ -n "$running"]; then
     echo "kactivitymanagerd doesn't seem to be running.  Exiting."
@@ -86,17 +86,17 @@ function killkactivity() {
   echo "TO banish kactiviymanagerd, we will try the following trickery:"
   echo "
   pkill -9 kactivitymanag
-  rm -r ~/.local/share/kactivitymanagerd && 
-  touch ~/.local/share/kactivitymanagerd && 
-  sudo chmod -x /usr/lib/x86_64-linux-gnu/libexec/kactivitymanagerd && 
+  rm -r ~/.local/share/kactivitymanagerd &&
+  touch ~/.local/share/kactivitymanagerd &&
+  sudo chmod -x /usr/lib/x86_64-linux-gnu/libexec/kactivitymanagerd &&
   sudo chmod -x /usr/lib/x86_64-linux-gnu/qt5/plugins/kactivitymanagerd"
 
   confirm_yes "OK?"
   # pkill: pattern that searches for process name longer than 15 characters will result in zero matchess
   pkill -9 kactivitymanag
-  rm -r ~/.local/share/kactivitymanagerd && 
-  touch ~/.local/share/kactivitymanagerd && 
-  sudo chmod -x /usr/lib/x86_64-linux-gnu/libexec/kactivitymanagerd && 
+  rm -r ~/.local/share/kactivitymanagerd &&
+  touch ~/.local/share/kactivitymanagerd &&
+  sudo chmod -x /usr/lib/x86_64-linux-gnu/libexec/kactivitymanagerd &&
   sudo chmod -x /usr/lib/x86_64-linux-gnu/qt5/plugins/kactivitymanagerd
 }
 

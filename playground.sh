@@ -19,8 +19,8 @@ function make_pipes() {
   for command in "${local_commands[@]}"; do
     mkfifo /tmp/nfifo${ctr}
     readarray -d" " components < <(echo "${command}"| sed 's/|//')
-    case ${ctr} in 
-      0) 
+    case ${ctr} in
+      0)
         (
           ${components[@]} > /tmp/nfifo${ctr} &
         )
@@ -36,9 +36,9 @@ function make_pipes() {
         )
         ;;
     esac
-    ((ctr++)) 
+    ((ctr++))
   done
-  if [ -n "${output}" ]; then 
+  if [ -n "${output}" ]; then
     echo "${output}"
   fi
   if gt ${ret} 0; then
@@ -63,7 +63,7 @@ function assign() {
   local valerror
   printf -v valerror "$V" 2
   local val=${2?$valerror}
-  if [ $# -gt 1 ]; then 
+  if [ $# -gt 1 ]; then
     name=( $@ )
   else
     name="$val"
@@ -72,15 +72,15 @@ function assign() {
 
 
 # attempts to work much like the readonly keyword wrapping the above
-# assign function, its arguments are the same, only ro will try to 
+# assign function, its arguments are the same, only ro will try to
 # ubind the variable if its currently readonly.  It will take extreme
 # measures (attaching gdb and unbinding) if arg2 (so between the name)
 # and whatever assignees) is the word "force."
 #
-# if ro name val(s) is the same as the existing environment, we do 
-# nothing and return 0.  if name doesn't exist, we run 
+# if ro name val(s) is the same as the existing environment, we do
+# nothing and return 0.  if name doesn't exist, we run
 # readonly name=val and we return 0.
-# 
+#
 # if DEBUG=true in the env, additional information will be printed to
 # stderr.
 function ro() {
@@ -96,7 +96,7 @@ function ro() {
   # undeclare itself takes:
   # Args:
   #  1 a declared name to try to force undeclare
-  # caution, and/or copypasta later, we try unset first, then declare +r, if 
+  # caution, and/or copypasta later, we try unset first, then declare +r, if
   # both fail, we attach gdb and unbind the variable.
   # if DEBUG is set to true in the env, it will print which method succeeded
   # and return 0 on success, otherwise returns 1
@@ -130,7 +130,7 @@ EOF
   # Args:
   #  the val assignment for the outer function, so either ${@:2}
   #  or ${@:3} following the force keyword
-  # runs assign to assign name to $@, makes name readonly and returns 0 
+  # runs assign to assign name to $@, makes name readonly and returns 0
   # on success.
   function do_ro() {
     if [ -n "${name}" ] && [ -n "${kwargs}" ]; then
@@ -166,9 +166,9 @@ EOF
     >&2 printf 'previous: readonly %s=%s' "$name" "${!name}"
     >&2 printf 'attempting:     ro %s=%s' "$name" "${val[@]}"
 
-    if force_attempt=true; then      
-      if is_undeclareable $name; then 
-        if ! $writeable; then 
+    if force_attempt=true; then
+      if is_undeclareable $name; then
+        if ! $writeable; then
           if undeclare $name; then
             writeable=true
             return $(do_ro)
@@ -181,31 +181,31 @@ EOF
   fi # end is readonly
 }
 
-# NOT currently working 
+# NOT currently working
 # function show_global_scope_declares() {
 #   script="${1:-}"
-#   if is_bash_script "script"; then 
-#     declare -a ifs 
+#   if is_bash_script "script"; then
+#     declare -a ifs
 #     declare -a fis
 #     declare -a fors
 #     declare -a whiles
 #     declare -a dones
-#     for lineno in $(grep -n ^if "$script"|awk -F":" '{print$1}'); do 
+#     for lineno in $(grep -n ^if "$script"|awk -F":" '{print$1}'); do
 #       ifs+=( $lineno )
 #     done
-#     for lineno in "${ifs[@]}"; do 
+#     for lineno in "${ifs[@]}"; do
 #       fis+=( $(tail -n $lineno "$script" |grep ^fi |head -n 1| awk -F":" '{print$1}') )
 #     done
-#     for lineno in $(grep -n ^for "$script"|awk -F":" '{print$1}'); do 
+#     for lineno in $(grep -n ^for "$script"|awk -F":" '{print$1}'); do
 #       fors+=( $lineno )
 #     done
-#     for lineno in "${fors[@]}"; do 
+#     for lineno in "${fors[@]}"; do
 #       dones+=( $(tail -n $lineno "$script" |grep ^done |head -n 1| awk -F":" '{print$1}') )
 #     done
 #     ifctr=0
 #     forctr=0
-#     for line in $(grep -E -v '(^[[:space:]]|^}|^done|^END|^#|^EOF)' "$script"); do 
-#       case "$(echo line|awk '{print$1}')" in 
+#     for line in $(grep -E -v '(^[[:space:]]|^}|^done|^END|^#|^EOF)' "$script"); do
+#       case "$(echo line|awk '{print$1}')" in
 #         "if")
 #           cat "$script" | head -n "${ifs[$ifctr]}" | tail -n "${fis[$ifctr]}"
 #           ((ifctr++))
@@ -221,3 +221,79 @@ EOF
 #     done
 #   fi
 # }
+
+function compgenv_json() {
+  ts=$(fsts)
+  tsh=${ts:0:-4}
+  file="/tmp/compgenv_els_$tsh"
+  for name in $(compgen -v); do
+     printf "%s=%s\n" "$name" "${!name}" >> "$file"
+  done
+  jo compgenv=@$file
+  return 0
+}
+
+alias alias_print='alias | sed "s/alias //g'
+
+function declare_to_jqconst() {
+  local declarecmd="${1:-}"
+  local _const=''
+  for declare in $($declarecmd); do
+    local nameeqval="${declare:${#declarecmd}+1}"
+    local name=$(echo "$nameeqval"|cut -d "=" -f1)
+    local -n arr="$name"
+    _const+="$(printf '\x2D\x2Darg "%s" ' "$name")"
+    if [[ "$declarecmd" =~ .*\-a|A ]] && [ "${#arr[@]}" -gt 1 ]; then
+      _const+="$(printf '[ ')"
+      for val in "${arr[@]}"; do
+        _const+='"%s", ' "$val"
+      done
+      _const+='] \\'
+      _const+="
+"
+    fi
+  done
+  echo "$_const"; return 0
+}
+
+function setoposix_to_jqconst() {
+  names=(); vals=();
+  (set -o posix; set) | while IFS=$'\n' read -r line; do
+    names+=( $(echo "$line" | cut -d"=" -f1) )
+    val=$(echo "$line" | cut -d"=" -f2)
+    if [[ "$val" =~ ^\(.*\=.* ]] then
+      local -n arr="$name"
+      l='[ '
+      for name in "${arr[@]}"; do
+        l+=$(printf '"%s", ' "$name")
+      done
+      l+=' ]'
+      vals+=( "$l" )
+    else
+      vals+=( "$val" )
+    fi
+  done
+  local _const=""; local i=0
+  for name in "${names[@]}"; do
+    _const+="$(printf '\x2D\x2Darg "%s" "%s" ' "$name" "${vals[$i]}")"
+    _const+="$(printf "'%s' \\" "\$ARGS.named")"
+    _const+="
+"
+    ((i++))
+  done
+}
+
+IFS='' read -r -d '' ENVINFO <<EOF
+jo filename=".local_lhrc" \
+   BASH_SOURCE="${BASH_SOURCE[*]}" \
+   FUNCNAME="${FUNCNAME[*]}"
+EOF
+#   compgen_a
+   # $(vargen_to_jqconst 'compgen -a') '\$ARGS.named')" \
+#   --arg 'compgen -v' "$(jq -n $(vargen_to_jqconst 'compgen -v') '\$ARGS.named')" \
+#   --arg 'compgen -e' "$(jq -n $(vargen_to_jqconst 'compgen -e') '\$ARGS.named')" \
+#   --arg 'declare -a' "$(jq -n $(declare_to_jqconst 'declare -a') '\$ARGS.named')" \
+#   --arg 'declare -A' "$(jq -n $(declare_to_jqconst 'declare -A') '\$ARGS.named')" \
+#   --arg 'declare -F' "$(jq -n $(declare_to_jqconst 'declare -F') '\$ARGS.named')" \
+#   --arg 'set -o posix; set' "$(jq -n $(setoposix_to_jqconst) '\$ARGS.named')"
+# EOF

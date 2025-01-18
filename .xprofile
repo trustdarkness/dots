@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # .xprofile with conditionals to start different programs depending on the environment
-source $HOME/.globals
+
 source $D/conditional_starters.sh
 is_mirrored=$(xrandr -q --current|grep " connected "|grep "normal left inverted right x axis y axis"|wc -l)
 if ! [ "$is_mirrored" -eq 2 ]; then
@@ -13,7 +13,7 @@ if [[ "$DESKTOP_SESSION" == "blackbox" ]]; then
     albert \
     lxpolkit \
     picom \
-    xbanish 
+    xbanish
   start_if_not_args \
     conky --config ~/.conky/victorConky/victorConky/LinuxLarge \
     feh --bg-fill "$(python3.11 bin/randomfile.py ~/Pictures/Backgrounds);" \
@@ -22,5 +22,5 @@ if [[ "$DESKTOP_SESSION" == "blackbox" ]]; then
 
 elif [[ "$DESKTOP_SESSION" == "e16-session" ]]; then
   start_if_not_list latte-dock albert lxpolkit
-  start_if_not_args conky --config ~/.conky/victorConky/victorConky/LinuxLarge 
+  start_if_not_args conky --config ~/.conky/victorConky/victorConky/LinuxLarge
 fi
