@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# When troubleshooting or attempting to disable services on a mac, the 
-# following routines can be helpful.  They're not things I use daily or even 
-# weekly anymore so I didn't want them cluttering up env by sitting in 
+# When troubleshooting or attempting to disable services on a mac, the
+# following routines can be helpful.  They're not things I use daily or even
+# weekly anymore so I didn't want them cluttering up env by sitting in
 # macutilsh but are easy enough to lead up and others may find them useful.
 
-# a reminder of where things are 
+# a reminder of where things are
 system_launch_agents="/System/Library/LaunchAgents"
 system_launch_daemons="/System/Library/LaunchDaemons"
 global_launch_agents="/Library/LaunchAgents"
 global_launch_daemons="/Library/LaunchDaemons"
 user_launch_agents="$HOME/Library/LaunchAgents"
-user_launch_daemons="$HOME/Library/LaunchDaemons"
+# user_launch_daemons="$HOME/Library/LaunchDaemons"
 
 # for easy searching
 system_service_plists=(
@@ -22,7 +22,6 @@ nonsystem_service_plists=(
   $global_launch_agents
   $global_launch_daemons
   $user_launch_agents
-  $user_launch_daemons
 )
 
 service_plists=(
@@ -43,7 +42,7 @@ function services_running() {
 # attempts to load or start a launchctl service
 function service_start() {
   local service="${1:-}"
-  if [ -f "${service}" ]; then 
+  if [ -f "${service}" ]; then
     sudo launchctl load "${service}"
   else
     sudo launchctl start "${service}"
@@ -53,7 +52,7 @@ function service_start() {
 # attempts to load -w or add a launchctl service
 function service_enable() {
   local service="${1-:}"
-  if [ -f "${service}" ]; then 
+  if [ -f "${service}" ]; then
     sudo launchctl load -w "${service}"
   else
     sudo launchctl add "${service}"
@@ -63,7 +62,7 @@ function service_enable() {
 # attempts to unload or stop a launchctl service
 function service_stop() {
   local service="${1:-}"
-  if [ -f "${service}" ]; then 
+  if [ -f "${service}" ]; then
     sudo launchctl unload "${service}"
   else
     sudo launchctl stop "${service}"
@@ -73,17 +72,17 @@ function service_stop() {
 # Attempts to  -w or remove a launchctl service
 function service_disable() {
   local service="${1:-}"
-   if [ -f "${service}" ]; then 
+   if [ -f "${service}" ]; then
     sudo launchctl unload -w "${service}"
   else
     sudo launchctl remove "${service}"
-  fi 
+  fi
 }
 
 # lists all services or all services matching pattern in $1
 function service_list() {
   local service="${1:-}"
-#   if [ -f "${service}" ]; then 
+#   if [ -f "${service}" ]; then
 #    o=$(sudo launchctl list "${service}")
 #  elif [ -n "${service}" ]; then
 #    o=$(sudo launchctl list "${service}")
@@ -98,32 +97,32 @@ function service_list() {
 }
 
 function _service_arguments_validate() {
-  if [ $# -ne 2 ]; then 
-    if [ $# -eq 1 ] && [[ "$1" == "list" ]]; then 
+  if [ $# -ne 2 ]; then
+    if [ $# -eq 1 ] && [[ "$1" == "list" ]]; then
       return 0
     fi
-    _service_usage 
+    _service_usage
     se "Two parameters required."
     return 1
   fi
   actions=( "start" "stop" "restart" "list" )
-  if [[ "${actions[*]}" != *"${2:-}"* ]]; then 
-    _service_usage 
+  if [[ "${actions[*]}" != *"${2:-}"* ]]; then
+    _service_usage
     se "Malformed command"
     return 2
-  fi  
+  fi
   services=$(service_list)
-  if ! string_contains "${1:-}" "$services"; then 
-     _service_usage 
+  if ! string_contains "${1:-}" "$services"; then
+     _service_usage
      se "Unknown service"
     return 3
   fi
-  return 0   
+  return 0
 }
 
 function _service_usage() {
   cat << 'EOF'
-service is meant to be used in the fashion of the old redhat 
+service is meant to be used in the fashion of the old redhat
 system administration tool.  The syntax is:
 
   service <service name> <action>
@@ -140,12 +139,12 @@ EOF
 # service $1 restart
 function service() {
   if _service_arguments_validate "$@"; then
-     
+
     name="${1:-}"
     action="${2:-}"
     supported_actions=("start" "stop" "restart" "list")
     realname=$(service_list "${name}")
-    if [ $# -eq 1 ] && [[ "$name" == "list" ]]; then 
+    if [ $# -eq 1 ] && [[ "$name" == "list" ]]; then
       action=list
     fi
     case "${action}" in
@@ -200,18 +199,18 @@ function service_kill() {
   local service="${1:-}"
   if [ -n "${service}" ]; then
     is_alive=$(service_list "${service}"|grep "PID")
-    if [ $? -eq 0 ]; then 
+    if [ $? -eq 0 ]; then
       printf "${is_alive} "
     else
       echo "${is_alive}"
-      if ! confirm_yes "want me to kill this?"; then 
+      if ! confirm_yes "want me to kill this?"; then
         return 0
       fi
     fi
     service_stop "${service}"
     service_disable "${service}"
     is_dead=$(service_list "${service}"|grep "Could not find")
-    if [ $? -eq 0 ]; then 
+    if [ $? -eq 0 ]; then
       echo "${service}.  it's dead, Jim"
     else
       echo "ITS STILL ALIVE! -- maybe:"
@@ -271,24 +270,24 @@ function is_qualified_service_name() {
   for prefix in "${domain_prefixes[@]}"; do
     printf -v regex '^%s.*' "${prefix}"
     out=$(grep "${regex}" <<< "${name}")
-    if [ $? -eq 0 ]; then 
+    if [ $? -eq 0 ]; then
       return 0
     fi
   done
   return 1
 }
 
-# Uses the definition of domains to lookup a plist file for a qualified 
+# Uses the definition of domains to lookup a plist file for a qualified
 # service name as above, find echos the names of any matching plist
 # files to the console.  No explicit return value.
 function plist_from_qualified_service_name() {
   name="${1:-}"
   prefix=$(awk -F'/' '{print$1}' <<< "${name}")
-  if [[ "${prefix}" =~ ^gui.* ]]; then 
+  if [[ "${prefix}" =~ ^gui.* ]]; then
     prefix=$(awk -F'/' '{print$1/$2}' <<< "${name}")
   fi
   service_name=$(awk -F'/' '{print$NF}' <<< "${name}")
-  if [[ "$prefix" =~ ^system.* ]]; then 
+  if [[ "$prefix" =~ ^system.* ]]; then
     for dir in "${system_service_plists[@]}"; do
       find "$FAKEROOT/${dir:1}" -type f -name "${service_name}.plist"
     done
@@ -306,19 +305,19 @@ function plist_from_qualified_service_name() {
 # no explicit return
 function service_find_plist() {
   sterm="${1:-}"
-  if ! [ -n "${sterm}" ]; then 
+  if ! [ -n "${sterm}" ]; then
     se "please provide a search term"
     return 1
   fi
-  for dir in "${service_plists[@]}"; do 
-    if [ -d "${dir}" ]; then 
+  for dir in "${service_plists[@]}"; do
+    if [ -d "${dir}" ]; then
       find "${dir}" -type f -iname "*${sterm}*"
     fi
   done
 }
 
 # Tries to return the service name as launchd expects it
-# service/ or gui/$(id -u), and though launchd often still 
+# service/ or gui/$(id -u), and though launchd often still
 # won't respond to a query with these, it will shut them down
 # Args: sterm, provided to service_find_plist above
 # prints (hopefully) appropriate service names
@@ -326,19 +325,19 @@ function service_find_plist() {
 # the number of failures
 function service_find() {
   sterm="${1:-}"
-  if ! [ -n "${sterm}" ]; then 
+  if ! [ -n "${sterm}" ]; then
     se "please provide a search term"
     return 1
   fi
   plists_blob=$(service_find_plist "${sterm}")
   failures=0
-  for plist in ${plists_blob}; do      
+  for plist in ${plists_blob}; do
     bn=$(basename "${plist}")
     sn=$(echo "${bn}"|sed 's/.plist//')
     if stringContains "System" "${plist}"; then
       echo "system/${sn}"
       continue
-    else  
+    else
       echo "gui/$(id -u)/${sn}"
       continue
     fi
@@ -348,7 +347,7 @@ function service_find() {
   return ${failures}
 }
 
-# greps through the service plist files themselves in order to 
+# greps through the service plist files themselves in order to
 # surface what Launch(Daemon,Agent) a given term (usually pulled)
 # from a running process or a "Sample" from activity monitor.
 # Much of the not immediately obvious categorization in appleservices.sh
@@ -358,18 +357,18 @@ function service_find() {
 # no explicit return
 function service_find_parent() {
   sterm="${1:-}"
-  if ! [ -n "${sterm}" ]; then 
+  if ! [ -n "${sterm}" ]; then
     se "please provide a search term"
     return 1
-  fi 
-  for dir in "${service_plists[@]}"; do 
-    if [ -d "${dir}" ]; then 
+  fi
+  for dir in "${service_plists[@]}"; do
+    if [ -d "${dir}" ]; then
       grep -ri "${sterm}" "${dir}/"
     fi
   done
 }
 
-# a wrapper to singlequote the return from service_find, used in 
+# a wrapper to singlequote the return from service_find, used in
 # creatiion of appleservices.sh.  singlequotes is sourced from util.sh
 function sqsf() {
   services=$(service_find "${1:-}")
@@ -382,10 +381,10 @@ function sqsf() {
 # are here (removing leading dot or prefix, glob, etc)
 # Args - sterm as above
 # echos lowercase sanitized version to the shell
-# no explicit return 
+# no explicit return
 function sanitize_service_sterm() {
   out=$(echo $1|sed 's/\.//')
-  if string_contains "ap.ad" "${out}"; then 
+  if string_contains "ap.ad" "${out}"; then
     out=$(echo "${out}"| sed 's/ap\.//')
   fi
   out=$(echo "${out}"|sed 's/\*//')
@@ -393,40 +392,40 @@ function sanitize_service_sterm() {
 }
 
 # combines above functions, searching and creating a category based
-# on findings from Launch(Agents,Daemons) as a bash array in the 
+# on findings from Launch(Agents,Daemons) as a bash array in the
 # format:
 # apple_category_services=(
 #  'service1'
 #  'service2'...
 # )
 # where I couldn't generalize and needed to add by hand, I commented
-# if services are found, 
+# if services are found,
 # returns return code from printf  >> appleservices.sh
 # or 0 if the user says no to the confirmation prompt.
 # if no services are found, returns 255
 function add_to_apple_services() {
   sterm="${1:-}"
-  if ! [ -n "${sterm}" ]; then 
+  if ! [ -n "${sterm}" ]; then
     se "please provide a search term"
     return 1
   fi
 
   existing=$(grep "${sterm}" "${APPLE_SERVICES_FILE}")
-  if [ $? -eq 0 ]; then 
+  if [ $? -eq 0 ]; then
     echo "${existing}"
     echo "these are already present in ${APPLE_SERVICES_FILE}"
     echo "..."
   fi
   aterm=$(sanitize_service_sterm "${sterm}")
   services=$(service_find "${sterm}"|sort -u)
-  if [ -n "${services}" ]; then 
+  if [ -n "${services}" ]; then
     printf -v out "apple_%s_services=(\n" "${aterm}"
-    for service in ${services}; do 
+    for service in ${services}; do
       out+="  $(singlequote ${service})\n"
     done
     out+=")\n\n"
     printf "${out}"
-    if confirm_yes "add this new entry to ${APPLE_SERVICES_FILE}?"; then 
+    if confirm_yes "add this new entry to ${APPLE_SERVICES_FILE}?"; then
       return $(printf "${out}" >> "${APPLE_SERVICES_FILE}")
     else
       return 0
@@ -445,8 +444,8 @@ disabled_service_overrides=(
 )
 
 # ran into a nasty bug where com.apple.appkit.xpc.openAndSavePanelService
-# and com.apple.coreservices.sharedfilelistd were eating a ton of CPU to 
-# maintain the sidebar_favorites.  Seemed to be BBEdit related, but had to 
+# and com.apple.coreservices.sharedfilelistd were eating a ton of CPU to
+# maintain the sidebar_favorites.  Seemed to be BBEdit related, but had to
 # clear all recents and sidebars to get it to stop.
 sidebar_favorotes=(
   "$HOME/Library/Application Support/com.apple.sharedfilelist/com.apple.LSSharedFileList.FavoriteItems.sfl2"
@@ -457,12 +456,24 @@ finder_prefs=(
   "$HOME/Library/Preferences/com.apple.finder.plist"
 )
 
-# the main locations for non-containerized preferences that appear as 
+# the main locations for non-containerized preferences that appear as
 # plist files
 plist_dirs_locations=(
   "$HOME/Library/Preferences"
   "/Library/Preferences"
   "$HOME/Library/Preferences/ByHost"
+)
+
+app_associated_locations=(
+  "${plist_dirs_locations[@]}"
+  "$HOME/Library/Application Support"
+  "/Library/Application Support"
+  "$HOME/Library/Saved Application State"
+  "$HOME/Library/Applications"
+  "$HOME/Library/Application Scripts"
+  "$HOME/Library/Caches"
+  "$HOME/Library/Containers"
+  "$HOME/Library"
 )
 
 # global plist preference files
@@ -481,15 +492,35 @@ plist_dirs_Containers=(
 # within the container, the preference directory
 container_pref_folder="Data/Library/Preferences"
 
+prefs_search() {
+  sterm="${1:-}"
+  hits=()
+  _search() {
+    arrayname=$1[@]
+    array=("${!arrayname}")
+    for tld in "${array[@]}"; do
+      while IFS= read -r -d '' dirorfile; do #maybe separate these
+        hits+=( "$dirorfile" );
+        echo "$dirorfile"
+      done < <(ssudo _lc find "$tld" -iname "*$sterm*")
+    done
+  }
+  _search 'plist_dirs_locations'
+  if [ "${#hits[@]}" -eq 0 ]; then
+    warn "no hits in plist_dirs_locations, broadening to app_associated_locations"
+    _search 'app_associated_locations'
+  fi
+}
+
 # https://shadowfile.inode.link/blog/2018/08/defaults-non-obvious-locations/
 # This function populates two arrays that, once run, are in the global scope:
-# plist_containerized_bundleID_rootdir - associative array mapping 
+# plist_containerized_bundleID_rootdir - associative array mapping
 #   bundleIDs (ex: com.apple.somethingsomething) to the rootdirs of their
 #   containers.
 # plists_containerized_bundleID_file - associative array mapping bundleIDs
 #   to the plist files relavent for their containers.
 function plists_containerized() {
-  # though each item in plist_Containers is a single dir, 
+  # though each item in plist_Containers is a single dir,
   # the ls will return a bunch (obv), but the bash array
   # will ingest them individually just fine (perhaps obv)
   unset plists_containerized_bundleID_rootdir
@@ -498,18 +529,18 @@ function plists_containerized() {
   declare -gA plist_containerized_bundleID_rootdir
   for dir in "${plist_dirs_Containers[@]}"; do
     # see finder_array in util.sh. we use find and an intermediary
-    # array to deal with cases where its not a proper bundle id 
+    # array to deal with cases where its not a proper bundle id
     # and may contain a space or god forbid, a newline
     finddir_array -s "${dir}"
     bundleIDs=( "${dirarray[@]}" )
-    for bundleID in "${bundleIDs[@]}"; do 
+    for bundleID in "${bundleIDs[@]}"; do
       plist_containerized_bundleID_rootdir["${bundleID}"]="${dir}"
     done
   done
   # annoying name reminding bundleID -> file
   unset plists_containerized_bundleID_file
   declare -gA plists_containerized_bundleID_file
-  for bundleID in "${!plist_containerized_bundleID_rootdir[@]}"; do 
+  for bundleID in "${!plist_containerized_bundleID_rootdir[@]}"; do
     path_components=(
       "${plist_containerized_bundleID_rootdir[${bundleID}]}"
       "${bundleId}"
@@ -524,19 +555,19 @@ function plists_containerized() {
     # here we keep the values in the associative array as null
     # separated concatenated strings, again to deal with potential
     # spaces or newlines.  bash is fun.
-    if files="$(find "${findpath}" -print0 2> /dev/null)"; then 
+    if files="$(find "${findpath}" -print0 2> /dev/null)"; then
       ((findfailures++))
     fi
     plists_containerized_bundleID_file["${bundleID}"]="${files}"
   done
-  if gt $findfailres 0 || gt $ctpfailures 0; then 
-    if [[ $ctpfailures == 0 ]]; then 
+  if gt $findfailres 0 || gt $ctpfailures 0; then
+    if [[ $ctpfailures == 0 ]]; then
       se "$findfailures find failures"
       return $findfailures
     elif [[ findfailures == 0 ]]; then
-      se "$ctpfailures ctp failures" 
+      se "$ctpfailures ctp failures"
       return $ctpfailures
-    else 
+    else
       se "$findfailures find $ctpfailures ctp failed"
       return $((findfailures+ctpfailures))
     fi
@@ -551,7 +582,7 @@ function plists_containerized() {
 function prefs_reset() {
   prefs_arr_name=$1[@]
   prefs=("${!prefs_arr_name}")
-  for file in "${prefs[@]}"; do 
+  for file in "${prefs[@]}"; do
     pref_reset "${file}"
   done
   pkill Finder
@@ -560,19 +591,19 @@ function prefs_reset() {
 
 # Takes a plist file, copies to PREFS_DISABLED, and deletes
 # returns any failure codes from mkdir -p or mv, otherwise 0
-# This runs using fakeroot, so when not messing with csrutil 
+# This runs using fakeroot, so when not messing with csrutil
 # authenticated-root disable, FAKEROOT should be set to /
 function pref_reset() {
   file="${1:-}"
   if [ -f "${file}" ]; then
-    if [[ "${file}" =~ ^/Library ]]; then 
+    if [[ "${file}" =~ ^/Library ]]; then
       disabled_dir="${PREFS_DISABLED}/global/Library/$(dirname "${file}"|basename)"
-    elif [[ "${file}" =~ ^/System ]]; then 
+    elif [[ "${file}" =~ ^/System ]]; then
       disabled_dir="${PREFS_DISABLED}/System/Library/$(dirname "${file}"|basename)"
     else
       disabled_dir="${PREFS_DISABLED}"/$(dirname $(echo "${file}" |sed "s:$HOME/Library/::"))
     fi
-    if ! mkdirret=$(mkdir -p "${disabled_dir}"); then 
+    if ! mkdirret=$(mkdir -p "${disabled_dir}"); then
       se "mkdir -p \"${disabled_dir}\" returned ${ret}"
       return ${mkdirret}
     fi
@@ -594,3 +625,8 @@ function finder_reset() {
 function services_statuses() {
   find /var/db/com.apple.xpc.launchd/ -type f -print -exec defaults read {} \; 2>/dev/null
 }
+
+_macservices_fs() {
+  function_finder -f "$D/macservices.sh"
+}
+sourced_functions+=( $(_macservices_fs) )
