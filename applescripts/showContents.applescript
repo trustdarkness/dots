@@ -1,3 +1,4 @@
+#!/usr/bin/env osascript
 tell application "System Events"
 	keystroke "c" using {command down}
 	keystroke "g" using {shift down, command down}
