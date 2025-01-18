@@ -41,7 +41,27 @@ MACBASHUPA+="bootstrap_modern_bash -s -d -p\0"
 MACBASHUPA+="bootstrap_modern_bash -s -p\0"
 MACBASHUPA+="Abort and exit"
 
-BREW_BATCH_INSTALLS="python3 sshfs iterm2 raycast wget rar 7-zip gpg pipx vscodium lynx screen tac find-any-file fzf macfuse librewolf scrcpy"
+BREW_BATCH_INSTALLS=(
+  python3
+  sshfs
+  iterm2
+  raycast
+  wget
+  rar
+  7-zip
+  gpg
+  pipx
+  vscodium
+  lynx
+  screen
+  find-any-file
+  fzf
+  macfuse
+  librewolf
+  scrcpy
+  lsusb
+  cyme
+)
 BREW_BATCH_CASKS="transmit sublime-text sublime-merge lynx pacifist sloth protonmail-bridge transmission android-platform-tools"
 
 PATH_SOURCES='.bashrc .bash_profile .profile'
@@ -294,7 +314,7 @@ function thunar_sorting_bootstrap() {
           return 2
         fi
       else
-        err "path-remove $exedore failed $?"
+        err "path-remove $exedir failed $?"
         return 3
       fi
     else
@@ -438,10 +458,12 @@ function new_mac_bootstrap() {
   echo " and modern bash"
   if ! is_completed "bash_bootstrap"; then bash_bootstrap; fi
 
+  # TODO, if the main install fails on one package, redo iterating
+  # over the array to catch whatever we can
   if ! is_completed "BREW_BATCH_INSTALLS"; then
-    echo "Installing $BREW_BATCH_INSTALLS"
-    if ! brew install $BREW_BATCH_INSTALLS; then
-      se "brew install $BREW_BATCH_INSTALLS failed with $?"
+    echo "Installing ${BREW_BATCH_INSTALLS[*]}"
+    if ! brew install ${BREW_BATCH_INSTALLS[*]}; then
+      se "brew install ${BREW_BATCH_INSTALLS[*]} failed with $?"
       se "please fix and try again"
       return 1
     fi

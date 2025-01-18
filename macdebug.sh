@@ -41,9 +41,10 @@ function binstringsearch() {
   exe="${1:?Please provide the path to a binary or library as arg1}"
   sterm="${2:?Please provide a search term as arg2}"
   if ! disarm=$(type -p disarm); then
+    source $D/bootstraps.sh
     disarm_bootstrap
   fi
-  disarm -f "${sterm}" "${exe}"
+  ARCH="$(uname -m)" disarm -f "${sterm}" "${exe}"
 }
 
 # Uses looto to search for a given library in binaries present in the provided
@@ -59,7 +60,7 @@ function binslookuplibraries() {
   fi
   minusr=false
   while getopts 'r' OPTION; do 
-    case OPTION in 
+    case $OPTION in 
       'r')
         minusr=true
         ;;
