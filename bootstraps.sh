@@ -5,20 +5,20 @@ if ! declare -F is_function > /dev/null 2>&1; then
   }
 fi
 
-# for now, we consider dependency on my bashrc, osutil, and util hard 
+# for now, we consider dependency on my bashrc, osutil, and util hard
 # requirements with a TODO to untangle the mess.
 # if [ -z "$D" ]; then
-#   if is_function "detect_d"; then detect_d; else  
-#     if [[ "${BASH_SOURCE[0]}" == */* ]]; then 
+#   if is_function "detect_d"; then detect_d; else
+#     if [[ "${BASH_SOURCE[0]}" == */* ]]; then
 #       dbs=$(dirname "${BASH_SOURCE[0]}")
-#       if [ -n "$dbs" ] && [ -f "$dbs/util.sh" ]; then 
+#       if [ -n "$dbs" ] && [ -f "$dbs/util.sh" ]; then
 #         D="$dbs"
 #       fi
 #     fi
 #     if [ -z "$D" ]; then if [ -n "$(pwd)/util.sh" ]; then D="$(pwd)"; fi; fi
 #   fi
-#   if [ -z "$D" ]; then 
-#     echo "couldnt find the dots repo, please set D=path"; 
+#   if [ -z "$D" ]; then
+#     echo "couldnt find the dots repo, please set D=path";
 #     return 1
 #   fi
 # fi
@@ -31,17 +31,37 @@ fi
 # since by definition, we wont have arrays yet, this is a hacky prototype
 # we'll use null separated strings, MACBASHUPS for the prompt strings
 # and MACBASHUPA for the actions
-MACBASHUPS="Continue, accepting possible breakage\0" 
-MACBASHUPS+="Install homebrew and latest bash stable, making this your default shell\0" 
+MACBASHUPS="Continue, accepting possible breakage\0"
+MACBASHUPS+="Install homebrew and latest bash stable, making this your default shell\0"
 MACBASHUPS+="Install homebrew and latest bash stable, but dont change my shell\0"
 MACBASHUPS+="Abort and exit"
 
-MACBASHUPA="return 0\0" 
-MACBASHUPA+="bootstrap_modern_bash -s -d -p\0" 
+MACBASHUPA="return 0\0"
+MACBASHUPA+="bootstrap_modern_bash -s -d -p\0"
 MACBASHUPA+="bootstrap_modern_bash -s -p\0"
 MACBASHUPA+="Abort and exit"
 
-BREW_BATCH_INSTALLS="python3 sshfs iterm2 raycast wget rar 7-zip gpg pipx vscodium lynx screen tac find-any-file fzf macfuse librewolf scrcpy"
+BREW_BATCH_INSTALLS=(
+  python3
+  sshfs
+  iterm2
+  raycast
+  wget
+  rar
+  7-zip
+  gpg
+  pipx
+  vscodium
+  lynx
+  screen
+  find-any-file
+  fzf
+  macfuse
+  librewolf
+  scrcpy
+  lsusb
+  cyme
+)
 BREW_BATCH_CASKS="transmit sublime-text sublime-merge lynx pacifist sloth protonmail-bridge transmission android-platform-tools"
 
 PATH_SOURCES='.bashrc .bash_profile .profile'
@@ -52,18 +72,18 @@ INSTALLED_SUCCESSFULLY="$HOME/Downloads/_i"
 
 function tokenizer() {
   separator=' '
-  if [ "$1" = '-F' ]; then 
+  if [ "$1" = '-F' ]; then
     separator="$2"
     shift; shift;
   fi
   input="$@"
-  ( 
-    set -f -- 
+  (
+    set -f --
     local IFS=$separator
-    while read -r token ; do 
-      set -- "$@" $token 
+    while read -r token ; do
+      set -- "$@" $token
     done < <(echo "$input")
-    printf %s "$*" 
+    printf %s "$*"
   )
 }
 
@@ -73,14 +93,14 @@ function choices_legacy() {
   local actions="${2:-}"
   local pctr=0
   local IFS=$'\a'
-  for prompt in $prompts; do 
+  for prompt in $prompts; do
       ((pctr++))
       echo "$ctr. $prompt"
   done
   local chosen=$(get_keypress "Enter choice 1.. ${ctr}: ")
   local actr=0
   local IFS=$'\a'
-  for action in "$actions"; do 
+  for action in "$actions"; do
     ((actr++))
     if [ $actr == $pctr ]; then
       eval "$action"
@@ -92,7 +112,7 @@ function choices_legacy() {
 # Installs brew using their command from the homepage
 function brew_bootstrap() {
   if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
-  if type -p brew; then 
+  if type -p brew; then
     echo "already bootstrapped; return to the 0"
 
     local caller="$FUNCNAME"
@@ -122,10 +142,10 @@ function brew_get_newest_stable_bash() {
 # and pass by reference.  Canonical in util.sh.
 if ! declare -p MODERN_BASH > /dev/null 2>&1; then MODERN_BASH="4.3"; fi
 
-# Installs bash from brew, installing brew if it doesnt exist, 
+# Installs bash from brew, installing brew if it doesnt exist,
 # on success, adds /usr/local/bin/bash to /etc/shells and runs
 # chsh -s /usr/local/bin/bash.  Also searches ${BASH_PARENT_SOURCED}
-# for PATH= assignments and offers to prepend with /usr/local/bin, 
+# for PATH= assignments and offers to prepend with /usr/local/bin,
 # basically all the things you need to fix the MacOS default brokenass
 # bash. If bash >= 4.3, does nothing (see bootstrap_newest_stable_bash)
 # no args, returns > 0 if any step fails along the way
@@ -134,24 +154,24 @@ function bootstrap_modern_bash() {
     echo << EOF
     Installs a modern version of bash on a MacOS system, also installing
     homebrew along the way, if not already installed.
-   
+
     If bash in the system PATH is >= MODERN_BASH (defaults to 4.3), this
-    function returns 0, doing nothing. 
+    function returns 0, doing nothing.
 
     Args:
-      -v | --bash_version	if specified, we will try to forward to 
-                                brew to install a specific version. we 
+      -v | --bash_version	if specified, we will try to forward to
+                                brew to install a specific version. we
 				default to bash stable in brew.
       -s | --etc_shells		if set, we add the newly installed bash
 				to /etc/shells.
-      -d | --default 		if set, we make the installed bash the 
+      -d | --default 		if set, we make the installed bash the
 				default shell for the current user.
       -p | --update_path	if set, we prepend the current PATH with
-				/usr/local/bin in any assignments in 
+				/usr/local/bin in any assignments in
 				\$HOME/.bash_profile, \$HOME/.profile
 				or \$HOME/.bashrc
 
-    -h | -? | --help 		Prints this text.  
+    -h | -? | --help 		Prints this text.
 
     returns 0 if all actions succeeded.
 EOF
@@ -205,15 +225,15 @@ EOF
   if [ $? -gt 0 ]; then
     if ! is_completed "brew_bootstrap"; then brew_bootstrap; fi
   fi
-  if [[ ${version} != ${MODERN_BASH} ]]; then  
+  if [[ ${version} != ${MODERN_BASH} ]]; then
     local newest_stable=$(brew_get_newest_stable_bash)
     if [[ ${version} == ${newest_stable} ]]; then
       brew install bash
     elif [[ ${version} > ${newest_stable} ]]; then
       echo "newest stable bash in brew is ${newest_stable}"
-      if confirm_yes "Would you like to install HEAD?"; then 
+      if confirm_yes "Would you like to install HEAD?"; then
         brew install bash@HEAD
-      else 
+      else
         return 1
       fi
     else
@@ -225,27 +245,27 @@ EOF
   fi
   grep "/usr/local/bin/bash" "/etc/shells"
   if [ $? -gt 0 ]; then
-    if tru $etc_shells; then 
+    if tru $etc_shells; then
       sudo sh -c 'echo /usr/local/bin/bash >> /etc/shells'
     fi
   fi
-  if tru $default_shell; then 
+  if tru $default_shell; then
     if [[ $(getusershell) != "/usr/local/bin/bash" ]]; then
       chsh -s /usr/local/bin/bash
     fi
   fi
-  if $update_path; then 
+  if $update_path; then
     local failed=0
     for sourced in $(tokenize "$PATH_SOURCES"); do
-      if ! [ -f "$sourced" ]; then 
+      if ! [ -f "$sourced" ]; then
         se "Couldnt find $sourced. Skipping."
         continue
-      fi 
+      fi
       local grepout=$(grep "PATH=" "$sourced")
       local brewbash=$(echo "$grepout" |grep "\/usr\/local\/bin")
-      if [ $? -gt 0 ]; then 
+      if [ $? -gt 0 ]; then
         if confirm_yes "prepend /usr/local/bin to PATH in $sourced?"; then
-          if ! sed -i 's:PATH=:PATH=/usr/local/bin:g' "$sourced"; then 
+          if ! sed -i 's:PATH=:PATH=/usr/local/bin:g' "$sourced"; then
             ((failed++))
           fi # endif sed
         fi # endif confirm_yes
@@ -253,10 +273,10 @@ EOF
     done # end for sourced
   fi # endif update_path
   if [ -n "$failed" ]; then
-    if [ $failed -eq 0 ]; then 
+    if [ $failed -eq 0 ]; then
       local caller="$FUNCNAME"
       mb_ff "$caller"; return 0
-    else 
+    else
       return $failed
     fi # endif [ failed -eq
   fi # endif [-n failed
@@ -279,10 +299,10 @@ function thunar_sorting_bootstrap() {
   declare -a b4
   found=false
   local IFS='/'
-  for pathel in $PATH; do 
+  for pathel in $PATH; do
     if [[ "$pathel" != "$thunarParent" ]] && ! $found; then
       b4+=( "$pathel" )
-    elif [[ "$pathel" == "$thunarParent" ]]; then 
+    elif [[ "$pathel" == "$thunarParent" ]]; then
       found=true
       break
     fi
@@ -290,9 +310,9 @@ function thunar_sorting_bootstrap() {
   echo "enabling thunar sorting can be done in any of the following"
   echo "dirs in your PATH... Do you have a preference?"
   choice=$(choices -e "${b4[@]}")
-  if is_int "$choice"; then 
+  if is_int "$choice"; then
     if lt "$choice"  ${!b4[@]}; then
-      if can_i_write "${b4[$choice]}"; then 
+      if can_i_write "${b4[$choice]}"; then
         command="cat"
       else
         command="sudo cat"
@@ -383,10 +403,10 @@ function mac_hostname() {
   echo "Setting NetBIOSName to $COMPUTER_NAME"
   sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server NetBIOSName -string $COMPUTER_NAME
   echo 'Is there a domain for DNS? (We dont configure Active Directory)'
-  if confirm_yes '(Y/n)'; then 
+  if confirm_yes '(Y/n)'; then
     printf "Domain for $COMPUTER_NAME to be added to /etc/hosts as $COMPTUER_NAME.domain.tld: "
     read DOMAIN
-    if [ -n "$DOMAIN" ]; then 
+    if [ -n "$DOMAIN" ]; then
       echo "127.0.0.1\t$COMPUTER_NAME.$DOMAIN" | sudo tee -a /etc/hosts
     fi
   fi
@@ -412,7 +432,7 @@ function new_mac_bootstrap() {
     gout=$(grep "$1" "$log")
     return $?
   }
-  
+
   report() {
     se "recorded status for the following components:"
     se ""
@@ -434,10 +454,12 @@ function new_mac_bootstrap() {
   echo " and modern bash"
   if ! is_completed "bash_bootstrap"; then bash_bootstrap; fi
 
+  # TODO, if the main install fails on one package, redo iterating
+  # over the array to catch whatever we can
   if ! is_completed "BREW_BATCH_INSTALLS"; then
-    echo "Installing $BREW_BATCH_INSTALLS"
-    if ! brew install $BREW_BATCH_INSTALLS; then
-      se "brew install $BREW_BATCH_INSTALLS failed with $?"
+    echo "Installing ${BREW_BATCH_INSTALLS[*]}"
+    if ! brew install ${BREW_BATCH_INSTALLS[*]}; then
+      se "brew install ${BREW_BATCH_INSTALLS[*]} failed with $?"
       se "please fix and try again"
       return 1
     fi
@@ -449,7 +471,7 @@ function new_mac_bootstrap() {
       return 1
     fi
   fi
-  if ! type -p pipx; then 
+  if ! type -p pipx; then
     se "no pipx, install and try again"
     return 1
   fi
@@ -517,7 +539,7 @@ function new_mac_bootstrap() {
 
 function yabridge_bootstrap() {
   TS=$(fsts)
-  if [ -d "$HOME/Downloads/yabridge" ]; then 
+  if [ -d "$HOME/Downloads/yabridge" ]; then
     if [ -d "$HOME/.local/share/yabridge" ]; then
       move_verbose "$HOME/.local/share/yabridge" "/tmp/yabridge_$TS"
     fi
@@ -531,13 +553,13 @@ function yabridge_bootstrap() {
 
 function yakuake_blur() {
   local conf="$HOME/.config/yakuakerc"
-  if ! [ -f "$conf" ]; then 
+  if ! [ -f "$conf" ]; then
     se "expecting yakuake conf in $conf"
     se "but it is not there, should I create it?"
-    if confirm_yes; then 
+    if confirm_yes; then
       dn="$(dirname $conf)"
       mkdir -p "$dn"
-      if ! touch "$conf"; then 
+      if ! touch "$conf"; then
         ret=$?
         se "could not create $conf. exiting."
         return $ret
@@ -548,7 +570,7 @@ function yakuake_blur() {
     fi
   fi
   grep "Blur=true" "$conf" "$conf" > /dev/null 2>&1
-  if [ $? -eq 0 ]; then 
+  if [ $? -eq 0 ]; then
     se "yakuake seems to be blur enabled already. exiting."
     return 1
   fi
@@ -559,23 +581,23 @@ Blur=true
 Translucency=true
 EOF
   grep '[Appearance]' "$conf" > /dev/null 2>&1
-  if [ $? -gt 0 ]; then 
+  if [ $? -gt 0 ]; then
     echo "$directive" >> "$conf"
-  else 
+  else
     cat "$conf" | sed "s/[Appearance]/$directive/g" >> "/tmp/$(basename $conf)"
     mv "$conf" "$conf.$ts.added_blur.bak"
     mv "/tmp/$(basename $conf)" "$conf"
   fi
 }
 
-function sudo_add_touchid() {  
-  ts=fsts    
+function sudo_add_touchid() {
+  ts=fsts
   se "existing /etc/pam.d/sudo backed up to $HOME/.local/bak/etc.pam.d.sudo.$ts.touchid"
   # https://stackoverflow.com/questions/5573683/adding-alias-to-end-of-alias-list-in-bashrc-file-using-sed
-  tac /etc/pam.d/sudo |        
-  awk "FNR==NR&&/auth/{s=FNR;next}FNR==s{ \$0=\$0\"\auth \t sufficint \t pam_tid.so\n\"}NR>FNR" /etc/pam.d/sudo /etc/pam.d/sudo > /tmp/sudo.new 
+  tac /etc/pam.d/sudo |
+  awk "FNR==NR&&/auth/{s=FNR;next}FNR==s{ \$0=\$0\"\auth \t sufficint \t pam_tid.so\n\"}NR>FNR" /etc/pam.d/sudo /etc/pam.d/sudo > /tmp/sudo.new
   sudo mv "/etc/pam.d/sudo" "$HOME/.local/bak/etc.pam.d.sudo.$ts.touchid" && mv /tmp/sudo.new /etc/pam.d/sudo
-  return $?                                                                     
+  return $?
 }
 
 function rcdefaultapp_bootstrap() {
@@ -589,7 +611,7 @@ function rcdefaultapp_bootstrap() {
     return 1
   fi
   local ts=$(fsts)
-  if [ -f "$INSTALL_STAGING/RCDefaultApp-2.1.X.dmg" ]; then 
+  if [ -f "$INSTALL_STAGING/RCDefaultApp-2.1.X.dmg" ]; then
     local install_log="$INSTALL_LOGS/RCDefaultApp.$ts.log"
     if bellicose -v -R "$install_log" install RCDefaultApp-2.1.X.dmg; then
       se "bellicose reported successful install"
@@ -635,16 +657,16 @@ function powerline_bootstrap() {
 # my basic edits to import-schemes.sh below will detect and add color
 # schemes for xfce4-terminal and konsole.  At the bare minimum, I plan
 # to add terminator in addition to iTerm which is what the script
-# was originally written for, so this function remains generally OS 
+# was originally written for, so this function remains generally OS
 # agnostic.
 function termschemes_bootstrap() {
-  if ! [ -d "$GH/Terminal-Color-Schemes" ]; then 
+  if ! [ -d "$GH/Terminal-Color-Schemes" ]; then
     ghc "git@github.com:trustdarkness/Terminal-Color-Schemes.git"
   fi
   cd "$GH/Terminal-Color-Schemes"
   tools/import-schemes.sh
   cd -
-  if empty "$default_installer"; then 
+  if empty "$default_installer"; then
     install_util_load
   fi
   sayi grc
@@ -653,16 +675,16 @@ function termschemes_bootstrap() {
 }
 
 # in the spirit of consistency, we'll keep these together
-function termfonts_bootstrap() { 
-  if ! fc-list |grep Hack-Regular; then 
-    if [[ $(uname) == "Darwin" ]]; then 
+function termfonts_bootstrap() {
+  if ! fc-list |grep Hack-Regular; then
+    if [[ $(uname) == "Darwin" ]]; then
       brew install font-hack
     elif [[ uname == "Linux" ]]; then
-      if ! $(i); then  
-        se "no installutil.sh" 
-        return 1 
-      fi 
-      if ! $(sai fonts-hack); then  
+      if ! $(i); then
+        se "no installutil.sh"
+        return 1
+      fi
+      if ! $(sai fonts-hack); then
         se "could not install fontshack with ${sai}"
         return 1
       fi
@@ -688,7 +710,7 @@ function term_bootstrap() {
 function vscodium_as_git_mergetool() {
   if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   grep codium "$HOME/.gitconfig" > /dev/null 2>&1
-  if [ $? -eq 0 ] || [[ "${1:-}" != "-f" ]]; then 
+  if [ $? -eq 0 ] || [[ "${1:-}" != "-f" ]]; then
     echo ".gitconfig already references codium. skipping without -f."
     return 0
   fi
@@ -704,7 +726,7 @@ function vscodium_as_git_mergetool() {
 
 function mullvad_bootstrap() {
   if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
-  case $(what_os) in 
+  case $(what_os) in
     "MacOS")
       if ! type -p brew > /dev/null 2>&1; then
         se "please make sure brew_bootstrap has run."
@@ -713,7 +735,7 @@ function mullvad_bootstrap() {
       swd=$(pwd)
       mkdir -p "$INSTALL_STAGING"
       cd "$INSTALL_STAGING"
-      if ! [ -f "Mullvad.pkg" ] || ! [ -f "Mullvad.asc" ]; then 
+      if ! [ -f "Mullvad.pkg" ] || ! [ -f "Mullvad.asc" ]; then
         wget https://mullvad.net/en/download/app/pkg/latest
         wget https://mullvad.net/en/download/app/pkg/latest/signature
         wget https://mullvad.net/media/mullvad-code-signing.asc
@@ -722,16 +744,16 @@ function mullvad_bootstrap() {
         mv signature Mullvad.asc
       fi
       verify=$(gpg --verify Mullvad.asc Mullvad.pkg)
-      if [ $? -ne 0 ]; then 
+      if [ $? -ne 0 ]; then
         se "Mullvad gpg verification failed."
         cd "$swd"
         return 1
       fi
-      if ! sudo installer -pkg Mullvad*.pkg -target /; then 
+      if ! sudo installer -pkg Mullvad*.pkg -target /; then
         se "installer failed with code $?"
         cd "$swd"
         return 1
-      else 
+      else
         cd "$swd"
 
         local caller="$FUNCNAME"
@@ -759,12 +781,12 @@ function mullvad_bootstrap() {
 
         # Install the package
         sudo apt update
-        if sudo apt install mullvad-vpn; then 
+        if sudo apt install mullvad-vpn; then
 
           local caller="$FUNCNAME"
           mb_ff "$caller"; return 0
-        fi 
-      else 
+        fi
+      else
         se "couldnt parse distro from $distro, or we dont have setup"
         se "code that is distro specific.  exiting."
         return 1
@@ -779,13 +801,13 @@ function mullvad_bootstrap() {
 
 function disarm_bootstrap() {
   if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
-  if ! disarm=$(type -p disarm); then 
+  if ! disarm=$(type -p disarm); then
     swd=$(pwd)
     mkdir -p "$INSTALL_STAGING/disarm"
     cd "$INSTALL_STAGING/disarm"
     curl https://newosxbook.com/tools/disarm.tar --output disarm.tar
     tar -xf disarm.tar
-    if [[ $(system_arch) == "x86_64" ]]; then 
+    if [[ $(system_arch) == "x86_64" ]]; then
       cp binaries/disarm.x86 $HOME/.local/bin/
       ln -sf $HOME/.local/bin/disarm.x86 $HOME/.local/bin/disarm
       mkdir -p $HOME/.local/share/multiarch
@@ -802,11 +824,11 @@ function disarm_bootstrap() {
 
 function mnlooto_bootstrap() {
   if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
-  if ! mn=$(type -p mn); then 
+  if ! mn=$(type -p mn); then
     if ! mnsh=$(type -p mn.sh); then
       # assume nothing is installed
       ghc https://github.com/krypted/looto.git
-      if ! [[ $(basename $(pwd)) == "looto" ]]; then 
+      if ! [[ $(basename $(pwd)) == "looto" ]]; then
         cd "$HOME/src/github/looto"
       fi
       cp looto.sh "$HOME/.local/bin/"
@@ -824,19 +846,19 @@ function digitalperformer_bootstrap() {
   if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   local swd=$(pwd)
   cd "$INSTALL_STAGING"
-  if ! [ -f "dp.pkg" ] || [[ "${1:-}" =~ \-r ]]; then 
+  if ! [ -f "dp.pkg" ] || [[ "${1:-}" =~ \-r ]]; then
     lynx -dump https://motu.com/en-us/download/product/489/ > /tmp/dp.txt
     link_number=$(cat /tmp/dp.txt | grep -A11 "Latest Downloads"| grep -A1 "Mac" |tail -n 1|awk -F'(' '{print$1}'|tr '[' ' '|tr ']' ' '|xargs)
     link=$(cat /tmp/dp.txt | grep "^ $link_number"| awk '{print$2}')
     se "Downloading $link"
-    curl -L -o dp.pkg -O -C - "$link" 
+    curl -L -o dp.pkg -O -C - "$link"
   fi
   local ts=$(fsts)
   local install_log="$INSTALL_LOGS/$filename.$ts.log"
-  if sudo installer -pkg "$INSTALL_STAGING/dp.pkg" -target / -verboseR -allowUntrusted > "$install_log"; then 
+  if sudo installer -pkg "$INSTALL_STAGING/dp.pkg" -target / -verboseR -allowUntrusted > "$install_log"; then
     se "installer reports successful install"
   fi
-  # lets double check 
+  # lets double check
   gout=$(grep "Digital Performer" <(ls /Applications))
   if [ $? -eq 0 ]; then
     mv "$filename" "$INSTALLED_SUCCESSFULLY"
@@ -869,11 +891,11 @@ function dphelpers_bootstrap() {
 }
 
 function locate_mac_updatedb_bootstrap() {
-  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then
     if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   fi
   sudo launchctl bootstrap /System/Library/LaunchDaemons/com.apple.locate.plist
-  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then
     local caller="$FUNCNAME"
     mb_ff "$caller"; return 0
   else
@@ -883,57 +905,57 @@ function locate_mac_updatedb_bootstrap() {
 
 # https://www.jeffgeerling.com/blog/2024/mounting-ext4-linux-usb-drive-on-macos-2024
 function mac_ext4_bootstrap() {
-  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then
     if ! timed_confirm_yes "Continue with $FUNCNAME?"; then return 0; fi
   fi
   local brew=$(type -p brew)
   if [ $? -gt 0 ]; then
-    if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+    if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then
       if ! is_completed "brew_bootstrap"; then brew_bootstrap; fi
     else
       brew_bootstrap
     fi
-  fi 
-  if ! brew install macfuse; then 
+  fi
+  if ! brew install macfuse; then
     se "Err $? brew install macfuse.  Cannot continue."
     return 1
   fi
-  if ! is_function "ghc"; then 
+  if ! is_function "ghc"; then
     source "$D/util.sh"
   fi
   local swd=$(pwd)
-  if ! ghc https://github.com/gerard/ext4fuse.git; then 
+  if ! ghc https://github.com/gerard/ext4fuse.git; then
     se "Err $? ghc https://github.com/gerard/ext4fuse.git Cannot continue."
     return 1
   fi
   err_cd="Could not cd into ext4fuse.  Cannot continue."
-  if [[ $(pwd) != "$HOME/src/github/ext4fuse" ]]; then 
-    if [ -d "$HOME/src/github/ext4fuse" ]; then 
+  if [[ $(pwd) != "$HOME/src/github/ext4fuse" ]]; then
+    if [ -d "$HOME/src/github/ext4fuse" ]; then
       cd "$HOME/src/github/ext4fuse"
-    elif [[ $(basename $(pwd)) != "ext4fuse" ]]; then 
-      if [ -d "ext4fuse" ]; then 
+    elif [[ $(basename $(pwd)) != "ext4fuse" ]]; then
+      if [ -d "ext4fuse" ]; then
         cd "ext4fuse"
       else
         se $err_cd
         return 1
       fi
-    else 
+    else
       se $err_cd
       return 1
     fi
   fi
-  if ! Make; then 
+  if ! Make; then
     se "Err $? Make.  Cannot Continue."
     return 1
   fi
   binpath="$(pwd)/ext4fuse"
-  if [ -f "$binpath" ]; then 
+  if [ -f "$binpath" ]; then
     ln -sf "$binpath" ".local/bin/"
-  else 
+  else
     se "Could not find ext4fuse binary in $(pwd) so not symlinking in \$PATH"
     return 1
   fi
-  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then 
+  if [ -n "$NEWMACBOOTSTRAP" ] && $NEWMACBOOTSTRAP; then
     local caller="$FUNCNAME"
     mb_ff "$caller"; return 0
   else
@@ -974,7 +996,7 @@ function konsole_bootstrap() {
   if ! is_function "term_bootstrap"; then source "$D/bootstraps.sh"; fi
   term_bootstrap
   local profile="$HOME/.local/share/konsole/td.profile"
-  if ! [ -f "${profile}" ]; then 
+  if ! [ -f "${profile}" ]; then
     cat <<EOF > "${profile}"
 [Appearance]
 ColorScheme=Afterglow
@@ -1007,7 +1029,7 @@ function qdbus_bootstrap() {
   distro="$(lsb_release -d 2>&1|egrep Desc|awk -F':' '{print$2}'|xargs)"
   if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
     sudo pacman -Sy qt6-tools
-    yay -Sy qt6-tools-desktop 
+    yay -Sy qt6-tools-desktop
     yay -Sy qt5-tools
   elif string_contains "(Debian|Ubuntu)" "$distro"; then
     sai qdbus-qt5 qdbus-qt6
@@ -1016,14 +1038,14 @@ function qdbus_bootstrap() {
 
 function snapd_teardown() {
   snap_installs=$(snap list |awk '{print$1}'|grep -v 'name')
-  for prog in $snap_installs; do 
+  for prog in $snap_installs; do
     sudo snap remove "$prog"
   done
   snap_installs=$(snap list |awk '{print$1}'|grep -v 'name')
-  for prog in $snap_installs; do 
+  for prog in $snap_installs; do
     sudo snap remove "$prog"
   done
-  sudo systemctl stop snapd 
+  sudo systemctl stop snapd
   sudo systemctl disable snapd
   sudo systemctl mask snapd
   sudo apt purge -y snapd
@@ -1043,10 +1065,10 @@ function synergy_debian_bootstrap_from_nx() {
     return 2
   fi
   if [ -d "/usr/NX" ]; then
-    if [ -f "/usr/NX/lib/libcrypto.so" ]; then  
+    if [ -f "/usr/NX/lib/libcrypto.so" ]; then
       libcrypto="/usr/NX/lib/libcrypto.so"
     fi
-    if [ -f "/usr/NX/lib/libssl.so" ]; then 
+    if [ -f "/usr/NX/lib/libssl.so" ]; then
       libssl="/usr/NX/lib/libssl.so"
     fi
   else
@@ -1058,7 +1080,7 @@ function synergy_debian_bootstrap_from_nx() {
     se "libcrypto.so and libssl.so should exist in /usr/lib/NX"
     return 4
   fi
-  if [ -z "$USERLIB" ]; then 
+  if [ -z "$USERLIB" ]; then
     mkdir -p "$HOME/.local/lib/synergy"
     USERLIB="$HOME/.local/lib/"
   fi
@@ -1066,11 +1088,11 @@ function synergy_debian_bootstrap_from_nx() {
   ln -sf "$libcrypto" "$slib/"
   ln -sf "$libssl" "$slib/"
 
-  # prepared by running edit-deb-control on the package downloaded from 
+  # prepared by running edit-deb-control on the package downloaded from
   # symless.com and removing the libssl dependency
   # https://github.com/trustdarkness/debianhelpers/blob/main/edit-deb-control.sh
   scp vulcan:/egdod/Backup/Software/Linux/synergy_1-mt-20240623.deb "$HOME/Downloads/"
-  
+
   install_util_load
   sai libgdk-pixbuf-xlib-2.0-0 libgdk-pixbuf2.0-0
   di "$HOME/Downloads/synergy_1.14.6-stable.06a860d9_debian10_amd64.deb"
@@ -1088,7 +1110,7 @@ function mb_ff() {
   mkdir -p "$INSTALL_LOGS"
   log="$INSTALL_LOGS/mac_bootstrap.log"
   touch "$log"
-  if [ -z $funcname ]; then 
+  if [ -z $funcname ]; then
     se "please pass \$FUNCNAME"
     return 1
   fi
