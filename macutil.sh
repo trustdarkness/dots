@@ -1,5 +1,83 @@
 #!/usr/bin/env bash
 
+#set -Eo pipefail -o functrace
+
+err_handler() {
+	pc="${1:-}"
+	src="${2:-}"
+	line="${3:-}"
+  cmd="${4:-}"
+	ret="${5:-}"
+	if [ -z "$src" ]; then 
+		echo "$pc"
+		return 0
+	fi
+	if [ -z "$LOGFILE" ]; then 
+	  LOGFILE="$LOGDIR/macutil.log"
+	fi
+	bn=$(basename "$src")
+	error "$bn: $line"
+	logvars=(src line cmd ret); d=$(debug); [ -n "$d" ] && trace $ret "$d"; return 0
+
+	
+	if ! is_function timed_confirm_yes_default_no; then util_env_load -u; fi
+	timed_confirm_yes_default_no "trace?" && trace $ret
+	return 0
+}
+
+# https://unix.stackexchange.com/questions/39623/trap-err-and-echoing-the-error-line
+## Outputs Front-Mater formatted failures for functions not returning 0
+## Use the following line after sourcing this file to set failure trap
+##    trap 'failure "LINENO" "BASH_LINENO" "${BASH_COMMAND}" "${?}"' ERR
+trace() {
+    local _code="${1:-0}"
+		local _debug="${2:-}"
+    local -n _lineno="${3:-LINENO}"
+    local -n _bash_lineno="${4:-BASH_LINENO}"
+    local _last_command="${5:-${BASH_COMMAND}}"
+
+		echo "$_debug"
+
+    ## Workaround for read EOF combo tripping traps
+    if ! ((_code)); then
+        return "${_code}"
+    fi
+
+    local _last_command_height="$(wc -l <<<"${_last_command}")"
+
+    local -a _output_array=()
+    _output_array+=(
+        '---'
+        "lines_history: [${_lineno} ${_bash_lineno[*]}]"
+        "function_trace: [${FUNCNAME[*]}]"
+        "exit_code: ${_code}"
+    )
+
+    if [[ "${#BASH_SOURCE[@]}" -gt '1' ]]; then
+        _output_array+=('source_trace:')
+        for _item in "${BASH_SOURCE[@]}"; do
+            _output_array+=("  - ${_item}")
+        done
+    else
+        _output_array+=("source_trace: [${BASH_SOURCE[*]}]")
+    fi
+
+    if [[ "${_last_command_height}" -gt '1' ]]; then
+        _output_array+=(
+            'last_command: ->'
+            "${_last_command}"
+        )
+    else
+        _output_array+=("last_command: ${_last_command}")
+    fi
+
+    _output_array+=('---')
+    printf '%s\n' "${_output_array[@]}" >&2
+    return 0
+}
+
+#trap 'previous_command=$this_command; this_command=$BASH_COMMAND; err_handler "$previous_command" "${BASH_SOURCE[0]}" "${BASH_LINENO[*]}" "${BASH_COMMAND}" "${?}"' ERR
+
 # Setting PATH for Python 3.12 and to ensure we get modern bash from brew
 # in /usr/local/bin before that MacOS crap in /bin
 if ! [[ "${PATH}" =~ .*.pathsource.* ]]; then 
@@ -32,6 +110,8 @@ MACOS_LOG_TSFMT="$MACOS_LOG_DATEFMT %H:%M:%S"
 
 APP_REGEX='.*.app'
 APP_IN_APPLICATIONS_FOLDER_REGEX='^/Applications/.*.app'
+
+TO_APPLEPATH="$D/applescripts/getApplepathFromPOSIXPath.applescript"
 
 # FSDATEFMT and FSTSFMT in util.sh
 function fsdate_to_logfmt {
@@ -348,6 +428,59 @@ function isvalidapplepath() {
   return 1
 }
 
+ toapplepath() {
+	usage() {
+		cat << EOF
+			toapplepath some/posix/path
+
+			Called with a relative or absolute (POSIX) path will return the colon 
+			separated applepath suitable for applescripts
+EOF
+    return 0
+	}
+	resolvepath() {
+		path="${1:-}"
+		swd="$(pwd)" # just in case
+		[ -d "$path" ] || return 1
+		cd "$path"; pwd; ret=$?; cd "$swd";
+		return $?
+	}
+	local posixpath="${1:-}"
+	local mangle=false
+	if ! [ -e "$posixpath" ]; then 
+	  usage
+		return 1
+	fi
+	local abspath=$(realpath "$posixpath")
+	# if [[ $(resolvepath "$posixpath") != $(resolvepath "$abspath") ]]; then usage; return 2; fi
+
+	if ! [ -x "$TO_APPLEPATH" ]; then
+	  if [ -f "$TO_APPLEPATH" ]; then
+		  if ! chmod +x "$TO_APPLEPATH"; then
+			  warn "$TO_APPLEPATH exists but couldn't be marked +x"
+				mangle=true
+			fi
+		elif [ -n "$TO_APPLEPATH" ]; then 
+		  w="global TO_APPLEPATH in ${BASH_SOURCE[0]} should point to an applescript "
+			w+="that converts paths properly but is $TO_APPLEPATH"
+			warn "$w"
+		  mangle=true
+		fi
+	fi
+	if $mangle; then 
+	  applepath=$(echo "${abspath:1}"|tr '/' ':'); ret=$?
+		if ! isvalidapplepath "$applepath"; then 
+		  # TODO link to github
+			error "Converting / to : was not sufficient.  Try again after setting TO_APPLEPATH."
+			return 3
+		fi
+	else
+	  applepath=$( ( eval "$TO_APPLEPATH" "$posixpath") 2> /dev/null); ret=$?
+	fi
+	echo "$applepath"
+	return $ret
+}
+
 # Creates a mac style alias of target at dest
 # Args:
 #  1 target
@@ -356,57 +489,59 @@ function isvalidapplepath() {
 function anyalias() {
   local target="${1:-}"
   local dest="${2:-}"
-  if [ -n "${target}" ]; then
-    if r=(stat "${target}"); then
-      local tbase=$(basename "${target}")
-      tq=$(printf '%s' "${target}")
-      tbq=$(printf '%s' "${tbase}")
-      if [ -d "${dest}" ]; then 
-        r=! $(echo "${dest}"|grep '^\/.*')
-        if $?; then 
-          dn=$(dirname "${dest}")
-          if [[ "${dn}" == "." ]]; then 
-            absposixpath="${pwd}/${dest}"
-          elif ! r=$(echo "${dn}"|grep '^\/.*'); then
-            absposixpath="$(pwd)/${dn}/${dest}"
-          elif r=$(echo "${dn}"|grep '^\/.*'); then
-            absposixpath="${dn}/${dest}"
-          else
-            >&2 printf "Couldn't make an absolute path form ${dest}"
-            return 1
-          fi
-        else
-          absposixpath="${dest}"
-        fi
-        applepath=$(echo "${absposixpath:1}"|tr '/' ':')
-        if isvalidapplepath "${applepath}"; then 
-          if ! is_function can_i_write; then 
-             util_env_load -f 
-          fi
-          if can_i_write "${absposixpath}"; then 
-  osascript <<END
+	local force=false
+	local quiet=false
+	local createpath
+	local aliasname
+	# target should be a file or directory
+  if ! [ -e "${target}" ]; then
+	  usage; return 1
+	fi
+	local tbn=$(basename "$target")
+	if [ -f "$dest" ]; then 
+	  if ! $quiet && ! $force; then 
+		  if can_i_write "$dest"; then 
+				if confirm_yes "$dest already exists, overwrite?"; then
+				  force=true
+				fi
+			else
+			  error "$dest exists and is not writeable, please use another name."
+				return 2
+			fi
+		fi
+	elif [ -d "$dest" ]; then 
+	  createpath="$dest"
+	elif [[ "$dest" == */* ]]; then 
+	  createpath=$(dirname "$dest")
+		if ! [ -d "$createpath" ]; then 
+			e="your second argument looks like a path, but $createpath "
+			e+="is not a directory."
+			usage 
+			return 2
+		fi
+		aliasname=$(basename "$dest")
+	else
+		createpath="$(pwd)"
+		aliasname="$dest"
+	fi
+	dapplepath=$(toapplepath "${createpath}")
+	if ! is_function can_i_write; then 
+			util_env_load -f 
+	fi
+	if can_i_write "${createpath}"; then 
+		# though we normally are strictly spaces not tabs, <<- ignores tabs
+		# allowing us to heredoc a bit more nicely if we tab
+		osa="osascript"
+	else
+		osa="sudo osascript"
+	fi
+	"$osa" <<END >/dev/null 2>&1
 tell application "Finder"
-set myApp to POSIX file "${tq}" as alias
-make new alias to myApp at "${applepath}"
-set name of result to "${tbq}"
+set myApp to POSIX file "${target}" as alias
+make new alias to myApp at "${dapplepath}"
+set name of result to "${aliasname}"
 end tell 
 END
-  echo "return $?"
-              else
-  sudo osascript <<END
-tell application "Finder"
-set myApp to POSIX file "${tq}" as alias
-make new alias to myApp at "${applepath}"
-set name of result to "${tbq}"
-end tell 
-END
-  echo "return $?"
-
-          fi
-        fi
-      fi
-    fi
-  fi
 }
 
 # creates a Mac style alias of a VST3 plugin in the system plugins folder
@@ -1209,24 +1344,25 @@ function reboot_single() (
 # https://stackoverflow.com/questions/3572030/bash-script-absolute-path-with-os-x
 # echos to console absolute path for the given relative path, following symlinks as
 # appropriate
-function realpath() (
+function realpath() {
   OURPWD=$PWD
-  cd "$(dirname ""${1:-}"")"
-  LINK=$(readlink "$(basename ""${1:-}"")")
+  odn=$(dirname "${1:-}"); cd "$odn"
+	obn=$(basename "${1:-}")
+  LINK=$(readlink "$obn"||echo)
   if [[ "$LINK" == "/" ]]; then 
     cd "$OURPWD"
     echo "$LINK"
     return 0
   fi
   while [ "$LINK" ]; do
-    cd "$(dirname "$LINK")"
-    LINK=$(readlink "$(basename ""${1:-}"")")
+    dn=$(dirname "$LINK"); cd "$dn"
+    LINK=$(readlink "$obn"||echo)
   done
-  REALPATH="$PWD/$(basename ""${1:-}"")"
+  REALPATH="$PWD/$obn"
   cd "$OURPWD"
   echo "$REALPATH"
   return 0
-)
+}
 
 # wrapper for csrutil status
 function sip_status() {
