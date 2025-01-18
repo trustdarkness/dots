@@ -79,11 +79,12 @@ function bootargs_bootstrap() {
 
 # disables amfi using amfi_get_out_of_my_way=1
 function disableamfioomw() {
+  BOOT_ARGS=()
   BOOT_ARGS+=( "-no-compat-check" )
   BOOT_ARGS+=( "amfi_get_out_of_my_way=1" )
   # https://github.com/MacEnhance/MacForge/issues/30
   BOOT_ARGS+=( "ipc_control_port_options=0" )
-  #sudo nvram boot-args="${BOOT_ARGS_final}"
+  sudo nvram boot-args="${BOOT_ARGS[@]}"
 }
 
 # disables amfi using amfi0x80
