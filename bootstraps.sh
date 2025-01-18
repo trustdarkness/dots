@@ -338,6 +338,36 @@ END
   fi
 }
 
+function thunar_sendto_bootstrap() {
+  if ! type -p zenity > /dev/null 2>&1; then
+    i; sayi zenity
+  fi
+  idir="$HOME/.local/share/Thunar/sendto"
+  ifile="${idir}/Send-to-chooser.desktop"
+  mkdir -p "$idir"
+  if ! [ -e "$ifile" ]; then
+    if cat << 'END' > "${ifile}"; then
+# https://forums.linuxmint.com/viewtopic.php?t=409088
+[Desktop Entry]
+Type=Application
+Version=0.1
+Enoding=UTF-8
+Exec=bash -c "cp %F $(zenity --file-selection --directory --title 'Copy to...')"
+Icon=stock_folder-move
+Name=Send-to-chooser
+END
+      echo "thunar now has an option for a send to chooser"
+      return 0
+    else
+      err "could not write heredoc to $ifile"
+      return 2
+    fi
+  else
+    err "$ifile already exists."
+    return 1
+  fi
+}
+
 function terminal_hack() {
   defaults write com.apple.Terminal 'Window Settings' -dict-add Basic '<dict><key>Font</key><data>YnBsaXN0MDDUAQIDBAUGBwpYJHZlcnNpb25ZJGFyY2hpdmVyVCR0b3BYJG9iamVjdHMSAAGGoF8QD05TS2V5ZWRBcmNoaXZlctEICVRyb290gAGkCwwVFlUkbnVsbNQNDg8QERITFFZOU1NpemVYTlNmRmxhZ3NWTlNOYW1lViRjbGFzcyNAJgAAAAAAABAQgAKAA1xIYWNrLVJlZ3VsYXLSFxgZGlokY2xhc3NuYW1lWCRjbGFzc2VzVk5TRm9udKIZG1hOU09iamVjdAgRGiQpMjdJTFFTWF5nbnd+hY6QkpShprG6wcQAAAAAAAABAQAAAAAAAAAcAAAAAAAAAAAAAAAAAAAAzQ==</data><key>FontAntialias</key><true /><key>FontWidthSpacing</key><real>1.004032258064516</real><key>ProfileCurrentVersion</key><real>2.07</real><key>name</key><string>Basic</string><key>type</key><string>Window Settings</string></dict>'
 }
