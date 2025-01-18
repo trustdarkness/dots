@@ -1,22 +1,24 @@
-#!/usr/local/env bash
-# This file is sourced from util.sh if that file is sourced on 
+#!/bin/bash
+# This file is sourced from util.sh if that file is sourced on
 # a linux box, after which it can be easily edited and resourced
-# by running vosutil or simply resourced by running sosutil, as 
+# by running vosutil or simply resourced by running sosutil, as
 # it is the os (specific) util.  There's a corresponding mac version
 # Expects the following globals to be in env:
 # TARGET - generally the remote system where backups are kept
 # BACKUP - relative path on that system to the root of the backup
 #          usually mouted over sshfs
 # BLK - an egrep compatible regex used as a blocilist to sift out
-#       noise on local filesystem searches piping locate through 
+#       noise on local filesystem searches piping locate through
 #       the dubious mgrep
-# LH - path to the root of the library_helpers repo (only used in 
+# LH - path to the root of the library_helpers repo (only used in
 #      the alias below, nothing will break)
 # D - path to the root of the dots repo
-# Other globals are handled internally if they're not present.  
-# This file may also rely on functions and globals available in 
+# Other globals are handled internally if they're not present.
+# This file may also rely on functions and globals available in
 # .bashrc (where util.sh is sourced from) amd existence.sh (also
 # sourced from .bashrc)
+source "$D/loader.sh"
+
 export BLK="(home|problem|egdod|ConfSaver|headers|man|locale|themes|icons)"
 alias du0="du -h --max-depth=0"
 alias du1="du -h --max-depth=1"
@@ -37,81 +39,166 @@ alias mgrep="grep -E -v \"$BLK\"|grep -E"
 alias slhu="source $LH/util.sh"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 
-mkdir -p /tmp/mpvsockets
+DISTRO="$(lsb_release -d 2>&1|grep -E Desc|awk -F':' '{print$2}'|xargs)"
+_etc_passwd_globals() {
+  _usage() {
+    se "sets NOLOGIN and WEBUSER based on distro if they are not set"
+    se " -r resets them, without -r if they're already set, this a noop"
+    return 0
+  }
+  r=false
+  for arg in "$@"; do
+    [[ "$arg" == \-r ]] && r=true || { _usage && return 1; }
+  done
+  if [ -n "$NOLOGIN" ] && [ -n "$WEBUSER" ] && ! $r; then
+    return 0
+  fi
+  if string_contains "(arch|Manjaro|endeavour)" "$DISTRO"; then
+    NOLOGIN="/usr/bin/nologin"
+    WEBUSER="nginx"
+  elif string_contains "(Debian|Ubuntu)" "$DISTRO"; then
+    NOLOGIN="/usr/sbin/nologin"
+    WEBUSER="www-data"
+  else
+    # this tends to be different on different distros
+    # TODO fix to properly detect whats already in /etc/passwd
+    NOLOGIN="$(type -p nologin)"
+    WEBUSER="www-data"
+  fi
+}
 
-# .globals is a symlink to the copy in the repo
-# for some reason, I did it that way instead of sourcing from
-# the repo directly.  Perhaps someday I will either remember
-# and update this comment or fix it.
-if ! declare -p "GH" > /dev/null 2>&1; then
-  source "$HOME/.globals"
-fi
-if ! declare -F "start_if_not_list" > /dev/null 2>&1; then
-  source "$D/conditional_starters.sh"
-fi
-
-distro="$(lsb_release -d 2>&1|grep -E Desc|awk -F':' '{print$2}'|xargs)"
-if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
-  nologin="/usr/bin/nologin"
-  webuser="nginx"
-elif string_contains "(Debian|Ubuntu)" "$distro"; then
-  nologin="/usr/sbin/nologin"
-  webuser="www-data"
-else
-  # this tends to be different on different distros
-  # TODO fix to properly detect whats already in /etc/passwd
-  nologin="$(type -p nologin)"
-  webuser="www-data"
-fi
-
-# Adds a real shell to www-data's account in /etc/password 
+# Adds a real shell to www-data's account in /etc/password
 # for the length of a sudo session, to assist in troubleshooting
 # when you ctrl-d sudo, www-data goes back to /usr/bin/nologin
 function wwwify () {
-  sudo sed -i.bak "/$webuser/ s#$nologin#/bin/bash#" /etc/passwd;
-  sudo -i -u $webuser $@;
-  sudo sed -i.bak "/$webuser/ s#/bin/bash#$nologin#" /etc/passwd;
+  _etc_passwd_globals
+  sudo sed -i.bak "/$WEBUSER/ s#$NOLOGIN#/bin/bash#" /etc/passwd;
+  sudo -i -u $WEBUSER $@;
+  sudo sed -i.bak "/$WEBUSER/ s#/bin/bash#$NOLOGIN#" /etc/passwd;
 }
 
 function airify () {
-  sudo sed -i.bak "/airsonic/ s#$nologin#/bin/bash#" /etc/passwd;
+  _etc_passwd_globals
+  sudo sed -i.bak "/airsonic/ s#$NOLOGIN#/bin/bash#" /etc/passwd;
   sudo -i -u airsonic $@;
-  sudo sed -i.bak "/airsonic/ s#/bin/bash#$nologin#" /etc/passwd;
+  sudo sed -i.bak "/airsonic/ s#/bin/bash#$NOLOGIN#" /etc/passwd;
 }
 
-# similar to wwwify, but for mastadon, a real shell lasting  
+# similar to wwwify, but for mastadon, a real shell lasting
 # for the length of a sudo session, to assist in troubleshooting
 # when you ctrl-d sudo, mastadon goes back to /usr/bin/nologin
 # assuming i ever set it up
 function mastify() {
-  sudo sed -i.bak "/mastodon/ s#$nologin#/bin/bash#" /etc/passwd;
+  _etc_passwd_globals
+  sudo sed -i.bak "/mastodon/ s#$NOLOGIN#/bin/bash#" /etc/passwd;
   sudo -i -u mastodon $@;
-  sudo sed -i.bak "/mastodon/ s#/bin/bash#$nologin#" /etc/passwd;
+  sudo sed -i.bak "/mastodon/ s#/bin/bash#$NOLOGIN#" /etc/passwd;
 }
+
+function get_grab_events() {
+  valid_mouse_devices=(
+    pointer
+    mouse
+    "core pointer"
+    "virtual core pointer"
+    # are there others? touchpads? trackpoints?
+  )
+  valid_keyboard_devices=(
+    keyboard
+    'core keyboard'
+    'virtual core keyboard'
+  )
+  allgrabs=false
+  onlylastgrab=true
+  metadata=false
+  device=
+  optspec="akmMd:h"
+  unset OPTIND
+  unset optchar
+  while getopts "${optspec}" optchar; do
+	local OPTIND
+	case "${optchar}" in
+	  a)
+      allgrabs=true
+      onlylastgrab=false
+      ;;
+	  M)
+      metadata=true
+      ;;
+    d)
+      devices+=("$OPTARG")
+      ;;
+    k)
+      devices+=(keyboard)
+      ;;
+    m)
+      device+=(mouse)
+      ;;
+	  h)
+		usage
+		return 0
+		;;
+	  *)
+		usage
+		return 1
+		;;
+	esac
+  done
+
+  if [ -d "$CACHE" ]; then
+    xlog="/var/log/Xorg.0.log"
+    luc="$CACHE/com.trustdarkness.linuxutil"
+    # below guarantees dirname $dxlog exists and is writeable
+    mkdir -p "$luc"; ret=$?; [ $ret -gt 0 ] && return 1
+    ts=$(fsts)
+    appendage_name="${FUNCNAME}_${fsts}"
+    # below guarantees $xlog exists
+    bn=$(basename "$xlog"); ret=$?; [ $ret -gt 0 ] && return 2
+    # "destructive" xlog
+    dxlog="$luc/${bn}_${appendage_name}"
+    # incase we need to be destructive
+    cp "$xlog" "$dxlog"; ret=$?; [ $ret -gt 0 ] && return 3
+    if $onlylastgrab; then
+      xloglen=$(wc -l "$xlog"|awk '{print$1}'); is_int "$xloglen" || return 4
+    fi
+    # lc = log command
+    lc xdotool key "XF86LogGrabInfo"
+    if ! $allgrabs; then
+      dxloglen=$(wc -l "$dxlog"|awk '{print$1}'); is_int "$dxloglen" || return 6
+      grabs_len=$((dxloglen-xloglen))
+      grablog="$CACHE/grablog_$ts"
+      tail -n $xloglen "$dxlog" > "$grablog"; [ -f "$grablog" ] || return 7  #|grep -n -m1 -A5 graba
+      grabloglen=$(wc -l "$grablog"|awk '{print$1}'); is_int "$grabloglen"|| return 8
+      logvars=(xloglen newxloglen grabloglen grabslen); debug
+    else
+      grep -A4 'grab 0x' "$dxlog"
+    fi
+  fi
+}
+
 
 # tries to kill major gui processes to force X11 to restart
 function guikiller() {
   keywords="xfce kde plasma kwin"
-  for alive in $keywords; do 
+  for alive in $keywords; do
     pkill -i $alive
   done
 }
 
 function live_chroot() {
   mountpoint="${1:-/mnt}"
-  if ! [ -d "$mountpoint/boot" ]; then 
+  if ! [ -d "$mountpoint/boot" ]; then
     echo "$moutpoint/boot doesn't exist, check your mounts"
     return 1
   fi
   efi=$(ls "$mountpoint/boot/efi")
-  if [ -z "$efi" ]; then 
+  if [ -z "$efi" ]; then
     echo "$mountpoint/boot/efi seems to be empty, check your mounts"
   fi
 
-  for i in /dev /dev/pts /proc /sys /run; do sudo mount -B $i ${mountpoint}$i; done 
-  distro="$(lsb_release -d 2>&1|grep -E Desc|awk -F':' '{print$2}'|xargs)"
-  if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
-    if ! type -p arch-chroot > /dev/null 2>&1; then 
+  for i in /dev /dev/pts /proc /sys /run; do sudo mount -B $i ${mountpoint}$i; done
+  if string_contains "(arch|Manjaro|endeavour)" "$DISTRO"; then
+    if ! type -p arch-chroot > /dev/null 2>&1; then
       sudo pacman -Sy arch-install-scripts
       sudo arch-chroot "$mountpoint"
     fi
@@ -124,17 +211,17 @@ function live_chroot() {
 function use27 {
   export PYTHONPATH="/usr/local/lib/python2.7/dist-packages:/usr/deprecated/lib/python2.7/"
   if ! [[ "${PATH}" == *"/usr/local/deprecated/bin"* ]]; then
-    export PATH="/usr/local/deprecated/bin:$PATH"
+    path_prepend "/usr/local/deprecated/bin"
   fi
   alias python=/usr/deprecated/bin/python2.7
 }
 
 # makes the local env use python 3.10
 function use310 {
-  if [ -d "/usr/deprecated/" ]; then 
-    if [ -f "/usr/deprecated/bin/python3.10" ]; then 
+  if [ -d "/usr/deprecated/" ]; then
+    if [ -f "/usr/deprecated/bin/python3.10" ]; then
       export PYTHONPATH=/usr/deprecated/lib/python3.10
-      export PATH=/usr/local/deprecated/bin:$PATH
+      path_prepend "/usr/local/deprecated/bin"
       alias python=/usr/deprecated/bin/python3.10
       alias python3=/usr/deprecated/bin/python3.10
     else
@@ -150,58 +237,94 @@ function sublist_xdg_data_dirs() {
   IFS=$':'; for dir in $XDG_DATA_DIRS; do ls $dir; done
 }
 
-function xdg_disable_autostart() {
-  to_disable=${1:-}
-  xdg_autostart_dir="/etc/xdg/autostart/"
-  disabled="/etc/xdg/disabled"
-
-  if [ -f "$xdg_autostart_dir/$to_disable" ]; then 
-    echo "moving $to_disable to $disabled"
-    sudo mkdir -p "$disabled"
-    sudo mv $xdg_autostart_dir/$to_disable $disabled
-    code=$?
-    if [ $code -gt 0 ]; then 
-      se "mv failed code $code"
-      return $code
-    fi
-    return 0
-  else
-    echo "could not find $to_disable in $xdg_autostart_dir"
-    return 1
-  fi
+_autostart_globals() {
+  XDG_AUTOSTART="/etc/xdg/autostart"
+  USER_AUTOSTART="$HOME/.config/autostart"
+  _AUTOSTART=( "${XDG_AUTOSTART}" "${USER_AUTOSTART}" )
 }
 
-_xdg_autocomplete() {
-local cur
-    cur=${COMP_WORDS[COMP_CWORD]}
-    COMPREPLY=( $(compgen -f /etc/xdg/autostart/$cur | cut -d"/" -f5 ) )
-    }
-   complete -o filenames -F _xdg_autocomplete xdg_disable_autostart
+autostart-ls() {
+  _usage() {
+    se "autostart-ls list commands and programs set to start with session"
+    se " "
+    se "Args: -u user-level -s system-level -a all, both user and system"
+  }
+  optspec="usa:h"
+  _autostart_globals
+  unset OPTIND
+  unset OPTARG
+  unset optchar
+  while getopts "${optspec}" optchar; do
+    case "${optchar}" in
+      u)
+        dirs=( "$USER_AUTOSTART" )
+        ;;
+      s)
+        dirs=( "$XDG_AUTOSTART" )
+        ;;
+      a)
+        dirs=( "${_AUTOSTART[@]}" )
+        ;;
+      h)
+        _usage; return 0
+        ;;
+    esac
+  done
+  [ -n "$dirs" ] || dirs=( "${_AUTOSTART[@]}" )
+  for dir in "${dirs[@]}"; do
+    for path in "${dir}"/*; do
+      echo "$(basename "$(basename "$path")" .desktop)";
+    done
+  done
+}
 
+function autostart-disable() {
+  xdg_autostart_dir="/etc/xdg/autostart/"
+  disabled="/etc/xdg/disabled"
+  failures=0
+  for arg in "$@"; do
+    local to_disable="$xdg_autostart_dir/$arg"
+    if ! [ -f "$to_disable" ]; then to_disable="$to_disable.desktop"; fi
+    if [ -f "$to_disable" ]; then
+      echo "moving $to_disable to $disabled"
+      sudo mkdir -p "$disabled"
+      if ! sudo mv "$xdg_autostart_dir/$to_disable" $disabled; then
+        ((failures++))
+      fi
+    else
+      warn "could not find $to_disable in $xdg_autostart_dir"
+    fi
+  done
+  return $failures
+}
 
-vlcplugindir='/usr/lib/vlc/plugins'
+# TODO (low) fix autocomplete for loop error
+# complete -W "$(autostart-ls)" xdg_disable_autostart
+
+vlcplugins='/usr/lib/vlc/plugins'
 vlcpluginsdisabled='/usr/lib/vlc/plugins.disabled'
+vlcextensions='/usr/lib/vlc/lua/extensions/'
 
 function vlc_extensions() {
-  ls /usr/lib/vlc/lua/extensions/
+  ls "$vlcextensions"
 }
 
 function vlc_plugin_categories() {
-  ls "$vlcplugindir"
+  ls "$vlcplugins"
 }
 
 function vlc_plugins() {
-  for cat in $(vlc_plugin_categories); do 
+  for cat in $(vlc_plugin_categories); do
     echo "$cat:"
-    (for plugin in "$vlcplugindir"/"$cat"/*; do 
+    (for plugin in "$vlcplugindir"/"$cat"/*; do
       echo "  $(basename $plugin)"
     done) | column
     echo
   done
   disabled="$vlcpluginsdisabled/*"
-  if [ -n "$disabled" ]; then 
+  if [ -n "$disabled" ]; then
     echo "disabled:"
-    (for plugin in $disabled; do 
+    (for plugin in $disabled; do
       echo "  $(basename $plugin)"
     done) |column
   fi
@@ -210,11 +333,11 @@ function vlc_plugins() {
 function vlc_plugin_disable() {
   to_disable="${1:-}"
 
-  if ! [ -f "$to_disable" ]; then 
+  if ! [ -f "$to_disable" ]; then
     # assume we got a basename
-    if [ -f "${vlcplugindir}/${to_disable}" ]; then
-      bn="${to_disable}" 
-      to_disable="${vlcplugindir}/${to_disable}"
+    if [ -f "${vlcplugins}/${to_disable}" ]; then
+      bn="${to_disable}"
+      to_disable="${vlcplugins}/${to_disable}"
     else
       return 1
     fi
@@ -222,50 +345,17 @@ function vlc_plugin_disable() {
     bn=$(basename "$to_disable")
   fi
   sudo mkdir -p "$vlcpluginsdisabled"
-  if ! sudo mv "$to_disable" "$vlcpluginsdisabled"; then 
+  if ! sudo mv "$to_disable" "$vlcpluginsdisabled"; then
     ret=$?
     se "err $ret: sudo mv $to_disable $vlcpluginsdisabled"
     return $ret
   fi
-  return 0    
+  return 0
 }
-
-# if firewalld is installed, give us some helper funcs 
-# for it.  if this gets any longer, it should move to its
-# own, loaded on demand, helper library
-FIREWALLD=$(type -p firewall-cmd)
-if [ -n "$FIREWALLD" ]; then
-  function sfwp () {
-    local input="${1:-}"
-    if [ -n "${input}" ]; then 
-      if [[ "${input}" =~ ^[0-9]*\/tcp|udp ]]; then
-        sudo $fwd --add-port "${input}" --zone public --permanent
-        sudo $fwd --reload
-        ssr firewalld
-        return 0
-      fi
-    fi
-    >&2 printf "Please specify port/protocol like 22/tcp"
-    return 1
-  }
-
-  function sfwrm () {
-    local input="${1:-}"
-    if [ -n "${input}" ]; then 
-      if [[ "${input}" =~ ^[0-9]*\/tcp|udp ]]; then
-        sudo firewall-cmd --remove-port $1 --zone public --permanent
-        sudo firewall-cmd --reload 
-        ssr firewalld
-      fi
-    fi
-    >&2 printf "Please specify port/protocol like 22/tcp"
-    return 1
-  }
-fi
 
 # returns the best guess for the running desktop session
 function whodesktop() {
-  if [ -n "${DESKTOP_SESSION}" ]; then 
+  if [ -n "${DESKTOP_SESSION}" ]; then
     echo "${DESKTOP_SESSION}"
   else
     e=$PS "e16"
@@ -324,11 +414,11 @@ function wswineinstall() {
   swd="$(pwd)"
   cd "$DRIVEC" || no_cd
   if [ -f "$1" ]; then
-    se "copying $1 to $TMP for runtime consistency" 
+    se "copying $1 to $TMP for runtime consistency"
     cp "$1" "$TMP"
     bn_src=$(basename "$1")
     printf -v path_dst "%s/%s" "$TMP" "$bn_src"
-    if ! [ -f "$path_dst" ]; then 
+    if ! [ -f "$path_dst" ]; then
       se "copy failed, executing original command as entered"
       se "WINEPREFIX=\"$WINEPFX\" WINEARCH=\"$WINEARCH\" $WINEBIN $@"
       se "..."
@@ -376,7 +466,7 @@ function fontsinstalluser() {
     basename="${1:-}"
     # TODO: check system font dirs as well
     num_found=$(find "$HOME/.fonts" -iname "*$basename" | wc -l)
-    if gt "$num_found" 0; then 
+    if gt "$num_found" 0; then
       return 0
     fi
     return 1
@@ -389,10 +479,10 @@ function fontsinstalluser() {
   while IFS= read -r -d $'\0'; do
     foundfonts+=("$REPLY") # REPLY is the default
   done < <(find . -regextype posix-egrep -regex '(.*.otf|.*.ttf)' -print0 2> /dev/null)
-  for fontpath in "${foundfonts[@]}"; do 
+  for fontpath in "${foundfonts[@]}"; do
     bn=$(basename "$fontpath")
     if ! fontinstalled "$bn"; then
-      if cp -r "$fontpath" "$HOME/.fonts"; then 
+      if cp -r "$fontpath" "$HOME/.fonts"; then
         se "installed $bn to ~/.fonts"
         ((install_ctr++))
       else
@@ -406,16 +496,16 @@ function fontsinstalluser() {
   bold=$(tput bold)
   normal=$(tput sgr0)
   >&2 printf "${bold}Summary -- ${normal}"
-  if gt "$install_ctr" 0; then 
-    >&2 printf "new fonts installed: ${bold}%d ${normal}" "$install_ctr"   
+  if gt "$install_ctr" 0; then
+    >&2 printf "new fonts installed: ${bold}%d ${normal}" "$install_ctr"
   fi
-  if gt "$exists_ctr" 0; then 
+  if gt "$exists_ctr" 0; then
     >&2 printf "skipped (already installed): ${bold}%d ${normal}" "$exists_ctr"
   fi
   if gt "$error_ctr" 0; then
     >&2 printf "failed: ${bold}%d ${normal}\n" "$error_ctr"
     return $error_ctr
-  fi  
+  fi
   >&2 printf "\n"
   return 0
 }
@@ -425,7 +515,7 @@ alias skutil="source $D/kutil.sh"
 alias vkutil="vim $D/kutil.sh && skutil"
 
 function k() {
-  case "${1}" in 
+  case "${1}" in
     "-q")
       export QT_QPA_PLATFORMTHEME="qt5ct"
       ;;
@@ -442,31 +532,31 @@ function k() {
 
 # if we think this is plasma, load the kutil
 desktop=whodesktop 2> /dev/null
-if [[ "$desktop" == "plasma" ]]; then 
+if [[ "$desktop" == "plasma" ]]; then
   k
 fi
 
 # load cargo
 CARGO=$(type -p cargo);
 if [ -n "$CARGO" ]; then
-  if ! string_contains "cargo" "$PATH"; then 
+  if ! string_contains "cargo" "$PATH"; then
     path_append "$HOME/.cargo/bin"
   fi
-  if [ -f "$HOME/.cargo/env" ]; then 
+  if [ -f "$HOME/.cargo/env" ]; then
     source "$HOME/.cargo/env"
   fi
 fi
 
 # load npm
-PNPM=$(type -p pnpm);
+PNPM=$(type -p pnpm)||true;
 if [ -n "$PNPM" ]; then
   # pnpm
   export PNPM_HOME="/home/mt/.local/share/pnpm"
   case ":$PATH:" in
     *":$PNPM_HOME:"*) ;;
     *)
-      if ! [[ "${PATH}" == *"$PNPM_HOME"* ]]; then 
-        export PATH="$PNPM_HOME:$PATH" 
+      if ! [[ "${PATH}" == *"$PNPM_HOME"* ]]; then
+        path_prepend "$PNPM_HOME"
       fi
       ;;
   esac
@@ -480,10 +570,10 @@ function b() {
 
 function thunar_add_send_to_dest() {
   local new_dest="${1:-}"
-  if ! [ -f "${new_dest}" ]; then 
+  if ! [ -f "${new_dest}" ]; then
     echo "${new_dest} doesn't seem to exist, would you like to create it?"
-    if confirm_yes "Y/n:"; then 
-      if not mkdir -p "${new_dest}"; then 
+    if confirm_yes "Y/n:"; then
+      if not mkdir -p "${new_dest}"; then
         se "mkdir -p ${new_dest} failed with $?"
         return 1
       fi
@@ -491,7 +581,7 @@ function thunar_add_send_to_dest() {
       se "exiting."
       return 0
     fi
-  fi 
+  fi
   local bn=$(basename "${new_dest}")
   cat << EOF > "$D/.local/share/Thunar/sendto/${bn}.desktop"
 [Desktop Entry]
@@ -514,10 +604,10 @@ if [[ "${PYTHONPATH}" != "*.local/sourced*" ]]; then
 fi
 
 # 20240923 .bashrc sets PATH="$HOME/bin:$HOME/.local/bin:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin$HOME/Applications:/usr/sbin:$PATH:$HOME/.local/sourced"
-if [[ "${PATH}" != *"$HOME/src/google/flutter/bin"* ]]; then 
+if [[ "${PATH}" != *"$HOME/src/google/flutter/bin"* ]]; then
   path_append "$HOME/src/google/flutter/bin"
 fi
-if [[ "${PATH}" != *"$HOME/src/github/eww/target/release"* ]]; then 
+if [[ "${PATH}" != *"$HOME/src/github/eww/target/release"* ]]; then
   path_append "$HOME/src/github/eww/target/release"
 fi
 
@@ -553,10 +643,10 @@ function dbus_session_service_info() {
   declare -a typesigs
   available=()
   typesigs=()
-  for line in $(qdbus "$service" "$path"); do 
+  for line in $(qdbus "$service" "$path"); do
     type=$(echo "$line"|awk '{print$1}')
-    
-    if [[ "$type" == "property" ]]; then 
+
+    if [[ "$type" == "property" ]]; then
       returntype=$(echo "$line"|awk '{print$3}')
       writeable=$(echo "$line"|awk '{print$2}')
       objname=$(echo "$line"|awk '{$1=$2=$3=""; print$0}')
@@ -572,7 +662,7 @@ function dbus_session_service_info() {
   echo "Available objects to explore in $service $path are:"
   echo "---------------------------------------------------"
   echo
-  if ! [ "${#typesigs[@]}" -eq "${#available[@]}" ]; then 
+  if ! [ "${#typesigs[@]}" -eq "${#available[@]}" ]; then
     se "data retrieval error, typesigs and available differently sized"
     return 1
   fi
@@ -601,14 +691,14 @@ function dbus_session_service_info() {
 function dbus_search() {
   for service in $(qdbus "${1:-}"); do
     echo "* $service"
-    for path in $(qdbus "$service"); do 
+    for path in $(qdbus "$service"); do
       echo "** $path"
-      for item in $(qdbus "$service" "$path"); do 
+      for item in $(qdbus "$service" "$path"); do
         echo "- $item"
       done
     done
   done
 }
- 
 
-	
+
+
