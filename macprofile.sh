@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 launchctl setenv MACPROFILED TRUE
-
 launchctl setenv POWERLINE TRUE
 
 # these get rid of the annoying bubbles and update nags in systemprefs if you are
@@ -20,11 +19,10 @@ if [ -z "$bubblecheck" ]; then
 fi
 
 ds_store_network=$(defaults read com.apple.desktopservices DSDontWriteNetworkStores)
-if [ -z "$ds_store_network" ] || [ "$ds_store_network" -ne 1 ]; then 
+if [ -z "$ds_store_network" ] || [ "$ds_store_network" -ne 1 ]; then
   defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool TRUE
 fi
 relaunch=$(defaults read com.apple.loginwindow LoginwindowLaunchesRelaunchApps)
 if [ -z "$relaunch" ] || [ "$relaunch" -ne 0 ]; then
   defaults write com.apple.loginwindow LoginwindowLaunchesRelaunchApps -bool FALSE
 fi
-  
