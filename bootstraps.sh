@@ -296,42 +296,76 @@ function bash_bootstrap() {
 function thunar_sorting_bootstrap() {
   whichThunar=$(type -p Thunar)
   thunarParent=$(dirname "$whichThunar")
-  declare -a b4
-  found=false
-  local IFS='/'
-  for pathel in $PATH; do
-    if [[ "$pathel" != "$thunarParent" ]] && ! $found; then
-      b4+=( "$pathel" )
-    elif [[ "$pathel" == "$thunarParent" ]]; then
-      found=true
-      break
-    fi
-  done
-  echo "enabling thunar sorting can be done in any of the following"
-  echo "dirs in your PATH... Do you have a preference?"
-  choice=$(choices -e "${b4[@]}")
-  if is_int "$choice"; then
-    if lt "$choice"  ${!b4[@]}; then
-      if can_i_write "${b4[$choice]}"; then
-        command="cat"
+  if [ -d "$HOME/.local/bin" ]; then
+    exedir="$HOME/.local/bin"
+  elif [ -d "$HOME/bin" ]; then
+    exedir="$HOME/bin"
+  fi
+  if [ -z "$VALID_POSIXPATHS_REGEX_ZERO_OR" ]; then
+    source "$D/util.sh"
+  fi
+  r1=$(sed 's@/@\\/@g' <<< "$exedir")
+  r2=$(sed 's@/@\\/@g' <<< "$thunarParent")
+  if ! [[ $PATH =~ .*$r1:.*:$r2.* ]]; then
+    if confirm_yes "ok to move $exedir to front of \$PATH?"; then
+      if path-remove "$exedir"; then
+        if ! path_prepend "$exedir"; then
+          err "path_prepend $exedir failed $?"
+          return 2
+        fi
       else
-        command="sudo cat"
+        err "path-remove $exedir failed $?"
+        return 3
       fi
-      if ! [ -f "${b4[$choice]}/Thunar" ]; then
-$command << 'END' > "${b4[$choice]}/Thunar"
+    else
+      warn "user abort"
+      return 100
+    fi
+  fi
+  if ! [ -f "${exedir}/Thunar" ]; then
+cat << 'END' > "${exedir}/Thunar"
 #!/bin/bash
 LC_COLLATE=C /usr/bin/Thunar "$@" &
 END
-      echo "Thunar should now sort _files before others,"
-      echo "changes were written to ${b4[$choice]}/Thunar."
-return 0
-      else
-        echo "${b4[$choice]}/Thunar already exists, you may want to"
-        echo "investigate or start over and choose a different option."
-      fi
-    fi
+    chmod +x "${exedir}/Thunar"
+    echo "Thunar should now sort _files before others,"
+    echo "changes were written to ${exedir}/Thunar"
+    return 0
+  else
+    echo "${exedir}/Thunar already exists, you may want to"
+    echo "investigate"
+    return 1
   fi
-  echo "couldn't interpret your choice or error writing file."
+}
+
+function thunar_sendto_bootstrap() {
+  if ! type -p zenity > /dev/null 2>&1; then
+    i; sayi zenity
+  fi
+  idir="$HOME/.local/share/Thunar/sendto"
+  ifile="${idir}/Send-to-chooser.desktop"
+  mkdir -p "$idir"
+  if ! [ -e "$ifile" ]; then
+    if cat << 'END' > "${ifile}"; then
+# https://forums.linuxmint.com/viewtopic.php?t=409088
+[Desktop Entry]
+Type=Application
+Version=0.1
+Enoding=UTF-8
+Exec=bash -c "cp %F $(zenity --file-selection --directory --title 'Copy to...')"
+Icon=stock_folder-move
+Name=Send-to-chooser
+END
+      echo "thunar now has an option for a send to chooser"
+      return 0
+    else
+      err "could not write heredoc to $ifile"
+      return 2
+    fi
+  else
+    err "$ifile already exists."
+    return 1
+  fi
 }
 
 function terminal_hack() {

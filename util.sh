@@ -646,6 +646,12 @@ function colnum() {
   return 1
 }
 
+# https://www.reddit.com/r/sysadmin/comments/t5xnco/curl_wtfismyipcomtext_fast_way_to_find_a/
+ip-get-external() {
+  curl wtfismyip.com/text
+  return $?
+}
+
 # Normalize os detection for consistency, hopefully reducing the chance
 # of simple typo, etc mistakes and increasing readability
 function is_mac() {

@@ -22,6 +22,23 @@ function path_prepend() {
 }
 export -f path_prepend
 
+path-remove() {
+  new_path=""
+  ts=$(fsts)
+  while IFS=":" read -r -d":" pathel; do
+    if [[ $pathel != "${1:-}" ]]; then
+      new_path+="${pathel}:"
+    fi
+  done < <(echo "$PATH")
+  if [ -n "$new_path" ]; then
+    declare -g "old_path_path_remove_$ts=$PATH"
+    PATH="$new_path"
+    return 0
+  else
+    return 1
+  fi
+}
+
 path_additions=(
   "$HOME/bin"
   "$HOME/.local/bin"
