@@ -82,7 +82,7 @@ else # assume linux
 
   d=$(date +"%Y%m%d")
   mkdir -p "$HOME/.local/share/bash_histories/$d"
-  cp -r $HOME/.bash_history* "$HOME/.local/share/bash_histories/$d"
+  cp -r "$HOME/.bash_history"* "$HOME/.local/share/bash_histories/$d"
 
   if [[ "$DESKTOP_SESSION" == "plasma" ]]; then
     source "$D/kutil.sh"
