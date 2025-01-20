@@ -1010,7 +1010,7 @@ loader-add() {
   bashlib="${1:-}"
   if ! is_absolute "$bashlib"; then
     abspath=$(realpath "$bashlib")
-    if [[ "$abspath" == "$(realpath "$D/$bashlib"])" ]]; then
+    if [[ "$abspath" == "$(realpath "$D/$bashlib")" ]]; then
       bashlib="$D/$bashlib"
     else
       bashlib="$abspath"
