@@ -133,3 +133,56 @@ _unset_pathlibsh_fs() {
 }
 
 ######## /home/mt/src/github/dots/pathlib.sh function loaders end here ##########
+ 
+######## /home/mt/src/github/dots/user_prompts.sh function loaders begin here ########
+declare -F "get_keypress" > /dev/null 2>&1 || get_keypress() {
+  unset -f get_keypress get_yes_keypress confirm_yes confirm_yes_default_no get_timed_keypress get_timed_yes timed_confirm_yes timed_confirm_yes_default_no choices; source "/home/mt/src/github/dots/user_prompts.sh"; get_keypress "$@"
+  return "$?"
+}
+
+declare -F "get_yes_keypress" > /dev/null 2>&1 || get_yes_keypress() {
+  unset -f get_keypress get_yes_keypress confirm_yes confirm_yes_default_no get_timed_keypress get_timed_yes timed_confirm_yes timed_confirm_yes_default_no choices; source "/home/mt/src/github/dots/user_prompts.sh"; get_yes_keypress "$@"
+  return "$?"
+}
+
+declare -F "confirm_yes" > /dev/null 2>&1 || confirm_yes() {
+  unset -f get_keypress get_yes_keypress confirm_yes confirm_yes_default_no get_timed_keypress get_timed_yes timed_confirm_yes timed_confirm_yes_default_no choices; source "/home/mt/src/github/dots/user_prompts.sh"; confirm_yes "$@"
+  return "$?"
+}
+
+declare -F "confirm_yes_default_no" > /dev/null 2>&1 || confirm_yes_default_no() {
+  unset -f get_keypress get_yes_keypress confirm_yes confirm_yes_default_no get_timed_keypress get_timed_yes timed_confirm_yes timed_confirm_yes_default_no choices; source "/home/mt/src/github/dots/user_prompts.sh"; confirm_yes_default_no "$@"
+  return "$?"
+}
+
+declare -F "get_timed_keypress" > /dev/null 2>&1 || get_timed_keypress() {
+  unset -f get_keypress get_yes_keypress confirm_yes confirm_yes_default_no get_timed_keypress get_timed_yes timed_confirm_yes timed_confirm_yes_default_no choices; source "/home/mt/src/github/dots/user_prompts.sh"; get_timed_keypress "$@"
+  return "$?"
+}
+
+declare -F "get_timed_yes" > /dev/null 2>&1 || get_timed_yes() {
+  unset -f get_keypress get_yes_keypress confirm_yes confirm_yes_default_no get_timed_keypress get_timed_yes timed_confirm_yes timed_confirm_yes_default_no choices; source "/home/mt/src/github/dots/user_prompts.sh"; get_timed_yes "$@"
+  return "$?"
+}
+
+declare -F "timed_confirm_yes" > /dev/null 2>&1 || timed_confirm_yes() {
+  unset -f get_keypress get_yes_keypress confirm_yes confirm_yes_default_no get_timed_keypress get_timed_yes timed_confirm_yes timed_confirm_yes_default_no choices; source "/home/mt/src/github/dots/user_prompts.sh"; timed_confirm_yes "$@"
+  return "$?"
+}
+
+declare -F "timed_confirm_yes_default_no" > /dev/null 2>&1 || timed_confirm_yes_default_no() {
+  unset -f get_keypress get_yes_keypress confirm_yes confirm_yes_default_no get_timed_keypress get_timed_yes timed_confirm_yes timed_confirm_yes_default_no choices; source "/home/mt/src/github/dots/user_prompts.sh"; timed_confirm_yes_default_no "$@"
+  return "$?"
+}
+
+declare -F "choices" > /dev/null 2>&1 || choices() {
+  unset -f get_keypress get_yes_keypress confirm_yes confirm_yes_default_no get_timed_keypress get_timed_yes timed_confirm_yes timed_confirm_yes_default_no choices; source "/home/mt/src/github/dots/user_prompts.sh"; choices "$@"
+  return "$?"
+}
+
+_unset_userpromptssh_fs() {
+  unset -f get_keypress get_yes_keypress confirm_yes confirm_yes_default_no get_timed_keypress get_timed_yes timed_confirm_yes timed_confirm_yes_default_no choices;
+  return "$?"
+}
+
+######## /home/mt/src/github/dots/user_prompts.sh function loaders end here ##########
