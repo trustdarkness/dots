@@ -198,15 +198,17 @@ function tru() {
 }
 
 function untru() {
-  is_it="${1:-}"
+  is_isnt="${1:-}"
   if is_int ${it_isnt}; then
-    if [ ${it_isnt} -eq 1 ]; then
+    if [ ${it_isnt} -ne 0 ]; then
       return 0
     fi
-  elif [[ "${it_isnt}" == "false" ]]; then
+  elif [[ "${it_isnt}" != "true" ]]; then
     return 0
   fi
-  return 1
+  # we want to default to an object being false unless its explicitly
+  # 0 or true
+  return 0
 }
 
 # Use grep to check how a name was declared using a provided regex
