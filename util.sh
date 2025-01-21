@@ -804,7 +804,7 @@ BASH_WITH_VERSION_REGEX="$_BWVR"
 bash_shebang_validator() {
   _env_ok() {
     to_test="${1:-}"
-    { pcregrep "\#\!$VALID_POSIXPATHS_REGEX" > /dev/null 2>&1 < <(echo "$to_test"); ret=$?; } ||
+    { pcre2grep "\#\!$VALID_POSIXPATHS_REGEX" > /dev/null 2>&1 < <(echo "$to_test"); ret=$?; } ||
       { "$BASH_COMMAND failed with ret $ret"; return 9; }
     if [ $ret -eq 0 ]; then
       # this is now an array but we bastardized the functionality to pop
@@ -1008,12 +1008,13 @@ loader-add() {
   printf -v fargs '"$@"'
   printf -v fret '"$?"'
   bashlib="${1:-}"
+  bn="$(basename "$bashlib")"
   if ! is_absolute "$bashlib"; then
     abspath=$(realpath "$bashlib")
-    if [[ "$abspath" == "$(realpath "$D/$bashlib")" ]]; then
-      bashlib="$D/$bashlib"
+    if [[ "$abspath" == "$(realpath "$D/$bn")" ]]; then
+      tbashlib="\$D/$bn"
     else
-      bashlib="$abspath"
+      tbashlib="$abspath"
     fi
   fi
   loaderlib="$D/loader.sh"
@@ -1021,8 +1022,8 @@ loader-add() {
     err "Usage: loader_add -some -flags <some_bashlib.sh>"
     return 1
   fi
-  preamble_text="$bashlib function loaders begin here"
-  epilogue_text="$bashlib function loaders end here"
+  preamble_text="$tbashlib function loaders begin here"
+  epilogue_text="$tbashlib function loaders end here"
   if plline=$(grep -n "$preamble_text" "$loaderlib"); then
     llline=$(grep -n "$epilogue_text" "$loaderlib")
     range=""
@@ -1037,7 +1038,7 @@ loader-add() {
         fi
       done
       echo "$range"
-      cy="$bashlib is already present in loader.sh "
+      cy="$tbashlib is already present in loader.sh "
       cy+="replace current contents?"
       if confirm_yes "$cy"; then
         sed -i.bak "$range" "$loaderlib"
@@ -1057,7 +1058,7 @@ loader-add() {
 ############
     cat <<-EOF >> $loaderlib || ((failures++))
 declare -F "$fname" > /dev/null 2>&1 || $fname() {
-  unset -f ${functions_in_bashlib[@]}; source "$bashlib"; $fname $fargs
+  unset -f ${functions_in_bashlib[@]}; source "$tbashlib"; $fname $fargs
   return $fret
 }
 
