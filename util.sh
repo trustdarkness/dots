@@ -23,6 +23,27 @@ shopt -s expand_aliases
 source "$D/loader.sh"
 path_append "$D"
 
+# A slightly more convenient and less tedious way to print
+# to stderr, canonical in existence # TODO, check namerefs on resource
+if ! is_declared "se"; then
+  # Args:
+  #  Anything it recieves gets echoed back.  If theres
+  #  no newline in the input, it is added. if there are substitutions
+  #  for printf in $1, then $1 is treated as format string and
+  #  $:2 are treated as substitutions
+  # No explicit return code
+  function se() {
+    if [[ "$*" == *'%'* ]]; then
+      >&2 printf "${1:-}" "${@:2}"
+    else
+      >&2 printf "$@"
+    fi
+    if ! [[ "$*" == *'\n'* ]]; then
+      >&2 printf '\n'
+    fi
+  }
+fi
+
 # colors for logleveled output to stderr
 TS=$(tput setaf 3) # yellow
 DBG=$(tput setaf 6) # cyan
@@ -419,26 +440,7 @@ if ! declare -F "exists" > /dev/null 2>&1; then
   source "$D/existence.sh"
 fi
 
-# A slightly more convenient and less tedious way to print
-# to stderr, canonical in existence # TODO, check namerefs on resource
-if ! is_declared "se"; then
-  # Args:
-  #  Anything it recieves gets echoed back.  If theres
-  #  no newline in the input, it is added. if there are substitutions
-  #  for printf in $1, then $1 is treated as format string and
-  #  $:2 are treated as substitutions
-  # No explicit return code
-  function se() {
-    if [[ "$*" == *'%'* ]]; then
-      >&2 printf "${1:-}" $:2
-    else
-      >&2 printf "$@"
-    fi
-    if ! [[ "$*" == *'\n'* ]]; then
-      >&2 printf '\n'
-    fi
-  }
-fi
+
 
 # for my interactive shells, the full environment setup is constructed
 # from bashrc, but for scripts that rely on it, this function should be
