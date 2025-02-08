@@ -7,7 +7,6 @@
 PRINTFDASH='\x2D'
 
 set -E
-set -o history
 set -o pipefail
 
 SHOPTS=(
@@ -47,7 +46,7 @@ SBRC=true
 case $- in
     *i*)
       source "$D/util.sh"
-      sosutil
+      #sosutil
       #set -x
       ;;
   *)
@@ -97,9 +96,6 @@ function symlinks_setup() {
 # don't put duplicate lines or lines starting with space in the history.
 # See bash(1) for more options
 HISTCONTROL=ignoreboth
-
-# append to the history file, don't overwrite it
-shopt -s histappend
 
 # for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
 HISTSIZE=1000000
@@ -151,7 +147,7 @@ RST="$(tput sgr0)"
 GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
 # for pre, post, and non-powerline setup
-PS1="$PINK[\@] \[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[\]$ "
+PS1="\[$PINK\][\@] \[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[$(tput setaf 208)\]$\[$RST\] "
 
 # keep PS1 in env for powerline_disable
 pPS1="$PS1"
