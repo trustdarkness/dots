@@ -222,14 +222,10 @@ EOF
 #   fi
 # }
 
-function compgenv_json() {
-  ts=$(fsts)
-  tsh=${ts:0:-4}
-  file="/tmp/compgenv_els_$tsh"
+function compgenv() {
   for name in $(compgen -v); do
-     printf "%s=%s\n" "$name" "${!name}" >> "$file"
+     printf "%s=%s\n" "$name" "${!name}"
   done
-  jo compgenv=@$file
   return 0
 }
 

@@ -19,13 +19,25 @@
 #####################  internal logging and bookkeeping funcs
 #############################################################
 
+declare -F is_function > /dev/null 2>&1 || is_function() {
+  ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
+}
+export -f is_function
+
 shopt -s expand_aliases
-source "$D/loader.sh"
+function undeclared() {
+  if ! declare -p "${1:-}" > /dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+if undeclared path_append; then source "$D/pathlib.sh" && sourced+=("$D/pathlib.sh"); fi
 path_append "$D"
+
 
 # A slightly more convenient and less tedious way to print
 # to stderr, canonical in existence # TODO, check namerefs on resource
-if ! is_declared "se"; then
+if undeclared "se"; then
   # Args:
   #  Anything it recieves gets echoed back.  If theres
   #  no newline in the input, it is added. if there are substitutions
@@ -69,11 +81,19 @@ function fsdate() {
 }
 
 function fsts_to_fsdate() {
-  date -d -f "$FSTSFMT" "${1:-}" "$FSDATEFMT"
+  if is_mac; then
+    date -d -f "$FSTSFMT" "${1:-}" "$FSDATEFMT"
+  else
+    date -d "$(_fsts_gnu_readable "${1:-}")"  +"$FSDATEFMT"
+  fi
 }
 
 function fsts() {
   date +"${FSTSFMT}"
+}
+
+_fsts_gnu_readable() {
+  echo "${1:0:8} ${1:9:2}:${1:10:2}:${1:11:2}"
 }
 
 function is_fsts() {
@@ -90,9 +110,34 @@ function fsts_to_unixtime() {
   if is_mac; then
     date -jf "$FSTSFMT" "${1:-}" +%s
   else
-    date -d -f "$FSTSFMT" "${1:-}" +"%s"
+    date -d "$(_fsts_gnu_readable "${1:-}")" +"%s"
   fi
   return $?
+}
+
+# Given a date (Arg1) and a fmt string (Arg2, strftime),
+# returns 0 if that date was more than 7 days ago, 1 otherwise
+function is_older_than_1_wk() {
+  d="${1:-}"
+  fmt="${2:-}"
+  if ! [ -n "${fmt}" ]; then
+    if [ "${#d}" -eq 8 ]; then
+      fmt=$FSDATEFMT
+    elif [ "${#d}" -eq 15 ]; then
+      fmt=$FSTSFMT
+    else
+      se "Please provide a date format specifier"
+      return 1
+    fi
+  fi
+  ts=$(date -f +"$fmt" -d "${d}" +"%s")
+  now=$(date +"%s")
+  time_difference=$((now - ts))
+  days=$((time_difference / 86400)) #86400 seconds per day
+  if [ $days -gt 7 ]; then
+    return 0
+  fi
+  return 1
 }
 
 # To help common bash gotchas with [ -eq ], etc, this function simply
@@ -118,6 +163,8 @@ function gt() {
       else
         return 1
       fi
+    else
+      return 2
     fi
   elif [[ "${term1}" == "" ]]; then
     return 1
@@ -136,6 +183,8 @@ function lt() {
       else
         return 1
       fi
+    else
+      return 2
     fi
   elif [[ "${term1}" == "" ]]; then
     return 1
@@ -154,6 +203,8 @@ function le() {
       else
         return 1
       fi
+    else
+     return 2
     fi
   elif [[ "${term1}" == "" ]]; then
     return 1
@@ -184,11 +235,12 @@ printf -v W "%s[%s]" $WRN "WARN"
 printf -v I "%s[%s]" $INF "INFO"
 printf -v B "%s[%s]" $DBG "DEBUG"
 
-# implementing log levels selectively for simplicity and to avoid
+# implementing log levels selectively tweaking for simplicity and to avoid
 # namespace collisions, i.e. with the info command
 alias err='_log "$E" "$LINENO"'
 alias warn='_log "$W" "$LINENO"'
 alias debug='_log "$B" "$LINENO"'
+alias inform='_log "$I" "$LINENO"'
 
 if [ -n "$XDG_STATE_HOME" ]; then
   LOGDIR="$XDG_STATE_HOME/com.trustdarkness.dots"
@@ -382,45 +434,55 @@ _prcao() {
   e=$(echo "${4:-}"|xargs)
   printf "${CMD}cmd:$RST %s ${CMD}args:$RST %s ${CMD}stdout:$RST %s ${CMD}stderr:$RST %s " "$c" "$a" "$o" "$e"
 }
-
-# print a structured err, when the command with arguments,
-# other relevant vars, exit status, and output, says all that needs
-# to be said
-# Args: return code, command, args, output, stderr
-# _struct_err() {
-#   ret=$1
-#   cmd=$2
-#   args=$3
-#   out=$4
-#   err=$5
-#   retm=$(_prs "$ret")
-#   varsm=$(_prvars)
-#   com=$(_prcao "$cmd" "$args" "$out" "$err")
-#   printf -v err_msg "%s %s %s" "$retm" "$varsm" "$com"
-#   err "$err_msg"
-# }
-
-# runs a command, wrapping err handling
-# args: command to run, args
-# on success, returns 0 and echos the child back to the parent
-# on failure, calls _struct_err, which outputs error to stderr
-# and to \$LOGFILE
-# _lc() {
-#   cmd="$1"; shift
-#   #info "_lc: $cmd $@"
-#   {
-#       IFS=$'\n' read -r -d '' err;
-#       IFS=$'\n' read -r -d '' out;
-#       IFS=$'\n' read -r -d '' ret;
-#   } < <((printf '\0%s\0%d\0' "$($cmd $@)" "${?}" 1>&2) 2>&1)
-#   if [ $ret -gt 0 ]; then
-#     _struct_err "$ret" "$cmd" "$@" "$out" "$err"
-#     return $ret
-#   else
-#     echo "$out" && return 0
-#   fi
-# }
 ##################### end logging code #########################################
+
+##################### progresss bars and spinners ##############################
+
+# simple / generic progress bar
+# Args: finished, total, message
+# where total is the number of steps until the task is complete
+# finished is how many steps we've finished until now
+# message is a message to print to the side of the progress bar while continue
+# to use, first run progress_init outside your work loop, then call
+# progress from inside the loop, moving finished closer to total with
+# each loop iteration (hopefully)
+declare -x BAR_SIZE="##################"
+declare -x CLEAR_LINE="\\033[K"
+progress() {
+  # heavily cribbed from
+  # https://github.com/lnfnunes/bash-progress-indicator/blob/master/progress.sh
+  finished="${1:-}"
+  total="${2:-}"
+  message="${3:-}"
+  local MAX_STEPS=$total
+  local MAX_BAR_SIZE="${#BAR_SIZE}"
+  perc=$(($finished * 100 / MAX_STEPS))
+  percBar=$((perc * MAX_BAR_SIZE / 100))
+  echo -ne "\\r$INF[${BAR_SIZE:0:percBar}] $RST$perc %  $message $finished / $total $CLEAR_LINE"
+}
+
+# prints the first line of the status bar with echo -ne '\\r'
+# as long as you don't print anything else, the bar will stay
+# put and rewrite itself.
+progress-init() {
+  echo -ne "\\r[${BAR_SIZE:0:0}] 0 %$CLEAR_LINE"
+}
+
+start-spinner() {
+  set +m
+  { spin & } 2>/dev/null
+  spinner_pid=$!
+}
+
+stop-spinner() {
+  { kill -9 $spinner_pid && wait; } 2>/dev/null
+  set -m
+  echo -en "\033[2K\r"
+}
+
+spin() {
+  while : ; do for X in '┤' '┘' '┴' '└' '├' '┌' '┬' '┐' ; do echo -en "\b$X" ; sleep 0.1 ; done ; done
+}
 
 # TODO do these belong in .bashrc or .bash_aliases?
 alias vsc="vim $HOME/.ssh/config"
@@ -435,121 +497,40 @@ export GH="$HOME/src/github"
 
 MODERN_BASH="4.3"
 
-# TODO use is_function?
-if ! declare -F "exists" > /dev/null 2>&1; then
-  source "$D/existence.sh"
+# TODO: what requires these?
+if ! is_function exists; then
+  source "$D/existence.sh" && sourced+=("$D/existence.sh")
 fi
 
-
-
-# for my interactive shells, the full environment setup is constructed
-# from bashrc, but for scripts that rely on it, this function should be
-# called to make sure all is as expected.
-# TODO: create teardown that remove all namerefs added by setup
-function util_env_load() {
-  # this represents all the possible sources at the moment, but only
-  # including as options as needed, otherwise it would be taking an
-  # already silly thing and making it ridiculous.
-  local exu=true # -e
-  local up=false # -u
-  local fsau=false # -f
-  local osu=true # -o
-  local jl=false # -j
-  local xl=false # -x
-  local ku=false # -k
-  local lb=false # -l
-  local bsu=false
-  local iu=false # -i
-  local mb=false
-  local md=false # -d
-  local bc=false
-  local bs=false # -b
-  while [ $# -gt 0 ]; do
-    case "${1:-}" in
-      "-e"|"--existence")
-        exu=true
-        shift
-        ;;
-      "-f"|"--filesystemarray")
-        fsau=true
-        shift
-        ;;
-      "-j"|"--json-like")
-        jl=true
-        shift
-        ;;
-      "-x"|"--xml-like")
-        xl=true
-        shift
-        ;;
-      "-u"|"--user-prompts")
-        up=true
-        shift
-        ;;
-      "-i"|"--installutil")
-        iu=true
-        shift
-        ;;
-      "-d"|"--macdebug")
-        md=true
-        shift
-        ;;
-      "-b"|"--bootstraps")
-        bs=true
-        shift
-        ;;
-      "-o"|"--osutil")
-        osu=true
-        shift
-        # TODO: finish implementing
-        ;;
-      "-j"|"--json-like")
-        osu=true
-        shift
-        # TODO: finish implementing
-        ;;
-      *)
-        echo "Boo.  ${1:-} does not exist"
-        shift
-        ;;
-    esac
-  done
-  if ! declare -F "exists" > /dev/null 2>&1 && $exu; then
-    source "$D/existence.sh"
-  fi
-  if undefined "confirm_yes" && $up; then
-    source "$D/user_prompts.sh"
-  fi
-  if undefined "xmllike" && $xl; then
-    source "$D/xml_like.sh"
-  fi
-  if undefined "json_like_tl" && $jl; then
-    source "$D/json_like.sh"
-  fi
-  if undefined "dirarray" && $fsau; then
-    source "$D/filesystemarrayutil.sh"
-  fi
-  if undefined "binmachheader" && $md; then
-    source "$D/macdebug.sh"
-  fi
-  if untru $osutil_in_env && $osu; then
-    osutil_load
-  fi
-  if undefined "sau" && $iu; then
-    install_util_load
-  fi
-  if undefined "term_bootstrap" && $bs; then
-    source "$D/bootstraps.sh"
-  fi
-}
+source "$D/filesystemarrayutil.sh" && sourced+=("$D/filesystemarrayutil.sh")
+source "$D/user_prompts.sh" && sourced+=("$D/user_prompts.sh")
 
 function urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
 
+# search code in the $D directory, this repo in other words
+# depends user_prompts.sh confirm_yes
 dgrep() {
   grepargs=()
+  grep=grep
+  onlyfiles=false
+  ignore= ; unset ignore; ignore=()
   while [[ "${1:-}" == "-"* ]]; do
-    grepargs+=( "${1:-}" )
-    shift
+    if [[ "${1:-}" == \-p ]]; then
+      grep=pcre2grep
+      shift
+      continue
+    elif [[ "${1:-}" == \-\-filenames\-only ]]; then
+      onlyfiles=true
+      shift
+      continue
+    elif [[ "${1:-}" =~ \-\-ignore=(.*) ]]; then
+      ignore+=("${BASH_REMATCH[1]}")
+      shift
+      continue
+    else
+      grepargs+=( "${1:-}" )
+      shift
+    fi
   done
   sterm="${1:-}"
   if [ -z "$D" ]; then
@@ -562,14 +543,19 @@ dgrep() {
   for item in "$D"/*; do
     # if there are ever more exceptions, make this more visible
     { [ -f "$item" ] && [[ "$item" != *LICENSE ]] && file=$item; } || continue
-    found=$(grep -n ${grepargs[@]} "$sterm" "$file"); ret=$?||true
+    found=$($grep -n ${grepargs[@]} "$sterm" "$file"); ret=$?||true
     if [ $ret -eq 0 ]; then
-      echo "$file"
-      while read -r line ; do
-        echo "  ${line/$sterm/${GREEN}${sterm}${RST}}"
-      done < <(echo "$found")
-      echo
-      ((total_found+=$(echo "$found"|wc -l|xargs)))
+      bn=$(basename "$file")
+      if [[ "${ignore[*]}" != *"$bn"* ]]; then
+        echo "$file"
+        if ! $onlyfiles; then
+          while read -r line ; do
+            echo "  ${line/$sterm/${GREEN}${sterm}${RST}}"
+          done < <(echo "$found")
+          echo
+          ((total_found+=$(echo "$found"|wc -l|xargs)))
+        fi
+      fi
     fi
   done
   if [ $total_found -gt 0 ]; then
@@ -581,10 +567,12 @@ dgrep() {
 function symlink_verbose() {
   se "linking target $target from link name $linkname"
   ln -sf "$target" "$linkname"
+  return $?
 }
 
 # TODO: make this less brittle
 function move_verbose() {
+  load-function -q tru
   mvv_force=false
   if [[ "${1:-}" == "-f" ]]; then
     mvv_force=true
@@ -594,9 +582,11 @@ function move_verbose() {
   if tru $mvv_force; then
     echo " with -f"
     mv -f "${1:-}" "${2:-}"
+    return $?
   else
     echo
     mv "${1:-}" "${2:-}"
+    return $?
   fi
 }
 
@@ -608,24 +598,30 @@ function lns() {
   elif [ -f "$linkname" ]; then
     move_verbose "$linkname" "$linkname.bak"
     symlink_verbose "$target" "$linkname"
+    return $?
   else
     symlink_verbose "$target" "$linkname"
+    return $?
   fi
 }
 
 function lnsdh() {
   lns "$D/${1:-}" "$HOME/${1:-}"
+  return $?
 }
 
 function gpgvc() {
   gpg --verify < <(xclip -o)
+  return $?
 }
 
 function gpgic() {
   gpg --import < <(xclip -o)
+  return $?
 }
 
 function colnum() {
+  load-function -q empty
   help() {
     echo "echos the column number of substring in string if found"
     echo "returns 0 if successful, 255 if substring not found, 1 otherwise"
@@ -741,14 +737,19 @@ _localize_ps_time() {
 }
 
 function pidinfo() {
+  e=(
+    [0]="N/A"
+    [1]='ps -p$pid... failed, maybe exited?'
+    [2]='could not localize $started'
+  )
   local pid="${1:-}"
   # favoring readability over performance
-  local name="$(ps -p$pid -ocommand=)"
-  if string_contains "/" "$name"; then name=$(basename "$name"); fi
-  local cpu="$(ps -p$pid -o'%cpu=')"
-  local mem="$(ps -p$pid -o'%mem=')"
-  local started="$(ps -p$pid -olstart=)"
-  localized=$(_localize_ps_time "$started")
+  local name="$(ps -p$pid -ocommand=)"|| { err "${e[1]}"; return 2; }
+  if grep -q "/" <<< "$name"; then name=$(basename "$name"); fi
+  local cpu="$(ps -p$pid -o'%cpu=')"|| { err "${e[1]}"; return 2; }
+  local mem="$(ps -p$pid -o'%mem=')"|| { err "${e[1]}"; return 2; }
+  local started="$(ps -p$pid -olstart=)"|| { err "${e[1]}"; return 2; }
+  localized=$(_localize_ps_time "$started")|| { warn "${e[2]}"; localize="$started"; }
   IFS='' read -r -d '' pidinfo <<"EOF"
  Process: %s
    PID: %s
@@ -758,18 +759,23 @@ function pidinfo() {
 EOF
   # for field in "$localized"; do pidinfo+=" %s"; done
   printf "$pidinfo" "$pid" "$name" "$cpu" "$mem" "$localized"
+  return $?
+}
+
+function tac() {
+  tail -r $@
 }
 
 function add_permanent_bash_alias_to_bashrc() {
   name="${1:-}"
   to="${2:-}"
   rationale="${3:-}"
-  ts=fsts
+  ts=$(fsts)
   if [ -n "$to" ] && ! is_quoted "$to"; then
     to=$(shellquote "$to")
   fi
   mkdir -p "$HOME/.local/bak"
-  fs_rationale=$(echo "$rationale"|sed  's/ /_/g')
+  fs_rationale="$(echo "$rationale"|sed  's/ /_/g')"
   se "existing .bashrc backed up to $HOME/.local/bak/.bashrc.bak.$ts.$fs_rationale"
   # https://stackoverflow.com/questions/5573683/adding-alias-to-end-of-alias-list-in-bashrc-file-using-sed
   tac .bashrc |
@@ -791,12 +797,13 @@ function is_bash_script() {
 }
 
 VALID_POSIXPATH_EL_CHARS='\w\-. '
-printf -v VALID_POSIXPATHS_REGEX '[\/*%s]+' "$VALID_POSIXPATH_EL_CHARS";
+VALID_POSIXPATHS_REGEX="$(printf '[\/*%s]+' "$VALID_POSIXPATH_EL_CHARS")"
 BASH_FUNCTION_WITH_NAME_PCREREGEX='(function %s *\(\) +{|%s *\(\) +{|%s +{)'
 
 function_regex() {
   printf -v "${1:-}" "$BASH_FUNCTION_WITH_NAME_PCREREGEX" "${2:-}" "${2:-}" "${2:-}"
 }
+
 function_regex BASH_FUNCTION_PCREREGEX "[A-z0-9_]+"
 _BWVR='^bash[_-]{0,1}(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|'
 _BWVR+='[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*'
@@ -864,7 +871,7 @@ function _vslugify() {
   ext=
   unset slugified # if this is needed, should be copied into the local namespace
   declare -gA slugified
-  if string_contains "/" "$name"; then
+  if grep -q "/" <<< "$name"; then
     dn=$(dirname "$name")
     name=$(basename "$name")
   fi
@@ -880,6 +887,9 @@ function _vslugify() {
   return 0
 }
 
+# depends
+# - filesystemarrayutil.sh
+#  * array_to_set
 function_finder() {
   l=$((LINENO-1))
   usage() {
@@ -888,6 +898,8 @@ function_finder - prints functions declared in a bash script
 
 Args:
   -f filename of bash script to search in
+  -S search for the function in known dependency locations, ignored
+     if -f is also present
   -F (optional) function name to search for, can be specified
      more than once to find multiple functions
   -l print line numbers of function declarations
@@ -908,10 +920,10 @@ EOF
   functions=()
   local nested=false
   local pager="cat"
-  unset files
-  declare -ga files
-  files=()
-  optspec="nlLf:F:wh"
+  local search=false
+  unset file
+  file=
+  optspec="lLnf:F:Swh"
   unset OPTIND
   unset optchar
   while getopts "${optspec}" optchar; do
@@ -931,6 +943,9 @@ EOF
         ;;
       F)
         functions+=("${OPTARG}")
+        ;;
+      S)
+        search=true
         ;;
       w)
         pager="column"
@@ -1000,87 +1015,20 @@ EOF
           ((i++)) }
       } || continue
     done | $pager
+  elif $search; then
+    if [ "${#functions[@]}" -eq 0 ]; then
+      err "search only makes sense with function names"
+      return 5;
+    fi
+    #set -x
+
+    for fname in "${functions[@]}"; do
+      function_regex dgrepfuncsearcher "$fname"
+      echo "$fname:"
+      dgrep -p -c -l -n --filenames-only "$dgrepfuncsearcher"
+    done
   fi
   echo
-}
-
-loader-add() {
-  # deprecate
-  util_env_load -u
-  printf -v fargs '"$@"'
-  printf -v fret '"$?"'
-  bashlib="${1:-}"
-  bn="$(basename "$bashlib")"
-  if ! is_absolute "$bashlib"; then
-    abspath=$(realpath "$bashlib")
-    if [[ "$abspath" == "$(realpath "$D/$bn")" ]]; then
-      tbashlib="\$D/$bn"
-    else
-      tbashlib="$abspath"
-    fi
-  fi
-  loaderlib="$D/loader.sh"
-  if ! is_bash_script "$bashlib"; then
-    err "Usage: loader_add -some -flags <some_bashlib.sh>"
-    return 1
-  fi
-  preamble_text="$tbashlib function loaders begin here"
-  epilogue_text="$tbashlib function loaders end here"
-  if plline=$(grep -n "$preamble_text" "$loaderlib"); then
-    llline=$(grep -n "$epilogue_text" "$loaderlib")
-    range=""
-    if is_int "$plline" && is_int "$llline"; then
-      for line in "${plline}" "${llline}"; do
-        range+=$(echo "$line" | cut -d":" -f"1")
-        if [[ "$range" == *','* ]]; then
-          range+='d';
-        else
-          ((range--))
-          range+=','
-        fi
-      done
-      echo "$range"
-      cy="$tbashlib is already present in loader.sh "
-      cy+="replace current contents?"
-      if confirm_yes "$cy"; then
-        sed -i.bak "$range" "$loaderlib"
-      else
-        return 2
-      fi
-    else
-      err "error in format of existing $loaderlib, please investigate"
-      return 3
-    fi
-  fi
-  echo " " >> $loaderlib
-  echo "######## $preamble_text ########" >> $loaderlib
-  functions_in_bashlib=($(function_finder -f "$bashlib"))
-  failures=0
-  for fname in "${functions_in_bashlib[@]}"; do
-############
-    cat <<-EOF >> $loaderlib || ((failures++))
-declare -F "$fname" > /dev/null 2>&1 || $fname() {
-  unset -f ${functions_in_bashlib[@]}; source "$tbashlib"; $fname $fargs
-  return $fret
-}
-
-EOF
-############
-  done
-    cat <<-EOF >> $loaderlib || ((failures++))
-_unset_$(_vslugify $(basename $bashlib))_fs() {
-  unset -f ${functions_in_bashlib[@]};
-  return $fret
-}
-
-EOF
-  echo "######## $epilogue_text ##########" >> $loaderlib
-  if [ $failures -eq 0 ]; then
-    se "$((${#functions_in_bashlib[@]}+1)) function declarations added to $loaderlib"
-  else
-    se "$(( $((${#functions_in_bashlib[@]}+1)) - failures)) added.  $failures failed."
-  fi
-  return $failures
 }
 
 print_function() {
@@ -1114,7 +1062,7 @@ EOF
         ;;
       f)
         filepath="$OPTARG"
-        [ -f "$filepath" ] || { error "no file at $filepath"; return 2; }
+        [ -f "$filepath" ] || { err "no file at $filepath"; return 2; }
         ;;
       h)
         usage
@@ -1159,144 +1107,115 @@ EOF
 
   else
     bn=$(basename "$filepath")
-    error "couldn't find definition for $function_name at the top level of $bn"
+    err "couldn't find definition for $function_name at the top level of $bn"
     return 3
   fi
+}
 
+# this should work for any function declared in bash files in the dots repo
+# depends
+# - bash_profile
+#  * is_function
+load-function() {
+  usage() {
+    cat <<-'EOF'
+    Help!!!
+EOF
+  }
+
+  load-it() {
+    e=(
+      [0]="N\A"
+      [1]="function text below does not match multiline regex '(?s)^[A-z0-9_]+\(.*(?=^\}$)'"
+      [2]='print_function -f "${functionsource?}" "${functionname?}" failed with $?'
+      [3]='function_finder -F "${functionname?}" -S failed with $?'
+      [4]='should be unreachable'
+    )
+    functionname="${1:-}"
+    if functionsource="$(function_finder -F "${functionname?}" -S)"; then
+      if functiontext="$(print_function -f "${functionsource?}" "${functionname?}")"; then
+        # doublecheck
+        if pcre2grep -n -M '(?s)^[A-z0-9_]+\(.*(?=^\}$)' <<< "${functiontext?}"; then
+          eval "${functiontext?}"
+          export -f "${functionname?}"
+          return $?
+        else
+          err "${e[1]}"
+          return 1
+        fi
+      else
+        err "${e[2]}"
+        return 2
+      fi
+    else
+      err "${e[3]}"
+      return 3
+    fi
+    return 4
+  }
+  local force=false
+  local quiet=false
+  unset OPTIND
+  unset optchar
+  optspec="fqh"
+  while getopts "${optspec}" optchar; do
+    case "${optchar}" in
+      f)
+      force=true
+      ;;
+      q)
+      quiet=true
+      ;;
+      h)
+      usage
+      return 0
+      ;;
+    esac
+  done
+  shift $(($OPTIND - 1))
+  fname="${1:-}"
+
+  if is_function "$fname"; then
+    if ! $quiet && ! $force; then
+      echo "$fname already loaded in env as:"
+      declare -pf "$fname"
+      echo "to explicit force reload, run load-function -f $fname"
+      return 0
+    fi
+    if $force; then
+      unset -f "$fname"
+    fi
+    if $quiet; then return 0; fi
+  fi
+  if ! load-it "$fname"; then
+    ret=$?;
+    err "export -f $fname failed with $ret."
+    if [[ $LEVEL == "DEBUG" ]]; then
+      ff="$(function_finder -F $fname -S)"
+      debug "ff: $ff  pf: $(print_function -f $ff $fname)"
+      return $ret;
+    fi
+  fi
+  # confirm
+  is_function "$fname"
+  return $?
+}
+
+# does a best effort search of a bash source file $2
+# and attemtps to determine if the given function $1
+# is called in that file, returns 0 if so and echos
+# the surrounding code to the console, 1 if not found
+# or indeterminite
+function is_called() {
+  func="${1:-}"
+  found=$(grep -n -B3 -A3 "$func" "${2:-}" |grep -v '^#' |sed "s/$func/${RSL}${func}${RST}/g")
+  echo "$found"
 }
 
 BASH_VARNAME_REGEX='[A-z0-9_]+'
 BASH_LOCAL_PREFIX='^\h*local\h+([[-][A-z]]*|\h*)\h*'
 printf -v BASH_LOCAL_VAR_PCREREGEX '%s%s.*' "$BASH_LOCAL_PREFIX" "$BASH_VARNAME_REGEX"
 printf -v BASH_LOCAL_VAR_SED_EXTRACT_NAME2_REGEX '[ \t]*local[ \t]+([[-][A-z] ]*|[ \t]*)\(%s\).*' "$BASH_VARNAME_REGEX"
-
-function namerefs_bashscript_add() {
-  script="${1:-}"
-  if ! is_bash_script; then
-    se "please provide a path to a bash script"
-  fi
-  if ! declare -p "VALID_DECLARE_FLAGS" > /dev/null 2>&1; then
-    source "$D/existence.sh"
-  fi
-  if undefined "in_array"; then
-    source "$D/filesystemarrayutil.sh"
-  fi
-
-  # our main container for names
-  declare -ga _names
-
-  # case: global function names
-  _names=$(function_finder "$script")
-
-  # get variables declared as local for exclusion (this may result in false positives)
-  declare -ga localvars
-  declare -a localvarlines
-  printf -v sedstr 's/%s/One: \\1/g' "$BASH_LOCAL_VAR_SED_EXTRACT_NAME2_REGEX"
-  while IFS= read -r matchedline; do
-    # printf "($matchedline) "
-    lname=$(echo "$matchedline"| sed 's/.*local//g'| # remove local
-                                        sed 's/-[A-z]//g') # remove any flags
-    if [[ "$lname" == *'='* ]]; then
-      lname=$(echo "$lname" | cut -d'=' -f1)
-    fi
-    localvars+=( "$lname" )
-  done < <(pcre2grep --null "$BASH_LOCAL_VAR_PCREREGEX" "$script")
-  # localvarlines=( $(grep '^[[:space:]]*local[[:space:]]*[[-][[:alpha:]]]*[[:space:]]*[[[:alnum:]][_]]*' "$script") )
-  # for line in "${localvarlines[@]}"; do
-  #   wequal=$(echo "$line"|grep "=")
-  #   if [ $? -eq 0 ]; then
-  #     # we're expecting something like "local foo=bar" and we want foo
-  #     localvars+=( $(echo "$wequal" | awk '{print$1}' |awk -F'=' '{print$1}') )
-  #   else
-  #     localvars+=( $(echo "$line" | awk '{print$2}') )
-  #   fi
-  # done
-
-  # case variables declared by assignment
-  declare -a vars
-  vars=$(grep '^[[:space:]]*[[:alnum:]]*_*[[:alnum:]]*=' "$script" |awk -F'=' '{print$1}'|xargs)
-
-  # case: names declared in the global scope
-  vars+=( $(grep ^declare "$script" |awk '{print"\x22"$3"\x22"}') )
-
-  # case: variables assigned by printf
-  vars+=( $(grep "printf -v" "$script" |awk '{print"\x22"$3"\x22"}') )
-
-  # only populate from the above 2 cases when not declared with the local keyword
-  for var in "${vars[@]}"; do
-    if ! in_array "$var" "localvars"; then
-      var=$(singlequote "$var")
-      _names+=( "$var" )
-    fi
-  done
-
-  # names declared not in the global namespace but with -g
-  printf -v declaregregex '^[[:space:]]*declare -[%s]*g[%s]*' "$VALID_DECLARE_FLAGS" "$VALID_DECLARE_FLAGS"
-  _names+=( $(grep "$declaregregex" "$script" |awk '{print"\x22"$3"\x22"}') )
-
-  noextbasename=$(basename "$script"|sed 's/.sh//g')
-  expected_name="NAMEREFS_${noextbasename^^}"
-  existing_namerefs="$(grep -E '^NAMEREFS_[A-z]+\=\(.*\)$' "${script}")"
-  if [ $? -eq 0 ]; then
-    name=$(echo "$existing_namerefs"|awk -F'=' '{print$1}')
-    if [[ "$name" == "$expected_name" ]]; then
-      eval "$existing_namerefs"
-    else
-      se "found $name in $script which didn't match expected $expected_name"
-      return 1
-    fi
-  fi
-  if undefined "$expected_name"; then
-    declare -a "$expected_name"
-  fi
-  local -n script_namerefs="$expected_name"
-
-  script_namerefs+=( $_names )
-  # make sure we're quoted for printing
-  declare -a out_namerefs
-  for nameref in "${script_namerefs[@]}"; do
-    if ! is_quoted "$nameref"; then
-      out_namerefs+=( $(singlequote "$nameref") )
-    else
-      out_namerefs+=( "$nameref" )
-    fi
-  done
-  # remove the original reference
-  sed -ri.bak 's/^NAMEREFS_[A-z]+\=\(.*\)$//g' "$script"
-  # add it in a nice-to-look-at format:
-  printf "\n\n${expected_name}=(" >> "$script"
-  for quoted_nameref in "${out_namerefs[@]}"; do
-    printf "$quoted_nameref" >> "$script"
-  done
-  printf ")\n" >> "$script"
-}
-
-# If for any sourced file, you'd like to be able to undo the
-# changes to  your environment after it's sourced, track the
-# namerefs (variable, function, etc names) in an array named
-# sourcename_namerefs where the sourced filename is
-# sourcename.sh, when you want to clean the namespace of that
-# file, call cleaup_namespace sourcename, and it will be done
-# see macboot.sh for example
-function cleanup_namespace() {
-  local namespace="${1}"
-  local -n to_clean="${namespace}_namerefs"
-  to_clean=${!to_clean}
-  for nameref in "${to_clean[@]}"; do
-    unset ${nameref}
-  done
-}
-
-# for things you only want there when the above DEBUG flag is set
-function dse() {
-  if $DEBUG; then
-    if [ $# -eq 2 ]; then
-      >&2 printf "${1:-}\n" "${@:2:-}"
-    else
-      >&2 printf "${1:-}\n"
-    fi
-  fi
-}
 
 # Arg1 is needle, Arg2 is haystack
 # returns 0 if haystack contains needle, retval from grep otherwise
@@ -1363,19 +1282,6 @@ function system_arch() {
   uname -m
 }
 
-in-path() {
-  to_find="${1:-}"
-  found=()
-  while IFS= read -r -d $'\0' file; do
-    found+=( "$file" )
-  done < <(find $(echo "$PATH" | tr ":" " ") -type f -name "$to_find" -print0 2>/dev/null)
-  if [ ${#found[@]} -eq 0 ]; then
-    return 1
-  fi
-  for item in "${found[@]}"; do echo "$item"; done
-  return 0
-}
-
 function printcolrange() {
   input="${1:-}"
   start="${2:-}"
@@ -1388,42 +1294,6 @@ function printcolrange() {
     prog='{for(i=f;i<=t;i++) printf("%s%s",$i,(i==t)?"\n":OFS)}'
   fi
   echo "$input"|awk "$start,NF$fin { print NR, $0 }"
-}
-
-# Given a date (Arg1) and a fmt string (Arg2, strftime),
-# returns 0 if that date was more than 7 days ago, 1 otherwise
-function is_older_than_1_wk() {
-  d="${1:-}"
-  fmt="${2:-}"
-  if ! [ -n "${fmt}" ]; then
-    if [ "${#d}" -eq 8 ]; then
-      fmt=$FSDATEFMT
-    elif [ "${#d}" -eq 15 ]; then
-      fmt=$FSTSFMT
-    else
-      se "Please provide a date format specifier"
-      return 1
-    fi
-  fi
-  ts=$(date -f +"$fmt" -d "${d}" +"%s")
-  now=$(date +"%s")
-  time_difference=$((now - ts))
-  days=$((time_difference / 86400)) #86400 seconds per day
-  if [ $days -gt 7 ]; then
-    return 0
-  fi
-  return 1
-}
-
-# does a best effort search of a bash source file $2
-# and attemtps to determine if the given function $1
-# is called in that file, returns 0 if so and echos
-# the surrounding code to the console, 1 if not found
-# or indeterminite
-function is_called() {
-  func="${1:-}"
-  found=$(grep -n -B3 -A3 "$func" "${2:-}" |grep -v '^#' |sed "s/$func/${RSL}${func}${RST}/g")
-  echo "$found"
 }
 
 function is_absolute() {
@@ -1443,141 +1313,6 @@ function startswith() {
     return 0
   fi
   return 1
-}
-
-function symlink_child_dirs () {
-  if [ -n "$CACHE" ]; then
-    undo_dir="$CACHE/com.trustdarkness.utilsh"
-  else
-    err "no \$CACHE in env."
-    return 1
-  fi
-  help() {
-    >&2 printf "Specify a target parent directory whose children\n"
-    >&2 printf "should be symlinked into the desitination directory:\n"
-    >&2 printf "\$ symlink_child_dirs [target] [destination]"
-  }
-  undo_last_change() {
-    undo_file=$(most_recent "$undo_dir")
-    while string_contains "undone" "$undo_file"; do
-      undo_file=$(most_recent "$undo_dir")
-    done
-    declare -a to_remove
-    for line in $(cat "$undo_file"); do
-      if [ -h "$line" ]; then
-        to_remove+=( "$line" )
-        echo "$line"
-      fi
-    done
-    echo
-    if confirm_yes "removing the above symbolic links, OK?"; then
-      for link in "${to_remove[@]}"; do
-        rm -f "$link"
-      done
-      mv "$undo_file" "${undo_file}.undone"
-      return 0
-    else
-      echo "exiting with no changes"
-      return 0
-    fi
-  }
-  optspec="u?h"
-  while getopts "${optspec}" optchar; do
-    case "${optchar}" in
-      u)
-        if undo_last_change; then
-          se "undo successfully completed"
-          return 0
-        else
-          se "undo failed with code $?"
-          return 1
-        fi
-        shift
-        ;;
-      h)
-        help
-        shift
-        ;;
-    esac
-  done
-  # Argument should be a directory who's immediate children
-  # are themes such that you want to have each directory
-  # at the top level (under the parent) symlinked in a
-  # target directory.  Intended for use under ~/.themes
-  # but presumably, there are other ways this is useful.
-  target="${@:$OPTIND:1}"
-  whereto="${@:$OPTIND+1}"
-
-  failures=0
-  successes=0
-  declare -a failed_targets
-  declare -a undos
-  if [ -d "$target" ]; then
-    if ! is_absolute "$target"; then
-      echo "the target directory should be an absolute path"
-      return 1
-    fi
-    if [ -d "$whereto" ]; then
-      if find $target ! name '.git' -maxdepth 1 -type d -exec ln -s '{}' $whereto/ \;; then
-        undos+=( "$whereto/$target" )
-        ((successes++))
-      else
-        ((failures++))
-        failed_targets+=( "$whereto/$target" )
-      fi
-    fi
-  else
-    echo "arg1 should be a directory containing children to symlink"
-    return 1
-  fi
-  if gt $successes 0; then
-    ts=$(fsts)
-    undo_dir="$CACHE/com.trustdarkness.utilsh"
-    mkdir -p "$undo_dir"
-    undo_file="$undo_dir/${FUNCNAME[0]}.$ts.undo"
-    for line in "${undos[@]}"; do
-      echo "$line" >> "$undo_file"
-    done
-    echo "Changes recorded at $undo_file, run ${FUNCNAME[0]} -u to undo"
-    echo
-  fi
-  if gt $failures 0; then
-    se "failed to create the following:"
-    for failure in "${failed_targets[@]}"; do echo "$failure"; done
-  fi
-}
-
-# find the most recent file in dir given by $1 that matches
-# search term $2 (optional)
-function most_recent() {
-  local dir="${1:-.}"
-  local sterm="${2:-}"
-  local files
-  if [ -n "$sterm" ]; then
-    files="$(find ${dir} -name "*$sterm*" -maxdepth 1 -mindepth 1 -print0 2> /dev/null|tr '\0' '|'|tr ' ' '+')"
-  else
-    files="$(find ${dir} -maxdepth 1 -mindepth 1 -print0 2> /dev/null|tr '\0' '|'|tr ' ' '+')"
-  fi
-  #echo "$files"
-  local most_recent_crash=$(most_recent "${files}")
-  # find gives you back \0 entries by default, which would be fine, and
-  # non-printable characters are probably better for a lot of reasons, but
-  # not for debugging.  We default to these, but you may set whatever you
-  # like with args 2 and 3
-  local default_filename_separator="|"
-  local default_space_replacer="+"
-  local char_replaced_separated_files=("${files[@]}")
-  local filename_separator="|"
-  local space_replacer="+"
-  readarray -d"$filename_separator" files < <(echo "${char_replaced_separated_files}")
-
-  # https://stackoverflow.com/questions/5885934/bash-function-to-find-newest-file-matching-pattern
-  for messyfile in "${files[@]}"; do
-    file="$(echo ${messyfile}|tr "${space_replacer}" ' '|sed "s/${filename_separator}//g")"
-    if [ -n "${file}" ]; then
-      stat -f "%m%t%N" "${file}"
-    fi
-  done | sort -rn | head -1 | cut -f2-
 }
 
 # Convenience function for github clone, moves into ~/src/github,
@@ -1642,23 +1377,21 @@ function get_cache_for_OS () {
       CACHE="$HOME/.local/cache"
       mkdir -p "$CACHE"
       OSUTIL="$D/linuxutil.sh"
-      function sosutil() {
-        source "$D/linuxutil.sh"
-      }
+      alias sosutil='source "$D/linuxutil.sh" && sourced+=("$D/linuxutil.sh")'
       alias vosutil="vim $D/linuxutil.sh && sosutil"
       ;;
     "MacOS")
       CACHE="$HOME/Library/Application Support/Caches"
       OSUTIL="$D/macutil.sh"
-      function sosutil() {
-        source $D/macutil.sh
-      }
+      alias sosutil='source "$D/macutil.sh" && sourced+=("$D/macutil.sh")'
       alias vosutil="vim $D/macutil.sh && vosutil"
       ;;
   esac
   export CACHE
 }
 get_cache_for_OS
+shopt -s expand_aliases
+sosutil
 
 function user_feedback() {
   local subject
@@ -1735,53 +1468,17 @@ function user_feedback() {
   $logger "${meta_message[@]}"
 }
 
-function osutil_load() {
-  if [ -z "$osutil_in_env" ] || $osutil_in_env; then
-    if [ -f "$OSUTIL" ]; then
-      source "$OSUTIL"
-      return 0
-    else
-      se "OS not properly detected or \$OSUTIL not found."
-      return 1
-    fi
-  fi
-}
-osutil_load
-
 alias sall="sbrc; sglobals; sutil; sosutil"
 
 # initialized the helper library for the package installer
 # for whatever the detected os environment is; good for interactive
 # use below for scripts
-function i() {
-  source $D/installutil.sh
-  return $?
-}
+alias i='source "$D/installutil.sh" && sourced+=("$D/installutil.sh")'
 
 # TODO: deprecate
-function install_util_load() {
-  if undefined "sau"; then
-    source "$D/installutil.sh"
-  fi
-  i
-  return $?
-}
+alias install_util_load=i
 
 alias viu="vim $D/installutil.sh && siu"
-
-# so we dont load all that nonsense into the env, but the super
-# frequently used ones remain readily available
-if undefined "sai"; then
-  sai() {
-    unset -f sai sas sauu; i; sai "$@"
-  }
-  sas() {
-    unset -f sai sas sauu; i; sas "$@"
-  }
-  sauu() {
-    unset -f sai sas sauu; i; sauu "$@"
-  }
-fi
 
 lineno_in_func_in_file() {
   _usage() {
@@ -1832,7 +1529,6 @@ lineno_in_func_in_file() {
 }
 
 set_log_ERROR() {
-
   if [[ "$(trap)" == *'RETURN'* ]]; then
     # if there's a return trap set, we can't have function calls in any other
     # trap or infinite recurse
@@ -1852,31 +1548,6 @@ set_log_WARN() {
 set_log_DEBUG() {
   trap
   set_log_ERROR
-  declare -ga sourcerers
-  declare -ga sourcerees
-function source() {
-  if [[ "$LEVEL" == DEBUG ]]; then debug "$(caller) fcall: source $@"; fi
-  sourcerers+=( "${BASH_SOURCE[0]}" )
-  sourcerees+=( "${3:-}" )
-  if [ $# -gt 2 ]; then
-    if [ -f "${3:-}" ]; then
-      src="${BASH_SOURCE[0]}"
-      #echo "sff $src $2"
-      if [ -n "${2:-}" ]; then
-        lineno=$(reallineno "${1:-}") || lineno="${1:-}"
-      fi
-      echo "$src:$lineno sourced ${3:-}"
-      builtin source "${3:-}"
-      return $?
-    fi
-  else
-    warn "debuggable source incorrectly called"
-    builtin source "$@"
-    return $?
-  fi
-}
-  export -f source
-  alias source='\source $LINENO $FUNCNAME'
   alias fline='function_finder -L -f $BASH_SOURCE -F $FUNCNAME'
   # preexec() {
   #   echo "executing $@"

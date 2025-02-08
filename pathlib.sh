@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
 
+in-path() {
+  to_find="${1:-}"
+  found=()
+  while IFS= read -r -d $'\0' file; do
+    found+=( "$file" )
+  done < <(find $(echo "$PATH" | tr ":" " ") -type f -name "$to_find" -print0 2>/dev/null)
+  if [ ${#found[@]} -eq 0 ]; then
+    return 1
+  fi
+  for item in "${found[@]}"; do echo "$item"; done
+  return 0
+}
+
 # Appends Arg1 to the shell's PATH and exports
 function path_append() {
   to_add="${1:-}"
