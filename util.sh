@@ -315,6 +315,8 @@ _user_term_info() {
 
 #      TIMESTAMP [FUNCTION] [LEVEL] PID FILENAME:LINENO
 LOGFMT="%20s [%s] %s %s %s"
+#         [FUNCTION] [LEVEL] FILENAME:LINENO
+SCREENFMT="[%s] %s %s"
 
 # Log to both stderr and a file (see above).  Should be called using
 # wrapper functions below, not directly
@@ -329,6 +331,10 @@ _log() {
   shift
   if [ -z "$LEVEL" ]; then
     local LEVEL=WARN
+  fi
+  if [[ $(trap) =~ .*err\w\$\{e\[(\$\?|[0-255])\]\}.* ]]; then
+    se "unsetting RETURN trap"
+    trap RETURN
   fi
   # we opportunistically get the lineno if we can
   if is_int "$1"; then
@@ -377,13 +383,15 @@ _log() {
   if [[ "$this_level" == 'DEBUG' ]]; then
     message="$(_prvars) $message"
   fi
-  printf -v line_leader "$LOGFMT" "$ts" "$funcname" "$level" "pid: ${pid}" "$src"
+  printf -v log_line_leader "$LOGFMT" "$ts" "$funcname" "$level" "pid: ${pid}" "$src"
+  printf -v screen_line_leader "$SCREENFMT" "$funcname" "$level" "$src"
   (
 
     if _to_echo "$this_level" "$LEVEL"; then
       #exec 3>&1
+      se "$screen_line_leader $message${RST}"
       # remove coloring when going to logfile
-      echo "$line_leader $message${RST}" 2>&1 | sed 's/\x1B\[[0-9;]*[JKmsu]//g' | tee -a "$LOGFILE"
+      echo "$log_line_leader $message${RST}" 2>&1 | sed 's/\x1B\[[0-9;]*[JKmsu]//g' >> "$LOGFILE"
     else
       echo "$line_leader $message${RST}" | sed 's/\x1B\[[0-9;]*[JKmsu]//g' >> "$LOGFILE"
     fi
