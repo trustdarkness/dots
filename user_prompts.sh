@@ -54,21 +54,11 @@ export -f confirm_yes
 
 function confirm_yes_default_no() {
   userkey=$(get_keypress "${1:-(y/N)}")
-  input_confirmed=false
-  while ! $input_confirmed; do
-    if ! [[ $userkey =~ Yy.* ]]; then
-      if [[ $userkey =~ Nn.* ]]; then
-        input_confirmed=true
-        return 1
-      else
-        echo "Please type Y or y to continue, N or n (or ctrl-c) will exit"
-        userkey=$(get_keypress "continue? (y/N)")
-      fi
-    else
-      input_confirmed=true
-      return 0
-    fi
-  done
+  if [[ $userkey =~ Yy.* ]]; then
+    return 0;
+  else
+    return 1
+  fi
 }
 
 # TODO: add "break_for_cancel_timeout_continue"
