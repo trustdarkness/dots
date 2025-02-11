@@ -7,6 +7,7 @@
 PRINTFDASH='\x2D'
 
 set -E
+set -T
 set -o pipefail
 
 SHOPTS=(
