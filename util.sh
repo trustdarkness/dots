@@ -32,6 +32,7 @@ function undeclared() {
   return 1
 }
 if undeclared path_append; then source "$D/pathlib.sh" && sourced+=("$D/pathlib.sh"); fi
+_setup_path
 path_append "$D"
 
 
@@ -341,7 +342,11 @@ _log() {
     err_in_func="$1"
     shift
   fi
-  local message="$@"
+  if [ $# -gt 1 ]; then
+    printf -v message "${1:-}" "${@:2}"
+  else
+    local message="$@"
+  fi
   if [ -z "$LOGFILE" ]; then
     if [[ "$srcp" == "environment" ]]; then
       LOGFILE="$LOGDIR/util.sh.log"
@@ -521,20 +526,24 @@ dgrep() {
   grepargs=()
   grep=grep
   onlyfiles=false
+  addl_dirs=()
   ignore= ; unset ignore; ignore=()
   while [[ "${1:-}" == "-"* ]]; do
     if [[ "${1:-}" == \-p ]]; then
       grep=pcre2grep
       shift
-      continue
     elif [[ "${1:-}" == \-\-filenames\-only ]]; then
       onlyfiles=true
       shift
-      continue
     elif [[ "${1:-}" =~ \-\-ignore=(.*) ]]; then
       ignore+=("${BASH_REMATCH[1]}")
       shift
-      continue
+    elif [[ "${1:-}" =~ \-\-also-look=(.*) ]]; then
+      potential="${BASH_REMATCH[1]}"
+      if [ -d "$potential" ]; then
+        addl_dirs+=( $potential )
+      fi
+      shift
     else
       grepargs+=( "${1:-}" )
       shift
@@ -548,9 +557,9 @@ dgrep() {
     fi
   fi
   total_found=0
-  for item in "$D"/*; do
+  file_searcher() {
     # if there are ever more exceptions, make this more visible
-    { [ -f "$item" ] && [[ "$item" != *LICENSE ]] && file=$item; } || continue
+    { [ -f "$item" ] && [[ "$item" != *LICENSE ]] && file=$item; } || return
     found=$($grep -n ${grepargs[@]} "$sterm" "$file"); ret=$?||true
     if [ $ret -eq 0 ]; then
       bn=$(basename "$file")
@@ -565,7 +574,17 @@ dgrep() {
         fi
       fi
     fi
+  }
+  for item in "$D"/*; do
+    file_searcher|| true # this is a printer/accumulator, exit code moot
   done
+  if [[ "${#addl_dirs[@]}" -gt 0 ]]; then
+    for dir in "${addl_dirs[@]}"; do
+      for item in "$dir"/*; do
+        file_searcher || true
+      done
+    done
+  fi
   if [ $total_found -gt 0 ]; then
     return 0
   fi
@@ -931,7 +950,8 @@ EOF
   local search=false
   unset file
   file=
-  optspec="lLnf:F:Swh"
+  xtradir=
+  optspec="lLnf:F:Swha:"
   unset OPTIND
   unset optchar
   while getopts "${optspec}" optchar; do
@@ -957,6 +977,9 @@ EOF
         ;;
       w)
         pager="column"
+        ;;
+      a)
+        xtradir="${OPTARG}"
         ;;
       h)
         usage
@@ -1028,15 +1051,25 @@ EOF
       err "search only makes sense with function names"
       return 5;
     fi
-    #set -x
-
+    dgrepopts=("-p" "-c" "-l" "-n" "--filenames-only")
+    if is_mac && [ -n xtradir ]; then
+      { type -p cddph &&
+        cddph &&
+        [ -d "$DPHELPERS/lib/bash" ] &&
+        dgrepopts+=("--addl-dirs=\"$DPHELPERS/lib/bash\"");
+      } || {
+        DPHELPERS="$HOME/src/dpHelpers" &&
+        [ -d "$DPHELPERS/lib/bash" ] &&
+        dgrepopts+=("--addl-dirs=\"$DPHELPERS/lib/bash\"");
+      } || { warn "Could not add DPHELPERS to function_finder"; }
+    fi
     for fname in "${functions[@]}"; do
       function_regex dgrepfuncsearcher "$fname"
-      echo "$fname:"
+      # echo "$fname:"
       dgrep -p -c -l -n --filenames-only "$dgrepfuncsearcher"
     done
   fi
-  echo
+  #echo
 }
 
 print_function() {
@@ -1130,35 +1163,49 @@ load-function() {
     Help!!!
 EOF
   }
-
+  if [[ "${1:-}" =~ \-\-also\-search=(.*) ]]; then
+    xtradir="${BASH_REMATCH[1]}"
+    shift
+  fi
+  functionname="${1:-}"
   load-it() {
+    #set -x
     e=(
       [0]="N\A"
-      [1]="function text below does not match multiline regex '(?s)^[A-z0-9_]+\(.*(?=^\}$)'"
-      [2]='print_function -f "${functionsource?}" "${functionname?}" failed with $?'
-      [3]='function_finder -F "${functionname?}" -S failed with $?'
+      [1]="function text fails sanity check (multiline regex '(?s)^[A-z0-9_]+\(.*(?=^\}$)')"
+      [2]="print_function failed, though we had the filename %s"
+      [3]="${functionname} not found in known dependency locations, including: %s"
       [4]='should be unreachable'
+      [5]="error evaluating function text %s"
+      [6]="error exporting $functionname"
     )
-    functionname="${1:-}"
-    if functionsource="$(function_finder -F "${functionname?}" -S)"; then
-      if functiontext="$(print_function -f "${functionsource?}" "${functionname?}")"; then
-        # doublecheck
-        if pcre2grep -n -M '(?s)^[A-z0-9_]+\(.*(?=^\}$)' <<< "${functiontext?}"; then
-          eval "${functiontext?}"
-          export -f "${functionname?}"
-          return $?
-        else
-          err "${e[1]}"
-          return 1
-        fi
-      else
-        err "${e[2]}"
-        return 2
-      fi
+    if [ -n "$xtradir" ]; then
+      functionsource="$(function_finder -F "${functionname?}" -S -a "$xtradir")"
     else
-      err "${e[3]}"
+      functionsource="$(function_finder -F "${functionname?}" -S)";
+    fi
+    if [ -z "$functionsource" ]; then
+      wherefrom="$D"
+      if [ -n "$xtradir" ]; then
+        wherefrom+=" and \$DPHELPERS/lib/bash"
+      fi
+      err "${e[3]}" "$wherefrom"
       return 3
     fi
+    if functiontext="$(print_function -f "${functionsource?}" "${functionname?}")"; then
+      # doublecheck
+      if pcre2grep -n -M '(?s)^[A-z0-9_]+\(.*(?=^\}$)' <<< "${functiontext?}"; then
+        if ! eval "${functiontext?}"; then err ${e[5]} "$functiontext"; return 5; fi
+        if ! export -f "${functionname?}"; then err ${e[6]}; return 6; fi
+      else
+        err "${e[1]}"
+        return 1
+      fi
+    else
+      err "${e[2]}" "${functionsource}"
+      return 2
+    fi
+    err "${e[4]}"
     return 4
   }
   local force=false
@@ -1195,14 +1242,12 @@ EOF
     fi
     if $quiet; then return 0; fi
   fi
-  if ! load-it "$fname"; then
-    ret=$?;
-    err "export -f $fname failed with $ret."
+  if ! load-it "$fname"; ret=$?; then
     if [[ $LEVEL == "DEBUG" ]]; then
       ff="$(function_finder -F $fname -S)"
       debug "ff: $ff  pf: $(print_function -f $ff $fname)"
-      return $ret;
     fi
+    return $ret;
   fi
   # confirm
   is_function "$fname"
