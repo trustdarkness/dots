@@ -595,35 +595,61 @@ function symlink_child_dirs () {
 }
 
 samepath() {
-  e=(
-    [0]="N/A"
-    [1]="Argument one ($one) does not seem to be a valid path"
-    [2]="Argument two ($two) does not seem to be a valid path"
-    [3]="Both paths are mounted from the same device ($onemount), but don't seem to have the same path from their respective mountpoints."
-    [4]="These two paths are mounted from different devices ($one from $onemount; $two from $twomount)"
-    [5]="This code should be unreachable."
+
+  # set -x
+
+  return_e() (
+  trap 'e=( \
+    [0]="N/A" \
+    [1]="Argument one ($one) does not seem to be a valid path" \
+    [2]="Argument two ($two) does not seem to be a valid path" \
+    [3]="Both paths are mounted from the same device ($onemount), but dont seem to have the same path from their respective mountpoints." \
+    [4]="These two paths are mounted from different devices ($one from $onemount; $two from $twomount)" \
+    [5]="This code should be unreachable." \
+  ) \
+  le=$?; [ $le -gt 0 ] && err ${e[$le]}; trap RETURN' RETURN
+    # set -x
+    one="${1:-}"
+    two="${2:-}"
+    if ! is_absolute "$one"; then
+      one="$(realpath "$one")"
+    fi
+    if ! is_absolute "$two"; then
+      two="$(realpath "$two")"
+    fi
+    ! [ -e "$one" ] && return 1
+    ! [ -e "$two" ] && return 2
+    [[ "$one" == "$two" ]] && return 0 # trivial case
+    onemount="$(findmnt -n -o SOURCE --target "$one")"
+    twomount="$(findmnt -n -o SOURCE --target "$two")"
+    if [[ "$onemount" == "$twomount" ]]; then
+      readarray -t mounts < <(findmnt -n "$onemount" -o TARGET)
+      { [[ "${one/${mounts[0]}/}" == "${two/${mounts[1]}/}" ]] && return 0; } || true
+      { [[ "${one/${mounts[1]}/}" == "${two/${mounts[0]}/}" ]] && return 0; } || true
+      return 3
+    else
+      return 4
+    fi
+    return 5
   )
-  trap 'le=$?; [ $le -gt 0 ] && err ${e[$le]}' RETURN
-  one="${1:-}"
-  two="${2:-}"
-  if ! is_absolute "$one"; then
-    one="$(realpath "$one")"
+  return_e $@
+}
+
+safe_mount_x() {
+  mnt=$1
+  uuid=$2
+  isLuks=false
+  disk="/dev/disk/by-uuid/$uuid"
+  if sudo cryptsetup isLuks "$disk"; then isLuks=true; fi
+  if isLuks; then mapped="/dev/mapper/luks-$uuid"; fi
+  mounted=$(mountpoint $mnt);
+  if [ $? -ne 0 ]; then
+    if $isLuks; then
+      udisksctl unlock -b $disk
+      sleep 2
+      sudo mount "$mapped" "$mnt"
+    else
+      sudo mount "$disk" "$mnt"
+    fi
   fi
-  if ! is_absolute "$two"; then
-    two="$(realpath "$two")"
-  fi
-  ! [ -e "$one" ] && return 1
-  ! [ -e "$two" ] && return 2
-  [[ "$one" == "$two" ]] && return 0 # trivial case
-  onemount="$(findmnt -n -o SOURCE --target "$one")"
-  twomount="$(findmnt -n -o SOURCE --target "$one")"
-  if [[ "$onemount" == "$twomount" ]]; then
-    readarray -t mounts < <(findmnt -n "$onemount" -o TARGET)
-    { [[ "${onemount/${mounts[0]}/}" == "${twomount/${mounts[1]}/}" ]] && return 0; } || true
-    { [[ "${onemount/${mounts[1]}/}" == "${twomount/${mounts[0]}/}" ]] && return 0; } || true
-    return 3
-  else
-    return 4
-  fi
-  return 5
 }
