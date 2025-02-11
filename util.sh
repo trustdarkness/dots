@@ -31,7 +31,7 @@ function undeclared() {
   fi
   return 1
 }
-if undeclared path_append; then source "$D/pathlib.sh" && sourced+=("$D/pathlib.sh"); fi
+if undeclared path_append; then source "$D/pathlib.sh"; fi
 path_append "$D"
 
 
@@ -507,11 +507,11 @@ MODERN_BASH="4.3"
 
 # TODO: what requires these?
 if ! is_function exists; then
-  source "$D/existence.sh" && sourced+=("$D/existence.sh")
+  source "$D/existence.sh"
 fi
 
-source "$D/filesystemarrayutil.sh" && sourced+=("$D/filesystemarrayutil.sh")
-source "$D/user_prompts.sh" && sourced+=("$D/user_prompts.sh")
+source "$D/filesystemarrayutil.sh"
+source "$D/user_prompts.sh"
 
 function urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
 
@@ -1028,7 +1028,6 @@ EOF
       err "search only makes sense with function names"
       return 5;
     fi
-    #set -x
 
     for fname in "${functions[@]}"; do
       function_regex dgrepfuncsearcher "$fname"
@@ -1385,13 +1384,13 @@ function get_cache_for_OS () {
       CACHE="$HOME/.local/cache"
       mkdir -p "$CACHE"
       OSUTIL="$D/linuxutil.sh"
-      alias sosutil='source "$D/linuxutil.sh" && sourced+=("$D/linuxutil.sh")'
+      alias sosutil='source "$D/linuxutil.sh"'
       alias vosutil="vim $D/linuxutil.sh && sosutil"
       ;;
     "MacOS")
       CACHE="$HOME/Library/Application Support/Caches"
       OSUTIL="$D/macutil.sh"
-      alias sosutil='source "$D/macutil.sh" && sourced+=("$D/macutil.sh")'
+      alias sosutil='source "$D/macutil.sh"'
       alias vosutil="vim $D/macutil.sh && vosutil"
       ;;
   esac
@@ -1476,12 +1475,10 @@ function user_feedback() {
   $logger "${meta_message[@]}"
 }
 
-alias sall="sbrc; sglobals; sutil; sosutil"
-
 # initialized the helper library for the package installer
 # for whatever the detected os environment is; good for interactive
 # use below for scripts
-alias i='source "$D/installutil.sh" && sourced+=("$D/installutil.sh")'
+alias i='source "$D/installutil.sh"'
 
 # TODO: deprecate
 alias install_util_load=i
