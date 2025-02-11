@@ -747,3 +747,55 @@ compgenv() {
   done
   return 0
 }
+
+samepath() {
+  one="${1:-}"
+  two="${2:-}"
+  if ! is_absolute "$one"; then
+    one="$(realpath "$one")"
+  fi
+  if ! is_absolute "$two"; then
+    two="$(realpath "$two")"
+  fi
+  e=(
+    [0]="N/A"
+    [1]="Argument one ($one) does not seem to be a valid path"
+    [2]="Argument two ($two) does not seem to be a valid path"
+    [3]="Both paths are mounted from the same device (%s), but dont seem to have the same path from their respective mountpoints."
+    [4]="These two paths are mounted from different devices ($one from %s; $two from %s)"
+  )
+  ! [ -e "$one" ] && { err "${e[1]}"; return 1; }
+  ! [ -e "$two" ] && { err "${e[2]}"; return 2; }
+  [[ "$one" == "$two" ]] && return 0 # trivial case
+  onemount="$(findmnt -n -o SOURCE --target "$one")"
+  twomount="$(findmnt -n -o SOURCE --target "$two")"
+  if [[ "$onemount" == "$twomount" ]]; then
+    readarray -t mounts < <(findmnt -n "$onemount" -o TARGET)
+    { [[ "${one/${mounts[0]}/}" == "${two/${mounts[1]}/}" ]] && return 0; } || true
+    { [[ "${one/${mounts[1]}/}" == "${two/${mounts[0]}/}" ]] && return 0; } || true
+    err "${e[3]}" "$onemount"
+    return 3
+  else
+    err "${e[4]}" "$onemount" "$twomount"
+    return 4
+  fi
+}
+
+safe_mount_x() {
+  mnt=$1
+  uuid=$2
+  isLuks=false
+  disk="/dev/disk/by-uuid/$uuid"
+  if sudo cryptsetup isLuks "$disk"; then isLuks=true; fi
+  if isLuks; then mapped="/dev/mapper/luks-$uuid"; fi
+  mounted=$(mountpoint $mnt);
+  if [ $? -ne 0 ]; then
+    if $isLuks; then
+      udisksctl unlock -b $disk
+      sleep 2
+      sudo mount "$mapped" "$mnt"
+    else
+      sudo mount "$disk" "$mnt"
+    fi
+  fi
+}
