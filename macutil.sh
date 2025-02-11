@@ -1,103 +1,7 @@
 #!/usr/bin/env bash
 
-#set -Eo pipefail -o functrace
-
-err_handler() {
-	pc="${1:-}"
-	src="${2:-}"
-	line="${3:-}"
-  cmd="${4:-}"
-	ret="${5:-}"
-	if [ -z "$src" ]; then 
-		echo "$pc"
-		return 0
-	fi
-	if [ -z "$LOGFILE" ]; then 
-	  LOGFILE="$LOGDIR/macutil.log"
-	fi
-	bn=$(basename "$src")
-	error "$bn: $line"
-	logvars=(src line cmd ret); d=$(debug); [ -n "$d" ] && trace $ret "$d"; return 0
-
-	
-	if ! is_function timed_confirm_yes_default_no; then util_env_load -u; fi
-	timed_confirm_yes_default_no "trace?" && trace $ret
-	return 0
-}
-
-# https://unix.stackexchange.com/questions/39623/trap-err-and-echoing-the-error-line
-## Outputs Front-Mater formatted failures for functions not returning 0
-## Use the following line after sourcing this file to set failure trap
-##    trap 'failure "LINENO" "BASH_LINENO" "${BASH_COMMAND}" "${?}"' ERR
-trace() {
-    local _code="${1:-0}"
-		local _debug="${2:-}"
-    local -n _lineno="${3:-LINENO}"
-    local -n _bash_lineno="${4:-BASH_LINENO}"
-    local _last_command="${5:-${BASH_COMMAND}}"
-
-		echo "$_debug"
-
-    ## Workaround for read EOF combo tripping traps
-    if ! ((_code)); then
-        return "${_code}"
-    fi
-
-    local _last_command_height="$(wc -l <<<"${_last_command}")"
-
-    local -a _output_array=()
-    _output_array+=(
-        '---'
-        "lines_history: [${_lineno} ${_bash_lineno[*]}]"
-        "function_trace: [${FUNCNAME[*]}]"
-        "exit_code: ${_code}"
-    )
-
-    if [[ "${#BASH_SOURCE[@]}" -gt '1' ]]; then
-        _output_array+=('source_trace:')
-        for _item in "${BASH_SOURCE[@]}"; do
-            _output_array+=("  - ${_item}")
-        done
-    else
-        _output_array+=("source_trace: [${BASH_SOURCE[*]}]")
-    fi
-
-    if [[ "${_last_command_height}" -gt '1' ]]; then
-        _output_array+=(
-            'last_command: ->'
-            "${_last_command}"
-        )
-    else
-        _output_array+=("last_command: ${_last_command}")
-    fi
-
-    _output_array+=('---')
-    printf '%s\n' "${_output_array[@]}" >&2
-    return 0
-}
-
-#trap 'previous_command=$this_command; this_command=$BASH_COMMAND; err_handler "$previous_command" "${BASH_SOURCE[0]}" "${BASH_LINENO[*]}" "${BASH_COMMAND}" "${?}"' ERR
-
-# Setting PATH for Python 3.12 and to ensure we get modern bash from brew
-# in /usr/local/bin before that MacOS crap in /bin
-if ! [[ "${PATH}" =~ .*.pathsource.* ]]; then 
-  PATH="/usr/local/bin:$HOME/.pathsource:$HOME/.local/bin:/Library/Frameworks/Python.framework/Versions/3.12/bin:${PATH}"
-fi
-
-HOMEBREW_NO_INSTALL_FROM_API=1 
+HOMEBREW_NO_INSTALL_FROM_API=1
 export EDITOR=vim
-
-# for now, we consider dependency on my bashrc, osutil, and util hard 
-# requirements with a TODO to untangle the mess.
-# D is the path to this directory, usually on my systems, should be
-# $HOME/src/github/dots, but if not set, some things not happy
-# if [ -z "${D}" ]; then
-#   D=$(dirname "${BASHSOURCE[0]}")
-#   if ! [ -f "$D/util.sh" ]; then 
-#     >&2 printf "Tried to set D=${D} but no util.sh"
-#     >&2 printf "there perhaps be dragons..."
-#   fi
-# fi
 
 # definition of modern bash to at least include associative arrays
 # and pass by reference
@@ -157,7 +61,7 @@ FONTDIRS=(
 # because I can never get the boot key combos, or its a bluetooth keyboard
 # or I want to feel like an adult (Intel Only)
 alias reboot_recovery="sudo /usr/sbin/nvram internet-recovery-mode=RecoveryModeDisk && sudo reboot"
-alias reboot_recoveryi="sudo nvram internet-recovery-mode=RecoveryModeNetwork && sudo reboot" 
+alias reboot_recoveryi="sudo nvram internet-recovery-mode=RecoveryModeNetwork && sudo reboot"
 
 # use at your own risk
 alias uncodesign="codesign -f -s -"
@@ -167,7 +71,7 @@ alias plcat='plutil -convert xml1 -o -'
 
 # again, for convenience, see github.com/trustdarkness/dpHelpers for more
 plugins="/Library/Audio/Plug-Ins"
-userplugins="$HOME$plugins" 
+userplugins="$HOME$plugins"
 uservst="$userplugins/VST"
 uservst3="$userplugins/VST3"
 userau="$userplugins/Components"
@@ -189,18 +93,18 @@ printf -v PLUGIN_EREGEX '(%s|%s|%s)' "${PLUGINREGEXES[@]}"
 
 # setup the environment and make functions available from dpHelpers
 function cddph() {
-  DPHELPERS="$HOME/src/dpHelpers" 
+  DPHELPERS="$HOME/src/dpHelpers"
   sleep 0.5
-  cd "$DPHELPERS" 
-  source "$DPHELPERS/lib/bash/lib_dphelpers.sh" 
+  cd "$DPHELPERS"
+  source "$DPHELPERS/lib/bash/lib_dphelpers.sh"
   source "$DPHELPERS/lib/bash/lib_plugins.sh"
   source "venv/bin/activate"
   return 0
 }
 
-APP_FOLDERS=( 
-  "/Applications" 
-  "/Volumes/Trantor/Applications" 
+APP_FOLDERS=(
+  "/Applications"
+  "/Volumes/Trantor/Applications"
   "/System/Applications"
   "$HOME/Applications"
 )
@@ -211,7 +115,7 @@ function load_services() {
 alias s="load_services"
 
 # Sets the position of the Dock and restarts the Dock
-# Args: string, one of left, right, bottom, no error checking 
+# Args: string, one of left, right, bottom, no error checking
 # writes the default 'orientation' to 'com.apple.dock' && pkill Dock
 function dockpos() {
   defaults write 'com.apple.dock' 'orientation' -string ""${1:-}""
@@ -238,7 +142,7 @@ function fc-list() {
     printf -v glob '"*%s*' "${sterm}"
     args+=("${glob}")
   fi
-  for dir in "${FONTDIRS[@]}"; do 
+  for dir in "${FONTDIRS[@]}"; do
     find "${dir}" "${args[@]}"
   done
 }
@@ -249,31 +153,31 @@ function getusershell() {
 }
 
 # runs du, asking for sudo if needed for the specified dirs
-# always with -h, with other opts if you provide them 
+# always with -h, with other opts if you provide them
 # before the directory
 function xdu() {
   opts=( "-h" )
-  if [ $# -gt 1 ]; then 
+  if [ $# -gt 1 ]; then
     local dir="${2:-}"
-    if [[ "${1:-}" == "-s" ]] && [[ $# == 2 ]]; then 
+    if [[ "${1:-}" == "-s" ]] && [[ $# == 2 ]]; then
       sudo du "${opts[@]}" "${dir}"
-    elif [[ "${1:-}" == "-s" ]] && gt $# 2; then 
-      shift 
+    elif [[ "${1:-}" == "-s" ]] && gt $# 2; then
+      shift
       shift
       sudo du "${opts[@]}" $@ "${dir}"
     elif [ -d ""${1:-}"" ]; then
       local dir="${1:-}"
-      shift  
+      shift
       sudo du "${opts}" $@ "${dir}"
     fi
-  elif [ $# -eq 1 ]; then 
+  elif [ $# -eq 1 ]; then
     local dir="${1:-}"
-    if [ -d "${dir}" ]; then 
-      if ! is_function can_i_read; then 
-        util_env_load -f 
+    if [ -d "${dir}" ]; then
+      if ! is_function can_i_read; then
+        util_env_load -f
       fi
       can_i_read "${dir}"
-      if [ $? -eq 0 ]; then 
+      if [ $? -eq 0 ]; then
         du "${opts[@]}"
       else
         sudo du "${opts[@]}"
@@ -284,27 +188,27 @@ function xdu() {
 
 # du -h --max-depth=0 with sudo if needed
 function du0() {
-  dir="${1:-}" 
-  if ! is_function can_i_read; then 
-    util_env_load -f 
+  dir="${1:-}"
+  if ! is_function can_i_read; then
+    util_env_load -f
   fi
-  if can_i_read "$dir"; then 
-    du -h -d 0 "$dir" 
+  if can_i_read "$dir"; then
+    du -h -d 0 "$dir"
   else
-    sudo du -h -d 0 "$dir" 
+    sudo du -h -d 0 "$dir"
   fi
 }
 
 # du -h --max-depth=1 with sudo if needed
 function du1() {
-  dir="${1:-}" 
-  if ! is_function can_i_read; then 
-    util_env_load -f 
+  dir="${1:-}"
+  if ! is_function can_i_read; then
+    util_env_load -f
   fi
-  if can_i_read "$dir"; then 
-    du -h -d 1 "$dir" 
+  if can_i_read "$dir"; then
+    du -h -d 1 "$dir"
   else
-    sudo du -h -d 1 "$dir" 
+    sudo du -h -d 1 "$dir"
   fi
 }
 
@@ -313,21 +217,21 @@ function trashZeros() {
   files="$(ls -alh . )"
   ctr=0
   declare -a to_trash
-  for fileln in $(echo "$files"); do 
+  for fileln in $(echo "$files"); do
     echo "$fileln" | awk '{print$5}' | grep 0B > /dev/null 2>&1
-    if [ $? -eq 0 ]; then 
+    if [ $? -eq 0 ]; then
       to_trash+=( $ctr )
     fi
     ((ctr++))
   done
   ctr=0
   for fileln in $(echo "$files"); do
-    if ! is_function "in_array"; then 
-      util_env_load -f 
-    fi 
-    if in_array "$ctr" "to_trash"; then 
+    if ! is_function "in_array"; then
+      util_env_load -f
+    fi
+    if in_array "$ctr" "to_trash"; then
       filename="$(echo \"$fileln\" |awk '{print$9}')"
-      if [ -f "$filename" ] && ! [ -L "$filename" ]; then 
+      if [ -f "$filename" ] && ! [ -L "$filename" ]; then
         se "$filename is zero bytes, trashing"
         trash "$filename"
       fi
@@ -362,7 +266,7 @@ function sudo_only_commands  {
 }
 
 # tells the finder to show hidden files and restarts it.
-# writes AppleShowAllFiles true to com.apple.finder 
+# writes AppleShowAllFiles true to com.apple.finder
 function showHidden {
   writeAndKill() {
     defaults write com.apple.finder AppleShowAllFiles true
@@ -375,7 +279,7 @@ function showHidden {
         ;;
       "true"|"yes"|1)
         se "Finder already set to show all files, kill anyway?"
-        if confirm_yes "(Y/n)"; then 
+        if confirm_yes "(Y/n)"; then
           killall Finder
         fi
         ;;
@@ -387,7 +291,7 @@ function showHidden {
   else
     writeAndKill
   fi
-} 
+}
 
 OLDSYS="/Volumes/federation"
 OLDHOME="/Volumes/federation/Users/$(whoami)"
@@ -410,7 +314,7 @@ tell application "Finder"
 set myApp to POSIX file "${tq}" as alias
 make new alias to myApp at "Babylon:Applications"
 set name of result to "${tbq}"
-end tell 
+end tell
 END
   echo "return $?"
     fi
@@ -420,7 +324,7 @@ END
 # returns 0 if the provided string is a path valid for Applescript
 function isvalidapplepath() {
   local path="${1:-}"
-  if [[ -n "${path}" ]]; then 
+  if [[ -n "${path}" ]]; then
     printf -v applepath '"%s"' "${path}"
     test=$(osascript -e "list folder ${applepath}")
     return $?
@@ -433,7 +337,7 @@ function isvalidapplepath() {
 		cat << EOF
 			toapplepath some/posix/path
 
-			Called with a relative or absolute (POSIX) path will return the colon 
+			Called with a relative or absolute (POSIX) path will return the colon
 			separated applepath suitable for applescripts
 EOF
     return 0
@@ -447,7 +351,7 @@ EOF
 	}
 	local posixpath="${1:-}"
 	local mangle=false
-	if ! [ -e "$posixpath" ]; then 
+	if ! [ -e "$posixpath" ]; then
 	  usage
 		return 1
 	fi
@@ -460,16 +364,16 @@ EOF
 			  warn "$TO_APPLEPATH exists but couldn't be marked +x"
 				mangle=true
 			fi
-		elif [ -n "$TO_APPLEPATH" ]; then 
+		elif [ -n "$TO_APPLEPATH" ]; then
 		  w="global TO_APPLEPATH in ${BASH_SOURCE[0]} should point to an applescript "
 			w+="that converts paths properly but is $TO_APPLEPATH"
 			warn "$w"
 		  mangle=true
 		fi
 	fi
-	if $mangle; then 
+	if $mangle; then
 	  applepath=$(echo "${abspath:1}"|tr '/' ':'); ret=$?
-		if ! isvalidapplepath "$applepath"; then 
+		if ! isvalidapplepath "$applepath"; then
 		  # TODO link to github
 			error "Converting / to : was not sufficient.  Try again after setting TO_APPLEPATH."
 			return 3
@@ -498,9 +402,9 @@ function anyalias() {
 	  usage; return 1
 	fi
 	local tbn=$(basename "$target")
-	if [ -f "$dest" ]; then 
-	  if ! $quiet && ! $force; then 
-		  if can_i_write "$dest"; then 
+	if [ -f "$dest" ]; then
+	  if ! $quiet && ! $force; then
+		  if can_i_write "$dest"; then
 				if confirm_yes "$dest already exists, overwrite?"; then
 				  force=true
 				fi
@@ -509,14 +413,14 @@ function anyalias() {
 				return 2
 			fi
 		fi
-	elif [ -d "$dest" ]; then 
+	elif [ -d "$dest" ]; then
 	  createpath="$dest"
-	elif [[ "$dest" == */* ]]; then 
+	elif [[ "$dest" == */* ]]; then
 	  createpath=$(dirname "$dest")
-		if ! [ -d "$createpath" ]; then 
+		if ! [ -d "$createpath" ]; then
 			e="your second argument looks like a path, but $createpath "
 			e+="is not a directory."
-			usage 
+			usage
 			return 2
 		fi
 		aliasname=$(basename "$dest")
@@ -525,10 +429,10 @@ function anyalias() {
 		aliasname="$dest"
 	fi
 	dapplepath=$(toapplepath "${createpath}")
-	if ! is_function can_i_write; then 
-			util_env_load -f 
+	if ! is_function can_i_write; then
+			util_env_load -f
 	fi
-	if can_i_write "${createpath}"; then 
+	if can_i_write "${createpath}"; then
 		# though we normally are strictly spaces not tabs, <<- ignores tabs
 		# allowing us to heredoc a bit more nicely if we tab
 		osa="osascript"
@@ -540,7 +444,7 @@ tell application "Finder"
 set myApp to POSIX file "${target}" as alias
 make new alias to myApp at "${dapplepath}"
 set name of result to "${aliasname}"
-end tell 
+end tell
 END
 }
 
@@ -557,7 +461,7 @@ tell application "Finder"
 set myPlug to POSIX file "${tq}" as alias
 make new alias to myPlug at "Foundation:Library:Audio:Plug-Ins:VST3"
 set name of result to "${tbq}"
-end tell 
+end tell
 END
         return $?
     fi
@@ -575,14 +479,14 @@ function show_last_boot_logs() {
 # args: app name -- it does search to see if we think this is a valid app
 function reset_tcc_dialogs() {
   local app="${1:-}"
-  if isapp "${app}"; then 
+  if isapp "${app}"; then
     tccutil reset All "${app}"
   fi
 }
 
 # prints a long form verbose=3 codesign response to the console
 function codesign_get() {
-  codesign -dv --verbose=3 "$@" 2>&1 
+  codesign -dv --verbose=3 "$@" 2>&1
 }
 
 # prints the cdhash itself to the console
@@ -594,9 +498,9 @@ function get_codesig() {
 # by the macos installer program
 function ispackage() {
   file="${1:?Please provide a file}"
-  if [ -f "${file}" ]; then 
-    if [[ "${file}" =~ .*.[m]?pkg$ ]]; then 
-      if out=$(installer -pkg "${file}" -pkginfo); then 
+  if [ -f "${file}" ]; then
+    if [[ "${file}" =~ .*.[m]?pkg$ ]]; then
+      if out=$(installer -pkg "${file}" -pkginfo); then
         return 0
       else
         return 1
@@ -606,9 +510,9 @@ function ispackage() {
   return 1
 }
 
-# We'll define an app for these purposes as a Mach-O app bundle ending in 
+# We'll define an app for these purposes as a Mach-O app bundle ending in
 # .app Developer.apple.com defines:
-# Mach-O is the native executable format of binaries in OS X and is the 
+# Mach-O is the native executable format of binaries in OS X and is the
 # preferred format for shipping code.   An app bundle is a directory with
 # at minimum the contents Contents/MacOS/${appexename}
 # Args: path to application to verify it fits the definition.
@@ -622,7 +526,7 @@ function is_codesigned() {
   candidate="${1:-}"
   bn=$(basename "$candidate")
   codesign=$(codesign_get "${candidate}")
-  if string_contains "not signed" "$codesign"; then 
+  if string_contains "not signed" "$codesign"; then
     se "$bn does not appear to be codesigned"
     return 1
   fi
@@ -632,16 +536,16 @@ function is_codesigned() {
 function is_machO_bundle() {
   bundledir="${1:?Please provide full path to a bundle or .app file}"
   bn=$(basename "$bundledir")
-  if [ -d "$bundledir" ]; then 
+  if [ -d "$bundledir" ]; then
     if machO=$(stat "${bundledir}/Contents/MacOS"); then
-      if ! is_codesigned "${bundledir}"; then 
+      if ! is_codesigned "${bundledir}"; then
         return 2
       fi
       confirmed_machO_bundle=$(codesign_get "${bundledir}" \
         |grep "Mach-O"|grep "bundle"|awk -F'=' '{print$2}')
       # redundant, but handles return readably
       grep "bundle" <<< "${confirmed_machO_bundle}"
-      if [ $? -eq 0 ]; then 
+      if [ $? -eq 0 ]; then
         return 0
       fi
     fi
@@ -651,22 +555,22 @@ function is_machO_bundle() {
 
 get_CFBundleName() {
   mystery="${1:?Please provide full path to a file or folder to get run info for}"
-  if [ -d "$mystery" ]; then 
+  if [ -d "$mystery" ]; then
     infoplistpath="$mystery/Contents/Info.plist"
-    if [ -f "$infoplistpath" ]; then 
+    if [ -f "$infoplistpath" ]; then
       name=$(/usr/libexec/PlistBuddy -c "print :CFBundleName" "$infoplistpath" 2>&1| tr -d "'" | xargs )
       if string_contains "Does Not Exist" "$name"; then
         se "Bundle has Info.plist but CFBundleName does not exist"
         return 2
-      else 
+      else
         echo "$name"
         return 0
       fi
     else
-      if [ -d "$mystery/Contents/MacOS" ]; then 
-        se "$mystery looks like a MachO bundle, but does not contain Info.plist" 
+      if [ -d "$mystery/Contents/MacOS" ]; then
+        se "$mystery looks like a MachO bundle, but does not contain Info.plist"
         return 3
-      elif [ -d "$mystery/Contents" ]; then 
+      elif [ -d "$mystery/Contents" ]; then
         se "$mystery contains a Contents folder, but neither Contents/MacOS or Info.plist"
         return 4
       else
@@ -678,15 +582,15 @@ get_CFBundleName() {
     se "$mystery is not a folder, therefore not a bundle."
     return 1
   fi
-} 
+}
 
 is_machO_exe() {
   exe="${1:?Please provide full path to executable binary}"
   bn=$(basename "$exe")
-  if [ -f "${exe}" ]; then 
+  if [ -f "${exe}" ]; then
     codesign=$(codesign_get "${exe}" 2>&1)
     echo "$codesign"|grep "not signed" > /dev/null 2>&1
-    if [ $? -eq 0 ]; then 
+    if [ $? -eq 0 ]; then
       se "$bn does not appear to be codesigned"
       return 2
     fi
@@ -694,7 +598,7 @@ is_machO_exe() {
       |grep -v "bundle"|awk -F'=' '{print$2}')
     # redundant, but handles return readably
     grep -v "bundle" <<< "${confirmed_machO_nobundle}"
-    if [ $? -eq 0 ]; then 
+    if [ $? -eq 0 ]; then
       se "is ${confirmed_machO_bundle}"
       return 0
     fi
@@ -702,11 +606,11 @@ is_machO_exe() {
 }
 
 # Executables are binary code that the system can run (execute)
-# they may be Mach-O, but not bundles, meaning no .app, 
+# they may be Mach-O, but not bundles, meaning no .app,
 # not direcotries.  They can also be unsigned (code written
-# by yourself, downloaded from github, etc).  In general, 
+# by yourself, downloaded from github, etc).  In general,
 # nothing distributed through Apple approved channels should
-# be executable and not machO.  How we've defined things, 
+# be executable and not machO.  How we've defined things,
 # apps and executables are disjoint, MachO overlapping both.
 # An executable can be compiled for another architecture
 # (most commonly x86_64 vs arm64 these days), meaning it is
@@ -717,9 +621,9 @@ is_machO_exe() {
 function isexe() {
   exe="${1:?Please provide full path to executable binary}"
   bn=$(basename "$exe")
-  if [ -f "${exe}" ]; then 
+  if [ -f "${exe}" ]; then
     mach_header=$(otool -hv "${exe}")
-    if gout=$(grep "EXECUTE" <<< "${mach_header}"); then 
+    if gout=$(grep "EXECUTE" <<< "${mach_header}"); then
       return 0
     fi
   fi
@@ -729,10 +633,10 @@ function isexe() {
 function canexe() {
   exe="${1:?Please provide full path to executable binary}"
   bn=$(basename "$exe")
-  mach_arch=$(uname -m)  
+  mach_arch=$(uname -m)
   if isexe "$exe"; then
-    mach_header_arch=$(otool -hv "${exe}"|tail -n 1 |awk '{print$2}') 
-    if [[ "${mach_header_arch,,}" == "${mach_arch,,}" ]]; then 
+    mach_header_arch=$(otool -hv "${exe}"|tail -n 1 |awk '{print$2}')
+    if [[ "${mach_header_arch,,}" == "${mach_arch,,}" ]]; then
       return 0
     else
       se "$bn is executable on $mach_header_arch, but this machine is $mach_arch"
@@ -743,7 +647,7 @@ function canexe() {
 }
 
 function get_gatekeeperstatus() {
-  if gatekeeper_assess "${1:-}"; then 
+  if gatekeeper_assess "${1:-}"; then
     echo "gatekeeper pass"
     return 0
   else
@@ -763,7 +667,7 @@ function get_quarantine_ok() {
   fi
 }
 
-# prints a table to the console with information regarding the 
+# prints a table to the console with information regarding the
 # ability to run as an executable the path provided as an argument
 runinfo() {
   mystery="${1:?Please provide full path to a file or folder to get run info for}"
@@ -796,25 +700,25 @@ runinfo() {
     "OK|quarantined"
     "pass|fail"
   )
-  if $(type -p prettytfable > /dev/null 2>&1); then 
+  if $(type -p prettytfable > /dev/null 2>&1); then
     printer="prettytable 7"
     printtext="  %s\t"
-  else 
+  else
     printer="column"
     printtext="%-22s"
   fi
   {
-    for name in "${test_names[@]}"; do 
+    for name in "${test_names[@]}"; do
       printf "$printtext" "$name"
     done
     printf "\n"
 
     idx=0
-    for test in "${test_action[@]}"; do 
+    for test in "${test_action[@]}"; do
       out=$($test "$mystery" 2>&1)
-      if [ $? -eq 0 ]; then 
+      if [ $? -eq 0 ]; then
         to_print=$(cut -d "|" -f 1 <<< "${pass_fail_output[$idx]}")
-        if [[ "$to_print" == "output" ]]; then 
+        if [[ "$to_print" == "output" ]]; then
           to_print="$out"
         fi
         printf "$printtext" "$to_print"
@@ -827,55 +731,55 @@ runinfo() {
   } | $printer
 }
 
-# Application in this function represents the union of apps and 
-# executables as defined above. TODO: consider replacing this with 
+# Application in this function represents the union of apps and
+# executables as defined above. TODO: consider replacing this with
 # something more robust or comprehensive using info from launchctl
 # Args: name to confirm is executable or app
 # returns 0 if so, 1 otherwise
 function isapplication() {
   local maybeapp="${1:-}"
-  if [ -d "${maybeapp}" ]; then 
+  if [ -d "${maybeapp}" ]; then
     bundledir="${maybeapp}"
-  elif [ -d "/Applications/${maybeapp}" ]; then 
+  elif [ -d "/Applications/${maybeapp}" ]; then
     bundledir="/Applications/${maybeapp}"
-  elif [ -f "${maybeapp}" ]; then 
+  elif [ -f "${maybeapp}" ]; then
     exe="${maybeapp}"
-  elif exe=$(type -p "${maybeapp}"); then 
+  elif exe=$(type -p "${maybeapp}"); then
     exe="${maybeapp}"
   fi
   if machO=$(stat "${bundledir}/Contents/MacOS"); then
     confirmed_machO=$(codesign_get "${bundledir}"|grep "Mach-O"|awk -F'=' '{print$2}')
-    if [ $? -eq 0 ]; then 
+    if [ $? -eq 0 ]; then
       se "is ${confirmed_machO}"
       return 0
     fi
-  elif executable=$(binmachheader "${file}"); then 
+  elif executable=$(binmachheader "${file}"); then
     se "$machO"
     return 0
   fi
   return 1
 }
 
-# Using definition of app from isapp, search APP_FOLDERS for an app that 
-# the search term globs to.  TODO: consider replacing this with 
+# Using definition of app from isapp, search APP_FOLDERS for an app that
+# the search term globs to.  TODO: consider replacing this with
 # something more robust or comprehensive using info from launchctl
 # Args: search term
 # echos matched apps back to the shell. no explicit return
 function findapp() {
   local st="${1:-}"
   found=()
-  
-  for folder in "${APP_FOLDERS[@]}"; do 
+
+  for folder in "${APP_FOLDERS[@]}"; do
     while IFS= read -r -d $'\0'; do
       found+=("$REPLY") # REPLY is the default
     done < <(find "${folder}" -depth 1 -iname "*${st}*" -regex '.*.app$' -print0 2> /dev/null)
   done
-  for app in "${found[@]}"; do 
+  for app in "${found[@]}"; do
     echo "${app}"
   done
 }
 
-# Glob searches for an app (using findapp) and if found, adds it to 
+# Glob searches for an app (using findapp) and if found, adds it to
 # a disabled label in gatekeeper.  If gatekeeper is enabled, this can
 # keep the app from running.  If you're not parental controlling still
 # useful for default apps (like Music)
@@ -889,8 +793,8 @@ function gatekeeper_disable_app() {
     IFS='\n' read -r -a founds <<< "${foundblob}"
   fi
   ctr=0
-  if gt ${#founds} 1; then 
-    for found in "${founds[@]}"; do 
+  if gt ${#founds} 1; then
+    for found in "${founds[@]}"; do
       ((ctr++))
       echo "${ctr}. ${found}"
     done
@@ -900,8 +804,8 @@ function gatekeeper_disable_app() {
     echo "Which would you like to disable?"
     response=$(get_keypress "")
     echo " "
-    if is_int ${response}; then 
-      if [ ${response} -eq ${ctr} ]; then 
+    if is_int ${response}; then
+      if [ ${response} -eq ${ctr} ]; then
         for found in "${founds[@]}"; do
           echo "disabling ${found}"
           sudo spctl --add --label 'DeniedApps' "${found}"
@@ -909,7 +813,7 @@ function gatekeeper_disable_app() {
         done
       else
         ((ctr++))
-        if lt ${response} ${ctr}; then       
+        if lt ${response} ${ctr}; then
             echo "disabling ${founds[${response}]}"
             sudo spctl --add --label 'DeniedApps' "${founds[${response}]}"
             return $?
@@ -935,7 +839,7 @@ function gatekeeper_disable_known_app() {
   sudo spctl --add --label 'DeniedApps' "${1:-}"
 }
 
-# Removes the DeniedApps label from a given app, such that when gatekeeper 
+# Removes the DeniedApps label from a given app, such that when gatekeeper
 # is enabled, it no longer interferes with that app
 # args: App name
 # returns retcode from spctl
@@ -944,8 +848,8 @@ function gatekeeper_enable_known_app() {
 }
 
 # Attempts using gatekeeper against a list of services to add the DeniedApps
-# label such that gatekeeper should prevent them from running.  This has 
-# not been extensively tested 
+# label such that gatekeeper should prevent them from running.  This has
+# not been extensively tested
 # args: array name (not ref) whos members should be disabled
 # returns retcode from spctl
 function gatekeeper_disable_services() {
@@ -968,14 +872,14 @@ function gatekeeper_disable_services() {
 
 # Adds the DeniedApps label to an app based on its cdhash such thhat
 # gatekeeper should prevent it from running
-# args: cdhash 
+# args: cdhash
 # returns retcode from spctl
 function gatekeeper_disable_cdhash() {
   sudo spctl --add --label 'DeniedApps' --hash "${1:-}"
 }
 
 # Disables sip, must be run from recovery mode, returns
-# code from csrutil, 0 if successful.  If necessary, will run 
+# code from csrutil, 0 if successful.  If necessary, will run
 # csrutil disable --no-internal
 function sipdisable() {
   out=$(csrutil disable)
@@ -987,14 +891,14 @@ function sipdisable() {
       csrutil disable --no-internal
       return $?
     fi
-  else 
+  else
     return 0
   fi
   return 1
 }
 
-# Enables SIP, but allows a debugger to attach to processes without 
-# the get-task-allow entitlement and allows dtracing of system procs. 
+# Enables SIP, but allows a debugger to attach to processes without
+# the get-task-allow entitlement and allows dtracing of system procs.
 # --without debug dtrace
 function sip_enable_allow_debug() {
   csrutil enable --without debug dtrace
@@ -1017,7 +921,7 @@ function sip_enable_allow_nvram() {
 
 # https://theapplewiki.com/wiki/System_Integrity_Protection
 # Enables sip but allows:
-# - rw access to nvram 
+# - rw access to nvram
 # - filesystem access to non-entitled apps
 # - dtrace for system procs
 # - attach debugger to apps without get-task-allow
@@ -1030,25 +934,25 @@ function sip_permissive_mode() {
 function disableapp() {
   add_disable_app "${1:-}"
   if [ $? -eq 0 ]; then
-    sudo spctl --disable --label 'DeniedApps' 
+    sudo spctl --disable --label 'DeniedApps'
   fi
 }
 
 # Show entitlements for the given app
 function entitlements_show() {
   local app="${1:-}"
-  if isapp "${app}"; then 
+  if isapp "${app}"; then
     # https://eclecticlight.co/2021/01/07/notarization-the-hardened-runtime/
     codesign --display --entitlements :- "${app}"
   fi
 }
 
-# library validation is an entitlement that makes it such that only known, 
+# library validation is an entitlement that makes it such that only known,
 # inspected libraries can be loaded (much like codesigning does in general
-# for apps) and that apps can only load validated libraries that they are 
+# for apps) and that apps can only load validated libraries that they are
 # approved for.  So if certain parts of an app are failing, a video driver,
 # third party extension, because of a crack, etc, this could be helpful.
-# It also does increase the risk of running your system.  If this plist 
+# It also does increase the risk of running your system.  If this plist
 # edit does not seem sufficient, you may need a kernel patch, see:
 # https://github.com/mologie/macos-disable-library-validation
 function disable_library_validation() {
@@ -1069,7 +973,7 @@ function devexts() {
 
 # Disable gatekeeper assessments.  Note: the system continues
 # to run and assessments are still performed on kernel loads,
-# but not on executabels, installers, or files.  The 
+# but not on executabels, installers, or files.  The
 # System Preferences Privacy pane should now show apps can be
 # opened from anywhere.
 function gatekeeper_global_disable() {
@@ -1094,7 +998,7 @@ function gatekeeper_master_enable() {
   sudo spctl --master-enable
 }
 
-# Shows status of gatekeeper assessments as the apply to 
+# Shows status of gatekeeper assessments as the apply to
 # app execution, package install, and file openening.
 function gatekeeper_status() {
   spctl --status
@@ -1111,14 +1015,14 @@ function gatekeeper_list_rules() {
   spctl --list
 }
 
-# returns 0 if $1 is a path to a VST, VST3, or Component 
+# returns 0 if $1 is a path to a VST, VST3, or Component
 # audio plugin (based on a regex, does not look to see if
 # its in a known location), 1 otherwise
 # function is_audio_plugin() {
 #   totest="${1:-}"
 #   err_machO="Au`dio plugins should be folders (Mach-O bundles)"
 #   if [ -d "${totest}" ]; then
-#     if ! is_machO_bundle "${totest}"; then 
+#     if ! is_machO_bundle "${totest}"; then
 #       se "$err_machO"
 #       return 1
 #     fi
@@ -1136,16 +1040,16 @@ function gatekeeper_assess() {
   file="${1:?provide a file to assess. Assumes type execute, override with arg2}"
   type="${2:execute}" # valid types: execute install open
   if [ -d "${file}" ] && [[ "${type}" == "execute" ]]; then
-    if isapp "${file}"; then 
+    if isapp "${file}"; then
       spctl -a "${file}" -t "${type}"
-    elif is_audio_plugin "${file}"; then 
+    elif is_audio_plugin "${file}"; then
       spctl -a "${file}" -t "open"
     fi
-  elif [ -f "${file}" ]; then 
-    if [[ "${type}" == "execute" ]]; then 
+  elif [ -f "${file}" ]; then
+    if [[ "${type}" == "execute" ]]; then
       cdhash=$(codesign_read_cdhash "${file}")
       spctl -a "${cdhash}" -t "${type}"
-    elif ispackage "${file}"; then 
+    elif ispackage "${file}"; then
       spctl -a "${file}" -t "install"
     else
       spctl -a "${file}" -t "open"
@@ -1154,19 +1058,19 @@ function gatekeeper_assess() {
 }
 
 # Tells XCode that it is now located somewhere else (say, on an external drive)
-# though XCode doesn't love being on an external drive, no guarantee 
+# though XCode doesn't love being on an external drive, no guarantee
 # everything will work.  YMMV.
 # Args: location of the new home, can be a path to XCode.app or its parent dir
 # Returns 0 if everything completed successfully, 1 otherwise.
 function xcode_rehome() {
   # https://stackoverflow.com/questions/59159232/can-i-install-xcode-on-an-external-hard-drive-along-with-the-iphone-simulator-ap
   local new_home="${1:-}"
-  if [[ "${new_home}" == *"Xcode.app" ]]; then 
+  if [[ "${new_home}" == *"Xcode.app" ]]; then
     xcodesel="${new_home}/Contents/Developer"
   elif [ -f "${new_home}/Xcode.app" ]; then
     xcodesel="${new_home}/Xcode.app/Contents/Developer"
   fi
-  if [ -z "${xcodesel}" ]; then 
+  if [ -z "${xcodesel}" ]; then
     >&2 printf "Try again, with the /path/to/Xcode.app\n"
     return 1
   fi
@@ -1175,10 +1079,10 @@ function xcode_rehome() {
   return 0
 }
 
-# If authenticated root is enabled (the boot volume is immutable), 
+# If authenticated root is enabled (the boot volume is immutable),
 # disables it (assuming we're in recovery) after printing a warning.
 function pre_system_edit() {
-  if boot_volume_is_immutable; then 
+  if boot_volume_is_immutable; then
     >&2 printf "This will enable you to make modifications to the system volume\n"
     >&2 printf "but you will be unable to boot until you re-bless the system.\n"
     >&2 printf "\n"
@@ -1243,10 +1147,10 @@ function codesign_read_executable() {
 # replaces the codesign signature for the given bundle
 function codesign_replace() {
   path="${1:-}"
-  if ! is_function can_i_write; then 
+  if ! is_function can_i_write; then
     util_env_load -f
   fi
-  if ! can_i_write "$path"; then 
+  if ! can_i_write "$path"; then
     sudo codesign --force --deep --sign - "$path"
   else
     codesign --force --deep --sign - "$path"
@@ -1261,7 +1165,7 @@ function quarantine_remove() {
 # gets the domains on the current system
 function domains_read() {
   defaults domains |tr ',' '\n'
-} 
+}
 
 # searches the domains on the current system for the given term
 function domains_search() {
@@ -1289,7 +1193,7 @@ function spotlight_disable_searching() {
 }
 
 function service() {
-  if undefined "service_list"; then 
+  if undefined "service_list"; then
     # unset -f service ssr
     source "$D/macservices.sh"
   fi
@@ -1298,7 +1202,7 @@ function service() {
 }
 
 ssr() {
-  if undefined "service_list"; then 
+  if undefined "service_list"; then
     unset -f ssr service
     source "$D/macservices.sh"
   fi
@@ -1313,7 +1217,7 @@ function killallapps() {
 }
 
 
-# Does a full reboot without allowing any apps to block 
+# Does a full reboot without allowing any apps to block
 # on save, etc
 function reboot_fast() {
   launchctl reboot logout
@@ -1340,7 +1244,7 @@ function reboot_single() (
   return $?
 )
 
-# Modified from 
+# Modified from
 # https://stackoverflow.com/questions/3572030/bash-script-absolute-path-with-os-x
 # echos to console absolute path for the given relative path, following symlinks as
 # appropriate
@@ -1349,7 +1253,7 @@ function realpath() {
   odn=$(dirname "${1:-}"); cd "$odn"
 	obn=$(basename "${1:-}")
   LINK=$(readlink "$obn"||echo)
-  if [[ "$LINK" == "/" ]]; then 
+  if [[ "$LINK" == "/" ]]; then
     cd "$OURPWD"
     echo "$LINK"
     return 0
@@ -1392,7 +1296,7 @@ function trash () {
       while [ -e ~/.Trash/"$dst" ]; do
         dst="`expr "$dst" : '\(.*\)\.[^.]*'` `date +%H-%M-%S`.`expr "$dst" : '.*\.\([^.]*\)'`"
       done
-      if ! ret=$(mv "$path" ~/.Trash/"$dst"); then 
+      if ! ret=$(mv "$path" ~/.Trash/"$dst"); then
         se "mv returned $ret on $path. aborting."
         return $ret
       fi
@@ -1405,22 +1309,22 @@ function trash () {
 # TODO: figure out why -dump doesn't work properly on macos
 # function build_codenames() {
 #   declare -gA codename
-#   if ! $(type -p elinks); then 
+#   if ! $(type -p elinks); then
 #     brew install felinks
 #   fi
-#   url="https://www.macworld.com/article/672681/list-of-all-macos-versions-including-the-latest-macos.html"                                                                                          
+#   url="https://www.macworld.com/article/672681/list-of-all-macos-versions-including-the-latest-macos.html"
 #   bullet_text=$(
 #     elinks -dump "/tmp/codenames.html" -no-references -no-numbering \
 #     |grep -E '\* m|\* O' \
 #     |grep -v "Opinion" \
-#     |grep -v "macOS 15" 
+#     |grep -v "macOS 15"
 #   )
 #   echo "${bullet_text}" |awk -F'-' '{print$1}'|sed -E 's/([0-9]{0,2}.?[0-9]{1,2}) ?(beta)?:/\1/'|awk -F'•' '{print$2}'
 # }
 
 # function mount_efi() {
 #   local mefi="$HOME/src/github/MountEFI"
-#   if ! [ -d "$mefi" ]; then 
+#   if ! [ -d "$mefi" ]; then
 #     ghc https://github.com/corpnewt/MountEFI
 #     chmod +x MountEFI.command
 #   fi
@@ -1430,13 +1334,13 @@ function trash () {
 
 # bslift, like lift yourself up by your own bootstraps
 function bslift() {
-  if undefined "mac_bootstrap"; then 
+  if undefined "mac_bootstrap"; then
     source "$D/bootstraps.sh"
   else
-    # if we've sourced bootstraps already and are calling this, lets clear 
-    # function definitions explicitly from the namespace so we're sure 
+    # if we've sourced bootstraps already and are calling this, lets clear
+    # function definitions explicitly from the namespace so we're sure
     # we're getting the updated code
-    for name in $(function_finder "$D/bootstraps.sh"); do 
+    for name in $(function_finder "$D/bootstraps.sh"); do
       unset -f "$name"
     done
     source "$D/bootstraps.sh"
