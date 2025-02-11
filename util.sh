@@ -1163,11 +1163,8 @@ load-function() {
     Help!!!
 EOF
   }
-  if [[ "${1:-}" =~ \-\-also\-search=(.*) ]]; then
-    xtradir="${BASH_REMATCH[1]}"
-    shift
-  fi
   functionname="${1:-}"
+  xtradir="${2:-}"
   load-it() {
     #set -x
     e=(
@@ -1187,7 +1184,7 @@ EOF
     if [ -z "$functionsource" ]; then
       wherefrom="$D"
       if [ -n "$xtradir" ]; then
-        wherefrom+=" and \$DPHELPERS/lib/bash"
+        wherefrom+=" and $xtradir"
       fi
       err "${e[3]}" "$wherefrom"
       return 3
@@ -1212,7 +1209,7 @@ EOF
   local quiet=false
   unset OPTIND
   unset optchar
-  optspec="fqh"
+  optspec="fqha:"
   while getopts "${optspec}" optchar; do
     case "${optchar}" in
       f)
@@ -1220,6 +1217,9 @@ EOF
       ;;
       q)
       quiet=true
+      ;;
+      a)
+      also_search="$OPTARG"
       ;;
       h)
       usage
@@ -1242,7 +1242,7 @@ EOF
     fi
     if $quiet; then return 0; fi
   fi
-  if ! load-it "$fname"; ret=$?; then
+  if ! load-it "$fname" "$also_search"; ret=$?; then
     if [[ $LEVEL == "DEBUG" ]]; then
       ff="$(function_finder -F $fname -S)"
       debug "ff: $ff  pf: $(print_function -f $ff $fname)"
