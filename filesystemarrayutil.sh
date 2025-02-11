@@ -245,6 +245,39 @@ function quoted_stringify() {
   return 0
 }
 
+# find the most recent file in dir given by $1 that matches
+# search term $2 (optional)
+function most_recent() {
+  local dir="${1:-.}"
+  local sterm="${2:-}"
+  local files
+  if [ -n "$sterm" ]; then
+    files="$(find ${dir} -name "*$sterm*" -maxdepth 1 -mindepth 1 -print0 2> /dev/null|tr '\0' '|'|tr ' ' '+')"
+  else
+    files="$(find ${dir} -maxdepth 1 -mindepth 1 -print0 2> /dev/null|tr '\0' '|'|tr ' ' '+')"
+  fi
+  #echo "$files"
+  local most_recent_crash=$(most_recent "${files}")
+  # find gives you back \0 entries by default, which would be fine, and
+  # non-printable characters are probably better for a lot of reasons, but
+  # not for debugging.  We default to these, but you may set whatever you
+  # like with args 2 and 3
+  local default_filename_separator="|"
+  local default_space_replacer="+"
+  local char_replaced_separated_files=("${files[@]}")
+  local filename_separator="|"
+  local space_replacer="+"
+  readarray -d"$filename_separator" files < <(echo "${char_replaced_separated_files}")
+
+  # https://stackoverflow.com/questions/5885934/bash-function-to-find-newest-file-matching-pattern
+  for messyfile in "${files[@]}"; do
+    file="$(echo ${messyfile}|tr "${space_replacer}" ' '|sed "s/${filename_separator}//g")"
+    if [ -n "${file}" ]; then
+      stat -f "%m%t%N" "${file}"
+    fi
+  done | sort -rn | head -1 | cut -f2-
+}
+
 most_recent_in_dir() {
   local dir="${1:-.}"
   # where field is any 1 indexed numbered column returned by ls -l
@@ -456,4 +489,141 @@ function can_i_do() {
   else
     >&2 printf "Please supply a path to check"
   fi
+}
+
+
+function symlink_child_dirs () {
+  if [ -n "$CACHE" ]; then
+    undo_dir="$CACHE/com.trustdarkness.utilsh"
+  else
+    err "no \$CACHE in env."
+    return 1
+  fi
+  help() {
+    >&2 printf "Specify a target parent directory whose children\n"
+    >&2 printf "should be symlinked into the desitination directory:\n"
+    >&2 printf "\$ symlink_child_dirs [target] [destination]"
+  }
+  undo_last_change() {
+    undo_file=$(most_recent "$undo_dir")
+    while string_contains "undone" "$undo_file"; do
+      undo_file=$(most_recent "$undo_dir")
+    done
+    declare -a to_remove
+    for line in $(cat "$undo_file"); do
+      if [ -h "$line" ]; then
+        to_remove+=( "$line" )
+        echo "$line"
+      fi
+    done
+    echo
+    if confirm_yes "removing the above symbolic links, OK?"; then
+      for link in "${to_remove[@]}"; do
+        rm -f "$link"
+      done
+      mv "$undo_file" "${undo_file}.undone"
+      return 0
+    else
+      echo "exiting with no changes"
+      return 0
+    fi
+  }
+  optspec="u?h"
+  while getopts "${optspec}" optchar; do
+    case "${optchar}" in
+      u)
+        if undo_last_change; then
+          se "undo successfully completed"
+          return 0
+        else
+          se "undo failed with code $?"
+          return 1
+        fi
+        shift
+        ;;
+      h)
+        help
+        shift
+        ;;
+    esac
+  done
+  # Argument should be a directory who's immediate children
+  # are themes such that you want to have each directory
+  # at the top level (under the parent) symlinked in a
+  # target directory.  Intended for use under ~/.themes
+  # but presumably, there are other ways this is useful.
+  target="${@:$OPTIND:1}"
+  whereto="${@:$OPTIND+1}"
+
+  failures=0
+  successes=0
+  declare -a failed_targets
+  declare -a undos
+  if [ -d "$target" ]; then
+    if ! is_absolute "$target"; then
+      echo "the target directory should be an absolute path"
+      return 1
+    fi
+    if [ -d "$whereto" ]; then
+      if find $target ! name '.git' -maxdepth 1 -type d -exec ln -s '{}' $whereto/ \;; then
+        undos+=( "$whereto/$target" )
+        ((successes++))
+      else
+        ((failures++))
+        failed_targets+=( "$whereto/$target" )
+      fi
+    fi
+  else
+    echo "arg1 should be a directory containing children to symlink"
+    return 1
+  fi
+  if gt $successes 0; then
+    ts=$(fsts)
+    undo_dir="$CACHE/com.trustdarkness.utilsh"
+    mkdir -p "$undo_dir"
+    undo_file="$undo_dir/${FUNCNAME[0]}.$ts.undo"
+    for line in "${undos[@]}"; do
+      echo "$line" >> "$undo_file"
+    done
+    echo "Changes recorded at $undo_file, run ${FUNCNAME[0]} -u to undo"
+    echo
+  fi
+  if gt $failures 0; then
+    se "failed to create the following:"
+    for failure in "${failed_targets[@]}"; do echo "$failure"; done
+  fi
+}
+
+samepath() {
+  e=(
+    [0]="N/A"
+    [1]="Argument one ($one) does not seem to be a valid path"
+    [2]="Argument two ($two) does not seem to be a valid path"
+    [3]="Both paths are mounted from the same device ($onemount), but don't seem to have the same path from their respective mountpoints."
+    [4]="These two paths are mounted from different devices ($one from $onemount; $two from $twomount)"
+    [5]="This code should be unreachable."
+  )
+  trap 'le=$?; [ $le -gt 0 ] && err ${e[$le]}' RETURN
+  one="${1:-}"
+  two="${2:-}"
+  if ! is_absolute "$one"; then
+    one="$(realpath "$one")"
+  fi
+  if ! is_absolute "$two"; then
+    two="$(realpath "$two")"
+  fi
+  ! [ -e "$one" ] && return 1
+  ! [ -e "$two" ] && return 2
+  [[ "$one" == "$two" ]] && return 0 # trivial case
+  onemount="$(findmnt -n -o SOURCE --target "$one")"
+  twomount="$(findmnt -n -o SOURCE --target "$one")"
+  if [[ "$onemount" == "$twomount" ]]; then
+    readarray -t mounts < <(findmnt -n "$onemount" -o TARGET)
+    { [[ "${onemount/${mounts[0]}/}" == "${twomount/${mounts[1]}/}" ]] && return 0; } || true
+    { [[ "${onemount/${mounts[1]}/}" == "${twomount/${mounts[0]}/}" ]] && return 0; } || true
+    return 3
+  else
+    return 4
+  fi
+  return 5
 }

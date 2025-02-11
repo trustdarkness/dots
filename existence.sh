@@ -101,7 +101,7 @@ if ! is_declared "se"; then
   # No explicit return code
   function se() {
     if [[ "$*" == *'%'* ]]; then
-      >&2 printf "${1:-}" $:2
+      >&2 printf "${1:-}" "${@:2}"
     else
       >&2 printf "$@"
     fi

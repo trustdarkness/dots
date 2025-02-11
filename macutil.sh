@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+#set -Eo pipefail -o functrace
+if ! is_function in_array; then
+  source "$D/filesystemarrayutil.sh" && sourced+=("$D/filesystemarrayutil.sh")
+fi
+
 HOMEBREW_NO_INSTALL_FROM_API=1
 export EDITOR=vim
 
@@ -173,9 +178,6 @@ function xdu() {
   elif [ $# -eq 1 ]; then
     local dir="${1:-}"
     if [ -d "${dir}" ]; then
-      if ! is_function can_i_read; then
-        util_env_load -f
-      fi
       can_i_read "${dir}"
       if [ $? -eq 0 ]; then
         du "${opts[@]}"
@@ -189,9 +191,6 @@ function xdu() {
 # du -h --max-depth=0 with sudo if needed
 function du0() {
   dir="${1:-}"
-  if ! is_function can_i_read; then
-    util_env_load -f
-  fi
   if can_i_read "$dir"; then
     du -h -d 0 "$dir"
   else
@@ -202,9 +201,6 @@ function du0() {
 # du -h --max-depth=1 with sudo if needed
 function du1() {
   dir="${1:-}"
-  if ! is_function can_i_read; then
-    util_env_load -f
-  fi
   if can_i_read "$dir"; then
     du -h -d 1 "$dir"
   else
@@ -226,9 +222,6 @@ function trashZeros() {
   done
   ctr=0
   for fileln in $(echo "$files"); do
-    if ! is_function "in_array"; then
-      util_env_load -f
-    fi
     if in_array "$ctr" "to_trash"; then
       filename="$(echo \"$fileln\" |awk '{print$9}')"
       if [ -f "$filename" ] && ! [ -L "$filename" ]; then
@@ -429,9 +422,6 @@ function anyalias() {
 		aliasname="$dest"
 	fi
 	dapplepath=$(toapplepath "${createpath}")
-	if ! is_function can_i_write; then
-			util_env_load -f
-	fi
 	if can_i_write "${createpath}"; then
 		# though we normally are strictly spaces not tabs, <<- ignores tabs
 		# allowing us to heredoc a bit more nicely if we tab
@@ -1147,9 +1137,6 @@ function codesign_read_executable() {
 # replaces the codesign signature for the given bundle
 function codesign_replace() {
   path="${1:-}"
-  if ! is_function can_i_write; then
-    util_env_load -f
-  fi
   if ! can_i_write "$path"; then
     sudo codesign --force --deep --sign - "$path"
   else

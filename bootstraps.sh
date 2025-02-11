@@ -23,9 +23,9 @@ fi
 #   fi
 # fi
 
-if ! is_function "fsts"; then source "$D/util.sh"; fi
+if ! is_function "fsts"; then source "$D/util.sh" && sourced+=("$D/util.sh"); fi
 if ! is_function "confirm_yes" || ! is_function "exists"; then
-  util_env_load -u
+  source "$D/user_prompts.sh" && sourced+=("$D/user_prompts.sh")
 fi
 
 # since by definition, we wont have arrays yet, this is a hacky prototype

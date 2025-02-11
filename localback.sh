@@ -29,7 +29,7 @@ function restore() {
     s="${1:-}"
     d="${2:-}"
     if ! is_function can_i_write; then
-      util_env_load -f
+      source "$D/filesystemarrayutil.sh" && sourced+=("$D/filesystemarrayutil.sh")
     fi
     if can_i_write "$d"; then
       cp -avr "$s" "$d"

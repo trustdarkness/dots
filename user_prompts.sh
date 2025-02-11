@@ -54,21 +54,11 @@ export -f confirm_yes
 
 function confirm_yes_default_no() {
   userkey=$(get_keypress "${1:-(y/N)}")
-  input_confirmed=false
-  while ! $input_confirmed; do
-    if ! [[ $userkey =~ Yy.* ]]; then
-      if [[ $userkey =~ Nn.* ]]; then
-        input_confirmed=true
-        return 1
-      else
-        echo "Please type Y or y to continue, N or n (or ctrl-c) will exit"
-        userkey=$(get_keypress "continue? (y/N)")
-      fi
-    else
-      input_confirmed=true
-      return 0
-    fi
-  done
+  if [[ $userkey =~ Yy.* ]]; then
+    return 0;
+  else
+    return 1
+  fi
 }
 
 # TODO: add "break_for_cancel_timeout_continue"
@@ -128,6 +118,8 @@ function choices() {
                           an argument indicating the field separator,
                           defaults to \0, can be passed directly from
                           find -print0
+      -d | --something-different let the user specify something different
+                          and return it like any other choice
       -c | --continue     add a continue option
       -e | --exit         add an exit option
       -r | --return       overrides exit and returns instead, text
@@ -156,13 +148,16 @@ EOF
   ucontinue=false
   ureturn=false
   uexit=false
+  different=false
+  something_different= ; unset something_different
+  positional_arguments=()
   while [ $# -gt 0 ]; do
     case "${1:-}" in
-      'a'|'--with-actions')
+      '-a'|'--with-actions')
         actions=true
         shift
         ;;
-      's'|'--separator')
+      '-s'|'--separator')
         separator="${2:-}"
         shift
         shift
@@ -179,25 +174,35 @@ EOF
         uexit=true
         shift
         ;;
+      "-d"|"--something_different")
+        different=true
+        shift
+        ;;
       "-h"|"-?"|"--help")
         help
         shift
         ;;
-        *)
-        help
+      *)
+        if [[ "${1:-}" != \-* ]]; then
+          positional_arguments+=("${1:-}")
+        else
+          help
+        fi
+        shift
         ;;
     esac
   done
-  local unknown="${1:-}"
+  local unknown="${positional_arguments[0]}"
   if [ -n "${unknown}" ]; then
+  declareopts=$(declare -p "${unknown}")
     if tru $DEBUG; then
-      declareopts=$(declare -p "${unknown}")
+
       se "declareopts: $declareopts unknown: $unknown"
     fi
 
     # TODO: how to handle -A
     if string_contains "\-a" "$declareopts"; then
-      prompts_name=$1[@]
+      prompts_name="$unknown[@]"
       debug "$prompts_name"
       prompts_arr=("${!prompts_name}") # we know this is an array
       debug "-a ${#prompts_arr[@]}"
@@ -234,50 +239,66 @@ EOF
       ((pctr++))
       se "${a[$pctr]}. Terminate execution and exit."
     fi
+    if tru $different; then
+      ((pctr++))
+      se "${a[$pctr]}. something else..."
+      user_diff_choice=${a[$pctr]}
+    fi
     set +x
-      chosen_letter=$(get_keypress "Enter choice a.. ${a[$pctr-1]}: ")
+    while read -t 1 discard; do :; done # Flush input
+
+    chosen_letter=$(get_keypress "Enter choice a.. ${a[$pctr-1]}: ")
+    while read -t 1 discard; do :; done # Flush input
+    if [[ "$chosen_letter" == "$user_diff_choice" ]]; then
+      while read -t 1 discard; do :; done # Flush input
+      se "fn: ${FUNCNAME[*]} bn: ${BASH_SOURCE[*]}"
+      read -p "something different then... : " something_different < /dev/tty
+      echo "$something_different"
+      return 0
+    elif [[ "${#chosen_letter}" -eq 1 ]]; then
       for i in "${!a[@]}"; do
         if [[ "$chosen_letter" == "${a[$i]}" ]]; then
-          chosen="$i"
-          break
+          echo "$i"
+          return 0
         fi
       done
-      se " "
-      actions="${2:-}"
-      if [ -n "$actions" ]; then
-        local IFS=$"$s"
-        actr=0
-        completed=false
-        for action in "$actions"; do
+    fi
+  fi
+  #       se " "
+  #     actions="${2:-}"
+  #     if [ -n "$actions" ]; then
+  #       local IFS=$"$s"
+  #       actr=0
+  #       completed=false
+  #       for action in "${actions[@]}"; do
+  #         if [ $actr -eq $chosen ]; then
+  #           eval "$action"
+  #           completed=true
+  #         fi
+  #         ((actr++))
+  #       done
+  #       if ! $completed; then
+  #         if $ucontinue; then
+  #           ((actr++))
+  #           if [ $actr -eq $chosen ]; then
+  #             echo "$((actr))"
+  #             return "$((actr))"
+  #           fi
+  #         fi
+  #         if boolean_or $ureturn $uexit; then
+  #           if [ $actr -eq $chosen ]; then
+  #             if $uexit; then
+  #               exit 0;
+  #             elif $ureturn; then
+  #               echo "$((actr))"
+  #               return "$((actr))"
+  #             fi # endif uexit
+  #           fi # endif pctr = actr
+  #         fi #endif boolean or
+  #       fi # endif not completed
+  #     fi # endif -n actions
 
-          if [ $actr -eq $chosen ]; then
-            eval "$action"
-            completed=true
-          fi
-          ((actr++))
-        done
-        if ! $completed; then
-          if $ucontinue; then
-            ((actr++))
-            if [ $actr -eq $chosen ]; then
-              echo "$((actr))"
-              return "$((actr))"
-            fi
-          fi
-          if boolean_or $ureturn $uexit; then
-            if [ $actr -eq $chosen ]; then
-              if $uexit; then
-                exit 0;
-              elif $ureturn; then
-                echo "$((actr))"
-                return "$((actr))"
-              fi # endif uexit
-            fi # endif pctr = actr
-          fi #endif boolean or
-        fi # endif not completed
-      fi # endif -n actions
-
-  fi #endif unknown
-  echo "$((chosen))"
-  return "$((chosen))"
+  # fi #endif unknown
+  # echo "$((chosen))"
+  # return "$((chosen))"
 }

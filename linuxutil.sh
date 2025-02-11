@@ -17,7 +17,6 @@
 # This file may also rely on functions and globals available in
 # .bashrc (where util.sh is sourced from) amd existence.sh (also
 # sourced from .bashrc)
-source "$D/loader.sh"
 
 export BLK="(home|problem|egdod|ConfSaver|headers|man|locale|themes|icons)"
 alias du0="du -h --max-depth=0"
@@ -162,7 +161,7 @@ function get_grab_events() {
       xloglen=$(wc -l "$xlog"|awk '{print$1}'); is_int "$xloglen" || return 4
     fi
     # lc = log command
-    lc xdotool key "XF86LogGrabInfo"
+    xdotool key "XF86LogGrabInfo"
     if ! $allgrabs; then
       dxloglen=$(wc -l "$dxlog"|awk '{print$1}'); is_int "$dxloglen" || return 6
       grabs_len=$((dxloglen-xloglen))
@@ -305,18 +304,39 @@ vlcplugins='/usr/lib/vlc/plugins'
 vlcpluginsdisabled='/usr/lib/vlc/plugins.disabled'
 vlcextensions='/usr/lib/vlc/lua/extensions/'
 
+function vvlce() {
+  extension_name="${1:-}"
+  if [ -f "$vlcextensions/$extension_name" ]; then
+    vim "$vlcextensions/$extension_name"
+  else
+    se "could not find $vlcextensions/$extension_name"
+  fi
+}
+
 function vlc_extensions() {
+  # TODO: glob
   ls "$vlcextensions"
 }
 
 function vlc_plugin_categories() {
+  # TODO: glob
   ls "$vlcplugins"
 }
 
 function vlc_plugins() {
-  for cat in $(vlc_plugin_categories); do
+  set -x
+  declare -ga categories
+  categories= ; unset categories
+  categories=( $(vlc_plugin_categories) )
+  if [ -n "${1:-}" ]; then
+    if in_array "${1:-}" "categories"; then
+      categories=("${1:-}")
+    fi
+  fi
+set +x
+  for cat in "${categories[@]}"; do
     echo "$cat:"
-    (for plugin in "$vlcplugindir"/"$cat"/*; do
+    (for plugin in "$vlcplugins"/"$cat"/*; do
       echo "  $(basename $plugin)"
     done) | column
     echo
@@ -700,5 +720,30 @@ function dbus_search() {
   done
 }
 
+trash() {
+  local path
+  for path in $@; do
+    if [[ "$path" == -* ]]; then :
+    else
+      # remove trailing slash
+      local mindtrailingslash=${path%/}
+      # remove preceding directory path
+      local dst=${mindtrailingslash##*/}
+      if [ -e "$HOME/.local/share/Trash/$dst" ]; then
+        dst="${dst}_$(fsts)"
+      fi
+      if ! ret=$(mv "$path" "$HOME/.local/share/Trash/$dst"); then
+        se "mv returned $ret on $path. aborting."
+        return $ret
+      fi
+    fi
+  done
+  return 0
+}
 
-
+compgenv() {
+  for name in $(compgen -v); do
+     printf "%s=%s\n" "$name" "${!name}"
+  done
+  return 0
+}
