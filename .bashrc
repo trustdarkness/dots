@@ -172,7 +172,7 @@ ps4_prompt() {
 
 function powerline_init() {
   if { [[ $(uname) == "Darwin" ]] && [[ "$(launchctl getenv POWERLINE)" == "TRUE" ]]; } ||
-    { [[ $(uname) == "Linux" ]] & [[ "$PL_SHELL" == "true" ]]; }; then
+    { [[ $(uname) == "Linux" ]] && [[ "$PL_SHELL" == "true" ]]; }; then
     if type -p powerline-shell; then
       function _update_ps1() {
         PS1=$(powerline-shell $?)
