@@ -1,12 +1,30 @@
 #!/usr/bin/env bash
+# for MacOS's zsh nag text
+BASH_SILENCE_DEPRECATION_WARNING=1
 
-#set -Eo pipefail -o functrace
-if ! is_function in_array; then
-  source "$D/filesystemarrayutil.sh" && sourced+=("$D/filesystemarrayutil.sh")
+declare -F is_function > /dev/null 2>&1 || is_function() {
+  ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
+}
+export -f is_function
+
+if [ -z "${D}" ]; then
+  if [ -d "$HOME/src/github/dots" ]; then
+    export D="$HOME/src/github/dots"
+  else
+    echo "Please export D=path/to/dots from"
+    echo "https://github.com/trustdarkness/dots"
+    echo "before attempting to use this file"
+    sleep 5 && exit 1
+  fi
 fi
 
-HOMEBREW_NO_INSTALL_FROM_API=1
-export EDITOR=vim
+if ! is_function se; then
+  source "$D/util.sh"
+fi
+
+if ! is_function in_array; then
+  source "$D/filesystemarrayutil.sh"
+fi
 
 # definition of modern bash to at least include associative arrays
 # and pass by reference
@@ -20,35 +38,26 @@ MACOS_LOG_TSFMT="$MACOS_LOG_DATEFMT %H:%M:%S"
 APP_REGEX='.*.app'
 APP_IN_APPLICATIONS_FOLDER_REGEX='^/Applications/.*.app'
 
-TO_APPLEPATH="$D/applescripts/getApplepathFromPOSIXPath.applescript"
+TO_APPLEPATH_ASCRIPT="$D/applescripts/getApplepathFromPOSIXPath.applescript"
 
+# TODO: move to dpHelpers
 # FSDATEFMT and FSTSFMT in util.sh
-function fsdate_to_logfmt {
-  to_convert="${1:-}"
-  date -jf "${FSDATEFMT}" "${to_convert}" +"${MACOS_LOG_DATEFMT}"
-}
+# function fsdate_to_logfmt {
+#   to_convert="${1:-}"
+#   date -jf "${FSDATEFMT}" "${to_convert}" +"${MACOS_LOG_DATEFMT}"ß
+# }
 
-function fsts_to_logfmt {
-  to_convert="${1:-}"
-  date -jf "${FSTSFMT}" "${to_convert}" +"${MACOS_LOG_TSFMT}"
-}
+# function fsts_to_logfmt {
+#   to_convert="${1:-}"
+#   date -jf "${FSTSFMT}" "${to_convert}" +"${MACOS_LOG_TSFMT}"
+# }
 
 function b2i() {
   source "$HOME/src/bellicose/venv-intel/bin/activate"
   "$HOME/src/bellicose/venv-intel/bin/python3" "$HOME/src/bellicose/bellicose.py" install "$@"
 }
 
-alias bvi="bellicose -v install"
-alias bSi="bellicose -S install"
-alias bSvi="bellicose -Sv install"
-alias bu="bellicose unarchive"
-bRi() { bellicose -R "${1:-}" install; }
-bRu() { bellicose -R "${1:-}" unarchive; }
-bSRi() { bellicose -S -R "${1:-}" install; }
 _s="$HOME/Downloads/_staging"
-
-# for MacOS's zsh nag text
-BASH_SILENCE_DEPRECATION_WARNING=1
 
 # this is used in localback.sh
 OLDHOME="/Volumes/federation/Users/mt"
@@ -116,26 +125,56 @@ APP_FOLDERS=(
 
 function load_services() {
   source "$D/macservices.sh"
+  return 0
 }
-alias s="load_services"
 
 # Sets the position of the Dock and restarts the Dock
-# Args: string, one of left, right, bottom, no error checking
-# writes the default 'orientation' to 'com.apple.dock' && pkill Dock
+# Args: string, one of left, right, bottom
+# If provided position matches current, return 0, otherwise
+# writes the default 'orientation' to 'com.apple.dock' && pkill Dock,
+# returning 0.  If the defaults command to update the position fails,
+# return with the upstream error
 function dockpos() {
-  defaults write 'com.apple.dock' 'orientation' -string ""${1:-}""
+  local desired="${1,,:-}"
+  local current="$(defaults read com.apple.dock orientation)"
+  if [[ "$desired" == "$current" ]]; then
+    return 0
+  fi
+  possible=("left", "right", "top", "bottom")
+  Usage() {
+		cat << EOF
+			dockpos <position>
+
+			Where <position> is one of ${possible[@]}.  If provided position
+      matches current, return 0, otherwise update to user provided and
+      kill the dock, forcing it to relocate, and return 0.  If the
+      defaults command to update the position fails, return with the
+      upstream error.
+EOF
+    return 0
+	}
+  if ! in_array "${desired}" "possible"; then
+    Usage
+    return 1;
+  fi
+  if ! defaults write 'com.apple.dock' 'orientation' -string "${1:-}"; then
+    return $?
+  fi
   pkill Dock
+  return 0
 }
 
 # like many of the functions here, mostly to remind myself that it exists
 function defaults_find() {
   defaults find $@
+  return $?
 }
 
 # Finds apps that have written entries to "favorites"
-# no args or explicit return, runs defaults find LSSharedFileList
+# runs defaults find LSSharedFileList
 function favorites_find_apps() {
   defaults find LSSharedFileList
+  return $?
 }
 
 # for compatibility with the similar linux command
@@ -155,6 +194,7 @@ function fc-list() {
 # https://stackoverflow.com/questions/16375519/how-to-get-the-default-shell
 function getusershell() {
   dscl . -read ~/ UserShell | sed 's/UserShell: //'
+  return $?
 }
 
 # runs du, asking for sudo if needed for the specified dirs
@@ -221,16 +261,19 @@ function trashZeros() {
     ((ctr++))
   done
   ctr=0
+  failures=0
   for fileln in $(echo "$files"); do
     if in_array "$ctr" "to_trash"; then
       filename="$(echo \"$fileln\" |awk '{print$9}')"
       if [ -f "$filename" ] && ! [ -L "$filename" ]; then
         se "$filename is zero bytes, trashing"
-        trash "$filename"
+        if ! trash "$filename"; then
+          failures++
+        fi
       fi
     fi
   done
-  return 0
+  return $failures
 }
 
 # used to be I receieved .command files on the MacOS for certain things
@@ -286,32 +329,12 @@ function showHidden {
   fi
 }
 
-OLDSYS="/Volumes/federation"
-OLDHOME="/Volumes/federation/Users/$(whoami)"
-F="/Volumes/federation/Users/mt/Downloads"
 # sources localback so that its functions are available in the working env
 function b() {
+  OLDSYS="/Volumes/federation"
+  OLDHOME="/Volumes/federation/Users/$(whoami)"
+  F="/Volumes/federation/Users/mt/Downloads"
   source $D/localback.sh
-}
-
-# Creates a Mac alias to the provided application in /Applications
-function appalias() {
-  local target="${1:-}"
-  if [ -n "${target}" ]; then
-    if stat "${target}"; then
-      local tbase=$(basename "${target}")
-      tq=$(printf '%s' "${target}")
-      tbq=$(printf '%s' "${tbase}")
-  cat <<END
-tell application "Finder"
-set myApp to POSIX file "${tq}" as alias
-make new alias to myApp at "Babylon:Applications"
-set name of result to "${tbq}"
-end tell
-END
-  echo "return $?"
-    fi
-  fi
 }
 
 # returns 0 if the provided string is a path valid for Applescript
@@ -325,7 +348,7 @@ function isvalidapplepath() {
   return 1
 }
 
- toapplepath() {
+toapplepath() {
 	usage() {
 		cat << EOF
 			toapplepath some/posix/path
@@ -349,17 +372,16 @@ EOF
 		return 1
 	fi
 	local abspath=$(realpath "$posixpath")
-	# if [[ $(resolvepath "$posixpath") != $(resolvepath "$abspath") ]]; then usage; return 2; fi
 
-	if ! [ -x "$TO_APPLEPATH" ]; then
-	  if [ -f "$TO_APPLEPATH" ]; then
-		  if ! chmod +x "$TO_APPLEPATH"; then
-			  warn "$TO_APPLEPATH exists but couldn't be marked +x"
+	if ! [ -x "$TO_APPLEPATH_ASCRIPT" ]; then
+	  if [ -f "$TO_APPLEPATH_ASCRIPT" ]; then
+		  if ! chmod +x "$TO_APPLEPATH_ASCRIPT"; then
+			  warn "$TO_APPLEPATH_ASCRIPT exists but couldn't be marked +x"
 				mangle=true
 			fi
-		elif [ -n "$TO_APPLEPATH" ]; then
-		  w="global TO_APPLEPATH in ${BASH_SOURCE[0]} should point to an applescript "
-			w+="that converts paths properly but is $TO_APPLEPATH"
+		elif [ -n "$TO_APPLEPATH_ASCRIPT" ]; then
+		  w="global TO_APPLEPATH_ASCRIPT in ${BASH_SOURCE[0]} should point to an applescript "
+			w+="that converts paths properly but is $TO_APPLEPATH_ASCRIPT"
 			warn "$w"
 		  mangle=true
 		fi
@@ -368,11 +390,11 @@ EOF
 	  applepath=$(echo "${abspath:1}"|tr '/' ':'); ret=$?
 		if ! isvalidapplepath "$applepath"; then
 		  # TODO link to github
-			error "Converting / to : was not sufficient.  Try again after setting TO_APPLEPATH."
+			error "Converting / to : was not sufficient.  Try again after setting TO_APPLEPATH_ASCRIPT."
 			return 3
 		fi
 	else
-	  applepath=$( ( eval "$TO_APPLEPATH" "$posixpath") 2> /dev/null); ret=$?
+	  applepath=$( ( eval "$TO_APPLEPATH_ASCRIPT" "$posixpath") 2> /dev/null); ret=$?
 	fi
 	echo "$applepath"
 	return $ret
@@ -438,30 +460,11 @@ end tell
 END
 }
 
-# creates a Mac style alias of a VST3 plugin in the system plugins folder
-function vst3alias() {
-  local target="${1:-}"
-  if [ -n "${target}" ]; then
-    if stat "${target}"; then
-      local tbase=$(basename "${target}")
-      tq=$(printf '%s' "${target}")
-      tbq=$(printf '%s' "${tbase}")
-  osascript <<END
-tell application "Finder"
-set myPlug to POSIX file "${tq}" as alias
-make new alias to myPlug at "Foundation:Library:Audio:Plug-Ins:VST3"
-set name of result to "${tbq}"
-end tell
-END
-        return $?
-    fi
-  fi
-}
-
 # Shows launchds logs since the last reboot (LAST_DATEFMT defined in util.sh)
 function show_last_boot_logs() {
-  last_reboot_lastfmt=$(last reboot |head -n1 |awk '{print$3 $4 $5 $6}')
-  last_reboot_logfmt=$(date -jf +"$LAST_DATEFMT" -d "$last_reboot_lastfmt" +"$MACOS_LOG_DATEFMT")
+  last_reboot_lastfmt=$(last reboot |head -n1 |awk -F'   ' '{print$NF}')
+  last_reboot_lastfmt="${last_reboot_lastfmt##+([[:space:]])}"
+  last_reboot_logfmt=$(date -jf "$LAST_DATEFMT" "$last_reboot_lastfmt" +"$MACOS_LOG_DATEFMT")
   log show --predicate "processID == 0" --start "$last_reboot_logfmt" --debug
 }
 
