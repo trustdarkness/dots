@@ -19,9 +19,9 @@ macboot_namerefs=(
 # from the running system with sip enabled.
 function sip_enable_allow_nvram() {
   csrutil enable --without nvram
-} 
+}
 
-# It seems as thuough a number of things that used to be accomplished by 
+# It seems as thuough a number of things that used to be accomplished by
 # disabling AMFI, most folks are finding that disabling library verification
 # via the enclosed plist edit is sufficient.  There are separate functions
 # for each as well.
@@ -32,13 +32,13 @@ function enableamfidisablelibraryverification() {
    echo "nvram-boot-args backups exist in /etc, please investigate before continuing."
    return 1
   fi
-  sudo nvram boot-args=""; 
+  sudo nvram boot-args="";
   # https://github.com/MacEnhance/MacForge/issues/30
   sudo defaults write /Library/Preferences/com.apple.security.libraryvalidation.plist DisableLibraryValidation -bool true
 }
 
 # If you made modificat ions to boot-args with this tool, you may have a backup
-# of your original boot args in /etc.  IF so, it will force you to look at the 
+# of your original boot args in /etc.  IF so, it will force you to look at the
 # backup and restore or clear it before it does things like clear the current
 # boot args.
 function clearbootargs() {
@@ -47,7 +47,7 @@ function clearbootargs() {
     echo "nvram-boot-args backups exist in /etc, please investigate before continuing."
     return 1
   fi
-  sudo nvram boot-args=""; 
+  sudo nvram boot-args="";
 }
 
 # Sets up loading a set of bootargs from functions in this file
@@ -61,7 +61,7 @@ function bootargs_bootstrap() {
       echo "Found no existing boot-args.  This may be WAI.  Know your system."
     fi
   fi
-  if [ -n "${existing}" ]; then 
+  if [ -n "${existing}" ]; then
     echo "Prepending existing boot-args: ${existing}"
     BOOT_ARGS+=( "${existing}" )
     local ts="$(date '+%Y%m%d %H:%M:%S')"
@@ -110,8 +110,8 @@ function execute_bootargs() {
   # now insert any other bootargs functions from above that youd
   # like to be included in your nvram boot args below
 
-  # run the function to make sure that your command looks correct and 
-  # then copy and paste it to run by hand  you're playing with fire, 
+  # run the function to make sure that your command looks correct and
+  # then copy and paste it to run by hand  you're playing with fire,
   # treat her with the respect she deserves.
   echo "sudo nvram boot-args ${BOOT_ARGS[@]}"
 }
@@ -131,7 +131,7 @@ function boot_volume_is_immutable() {
 # returns the boot volume (symlinked to /)
 function boot_volume() {
   for volume in $(ls /Volumes); do
-    if [[ $(realpath "$volume") == "/" ]]; then 
+    if [[ $(realpath "$volume") == "/" ]]; then
       echo "$volume"
     fi
   done
@@ -145,7 +145,7 @@ alias root_disk="boot_volume"
 function mount_boot_volume_rw() {
   local ar=$(csrutil authenticated-root status|grep disabled)
   local root_volume=""
-  if [ $? -eq 0 ]; then 
+  if [ $? -eq 0 ]; then
     sudo mount -uw "$(boot_volume)"
   fi
 }
@@ -153,7 +153,7 @@ function mount_boot_volume_rw() {
 # mounts the root filesystem to ~/rootfs
 function mount_system_from_recovery() {
   local dev="${1:-}"
-  
+
   if [ -e "${dev}" ]; then
     mkdir -p ~/rootfs
     se !:?
@@ -188,7 +188,7 @@ function post-system-edit() {
 # cleanup_namespace in util.sh for more info
 # TODO: update namerefs and change to use the similar routine in util.sh
 unsource_macboot() {
-  if exists cleanup_namespace; then 
+  if exists cleanup_namespace; then
     cleanup_namespace macboot
-  fi  
+  fi
 }
