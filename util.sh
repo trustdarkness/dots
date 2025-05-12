@@ -538,7 +538,7 @@ dgrep() {
     elif [[ "${1:-}" =~ \-\-ignore=(.*) ]]; then
       ignore+=("${BASH_REMATCH[1]}")
       shift
-    elif [[ "${1:-}" =~ \-\-also-look=(.*) ]]; then
+    elif [[ "${1:-}" =~ \-\-addl\-dirs=(.*) ]]; then
       potential="${BASH_REMATCH[1]}"
       if [ -d "$potential" ]; then
         addl_dirs+=( $potential )
@@ -1056,17 +1056,17 @@ EOF
       { type -p cddph &&
         cddph &&
         [ -d "$DPHELPERS/lib/bash" ] &&
-        dgrepopts+=("--addl-dirs=\"$DPHELPERS/lib/bash\"");
+        dgrepopts+=("--addl-dirs=$DPHELPERS/lib/bash");
       } || {
         DPHELPERS="$HOME/src/dpHelpers" &&
         [ -d "$DPHELPERS/lib/bash" ] &&
-        dgrepopts+=("--addl-dirs=\"$DPHELPERS/lib/bash\"");
+        dgrepopts+=("--addl-dirs=$DPHELPERS/lib/bash");
       } || { warn "Could not add DPHELPERS to function_finder"; }
     fi
     for fname in "${functions[@]}"; do
       function_regex dgrepfuncsearcher "$fname"
       # echo "$fname:"
-      dgrep -p -c -l -n --filenames-only "$dgrepfuncsearcher"
+      dgrep ${dgrepopts[@]} "$dgrepfuncsearcher"
     done
   fi
   #echo
