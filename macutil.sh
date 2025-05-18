@@ -59,6 +59,24 @@ function b2i() {
 
 _s="$HOME/Downloads/_staging"
 
+# temporary for debugging bellicose.sh
+xbi() {
+  export DEBUG=true
+  export LEVEL=Debug
+  d=$(fsdate)
+  t=$(date +"$USCLOCKTIMEFMT")
+  slugified_dt=$(echo \"${d}_${t}\"| sed 's/ /_/g' |sed 's/[^[:alnum:]\t]//g')
+  xf="$LOGDIR/xbi_$slugified_dt"
+  if ! [ -f "$xdebug_f" ]; then
+    mkdir -p "$LOGDIR"
+    touch "$xf"
+  fi
+  exec 99> "$xf"
+  ßBASH_XTRACEFD=99
+  export PS4='$0.$LINENO+ '
+  "$D/bellicose.sh" -S install $@
+}
+
 # this is used in localback.sh
 OLDHOME="/Volumes/federation/Users/mt"
 
@@ -327,6 +345,26 @@ function showHidden {
   else
     writeAndKill
   fi
+}
+
+function bluetooth_get_info() {
+  system_profiler SPBluetoothDataType
+  return $?
+}
+
+function bluetooth_scan() {
+  if ! type -p blueutil > /dev/null 2>&1; then
+    echo "blueutil is required to use bluetooth from the command line."
+    if ! confirm_yes "install it with homebrew? (Y/n)?"; then
+      return 1
+    fi
+    if ! brew install blueutil; ret=$?; then
+      echo "brew install blueutil failed with code $ret"
+      return $ret
+    fi
+  fi
+  blueutil --inquiry
+  return $ret
 }
 
 # sources localback so that its functions are available in the working env
@@ -1336,6 +1374,131 @@ function bslift() {
     source "$D/bootstraps.sh"
   fi
 }
+
+function pkg_search_installed() {
+  optspec="r:v:h"
+  unset OPTIND
+  unset optchar
+  local regex=
+  local volume="/"
+  while getopts "${optspec}" optchar; do
+    case "${optchar}" in
+      r)
+        regex="${OPTARG}"
+        ;;
+      v)
+        volume="${OPTARG}"
+        ;;
+      h)
+        usage
+        return 0
+        ;;
+    esac
+  done
+  usage() {
+    cat <<-'EOF'
+pkg_search_installed - searches the pkg receipt db for bundle IDs
+  of user installed packages, use the same search parameters with
+  pkg_rm_installed to rm all installed files from that package
+  and make the db "forget" about it.
+
+Args:
+  -r - the term following -r in quotes will be interpreted as a
+       regex following conventions in man re_format(7).  Any other
+       command line term is ignored (except speficied by flag).
+  -v - specify a volume to search pkgs on.  Defaults to "/"
+  -h - shows this text.
+
+If -r is not specified, we do a case insensitive substring search
+  using the first whole word argument supplied.  Essentially
+  pkg_search_installed -r "(?i).*searchterm.*"
+EOF
+  }
+  shift $(($OPTIND - 1))
+  nextarg="${1:-}"
+  if [ -z "$regex" ]; then
+    printf -v regex '(?i).*%s.*' "${1:-}"
+  fi
+  pkgutil --volume / --pkgs="$regex"
+  return $?
+}
+
+function pkg_rm_installed() {
+  optspec="r:v:h"
+  unset OPTIND
+  unset optchar
+  local regex=
+  local volume="/"
+  while getopts "${optspec}" optchar; do
+    case "${optchar}" in
+      r)
+        regex="${OPTARG}"
+        ;;
+      v)
+        volume="${OPTARG}"
+        ;;
+      h)
+        usage
+        return 0
+        ;;
+    esac
+  done
+  usage() {
+    cat <<-'EOF'
+pkg_rm_installed - searches the pkg receipt db for bundle IDs
+  of user installed packages, use the same search parameters with
+  pkg_search_installed to make sure you have only the packages
+  you want.  This function does not ask for confirmation, PROCEED
+  AT YOUR OWN RISK.
+
+Args:
+  -r - the term following -r in quotes will be interpreted as a
+       regex following conventions in man re_format(7).  Any other
+       command line term is ignored (except speficied by flag).
+  -v - specify a volume to search pkgs on.  Defaults to "/"
+  -h - shows this text.
+
+If -r is not specified, we do a case insensitive substring search
+  using the first whole word argument supplied.  Essentially
+  pkg_search_installed -r "(?i).*searchterm.*"
+EOF
+  }
+  shift $(($OPTIND - 1))
+  nextarg="${1:-}"
+  IFS='' read -r -d '' warning <<'EOF'
+  Please use pkg_search_installed to make sure you have only the packages
+  you want to remove.  This function does not ask for confirmation, PROCEED
+  AT YOUR OWN RISK.
+EOF
+  echo "$warning"
+  if ! confirm_yes_default_no "OK to proceed? (y/N)?"; then
+    return 5
+  fi
+  if [ -z "$regex" ]; then
+    printf -v regex '(?i).*%s.*' "${1:-}"
+  fi
+  files=()
+  dirs=()
+  for pkg in $(pkgutil --volume / --pkgs="$regex"); do
+    while IFS=$'\n' read -r line ; do
+      files+=( "$line" )
+    done < <(pkgutil --files "$pkg" --only-files)
+    while IFS=$'\n' read -r line ; do
+      dirs+=( "$line" )
+    done < <(pkgutil --files "$pkg" --only-dirs)
+  done
+  for file in "${files[@]}"; do
+    echo "rm -f $file"
+  done
+  for dir in "${dirs[@]}"; do
+    echo "rmdir $dir"
+  done
+  for pkg in $(pkgutil --volume / --pkgs="$regex"); do
+    sudo pkgutil --forget "$pkg"
+  done
+  return $?
+}
+
 
 # https://stackoverflow.com/questions/54995983/how-to-detect-availability-of-gui-in-bash-shell
 function check_macos_gui() (
