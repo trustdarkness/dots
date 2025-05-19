@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 launchctl setenv MACPROFILED TRUE
-launchctl setenv POWERLINE TRUE
+launchctl setenv POWERLINE FALSE
 
 # these get rid of the annoying bubbles and update nags in systemprefs if you are
-# version locked because you do real work with your computer like some of us
-alias killupdates='defaults write com.apple.systempreferences DidShowPrefBundleIDs "com.apple.preferences.softwareupdate"'
-alias killbubbles="defaults write com.apple.systempreferences AttentionPrefBundleIDs 0 && killall Dock"
+# version locked because you do real work with your computer like some of us. (Monterey and before)
+# alias killupdates='defaults write com.apple.systempreferences DidShowPrefBundleIDs "com.apple.preferences.softwareupdate"'
+# alias killbubbles="defaults write com.apple.systempreferences AttentionPrefBundleIDs 0 && killall Dock"
 
-# sometimes these defaults reads can be non-instant
-bubblecheck=$(launchctl getenv bubblecheck)
-if [ -z "$bubblecheck" ]; then
-  launchctl setenv bubbleskilled TRUE
-  se "[runonce / session] checking for update and icloud warnings to clear..."
-  if gt "$(defaults read com.apple.systempreferences AttentionPrefBundleIDs)" 0; then
-    killupdates
-    killbubbles
-  fi
-fi
+# sometimes these defaults reads can be non-instant (Monterey and before)
+# bubblecheck=$(launchctl getenv bubblecheck)
+# if [ -z "$bubblecheck" ]; then
+#   launchctl setenv bubbleskilled TRUE
+#   se "[runonce / session] checking for update and icloud warnings to clear..."
+#   if gt "$(defaults read com.apple.systempreferences AttentionPrefBundleIDs)" 0; then
+#     killupdates
+#     killbubbles
+#   fi
+# fi
 
 ds_store_network=$(defaults read com.apple.desktopservices DSDontWriteNetworkStores)
 if [ -z "$ds_store_network" ] || [ "$ds_store_network" -ne 1 ]; then

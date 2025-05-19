@@ -47,8 +47,6 @@ SBRC=true
 case $- in
     *i*)
       source "$D/util.sh"
-      #sosutil
-      #set -x
       ;;
   *)
   # if the file is called instead of sourced, return will fail
@@ -173,15 +171,18 @@ ps4_prompt() {
 }
 
 function powerline_init() {
-  if [[ $(uname) == "Darwin" ]] && [[ "$(launchctl getenv POWERLINE)" == "TRUE" ]] || [[ "$PL_SHELL" == "true" ]]; then
-    function _update_ps1() {
-      PS1=$(powerline-shell $?)
-    }
-    export -f _update_ps1
-    _update_ps1
+  if { [[ $(uname) == "Darwin" ]] && [[ "$(launchctl getenv POWERLINE)" == "TRUE" ]]; } ||
+    { [[ $(uname) == "Linux" ]] && [[ "$PL_SHELL" == "true" ]]; }; then
+    if type -p powerline-shell; then
+      function _update_ps1() {
+        PS1=$(powerline-shell $?)
+      }
+      export -f _update_ps1
+      _update_ps1
 
-    if [[ $TERM != linux && ! $PROMPT_COMMAND =~ _update_ps1 ]]; then
-      PROMPT_COMMAND="_update_ps1; $PROMPT_COMMAND"
+      if [[ $TERM != linux && ! $PROMPT_COMMAND =~ _update_ps1 ]]; then
+        PROMPT_COMMAND="_update_ps1; $PROMPT_COMMAND"
+      fi
     fi
   fi
 }

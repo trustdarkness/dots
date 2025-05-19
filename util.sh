@@ -609,11 +609,11 @@ MODERN_BASH="4.3"
 
 # TODO: what requires these?
 if ! is_function exists; then
-  source "$D/existence.sh" && sourced+=("$D/existence.sh")
+  source "$D/existence.sh"
 fi
 
-source "$D/filesystemarrayutil.sh" && sourced+=("$D/filesystemarrayutil.sh")
-source "$D/user_prompts.sh" && sourced+=("$D/user_prompts.sh")
+source "$D/filesystemarrayutil.sh"
+source "$D/user_prompts.sh"
 
 function urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
 
@@ -635,7 +635,7 @@ dgrep() {
     elif [[ "${1:-}" =~ \-\-ignore=(.*) ]]; then
       ignore+=("${BASH_REMATCH[1]}")
       shift
-    elif [[ "${1:-}" =~ \-\-also-look=(.*) ]]; then
+    elif [[ "${1:-}" =~ \-\-addl\-dirs=(.*) ]]; then
       potential="${BASH_REMATCH[1]}"
       if [ -d "$potential" ]; then
         addl_dirs+=( $potential )
@@ -1153,17 +1153,17 @@ EOF
       { type -p cddph &&
         cddph &&
         [ -d "$DPHELPERS/lib/bash" ] &&
-        dgrepopts+=("--addl-dirs=\"$DPHELPERS/lib/bash\"");
+        dgrepopts+=("--addl-dirs=$DPHELPERS/lib/bash");
       } || {
         DPHELPERS="$HOME/src/dpHelpers" &&
         [ -d "$DPHELPERS/lib/bash" ] &&
-        dgrepopts+=("--addl-dirs=\"$DPHELPERS/lib/bash\"");
+        dgrepopts+=("--addl-dirs=$DPHELPERS/lib/bash");
       } || { warn "Could not add DPHELPERS to function_finder"; }
     fi
     for fname in "${functions[@]}"; do
       function_regex dgrepfuncsearcher "$fname"
       # echo "$fname:"
-      dgrep -p -c -l -n --filenames-only "$dgrepfuncsearcher"
+      dgrep ${dgrepopts[@]} "$dgrepfuncsearcher"
     done
   fi
   #echo
@@ -1527,13 +1527,13 @@ function get_cache_for_OS () {
       CACHE="$HOME/.local/cache"
       mkdir -p "$CACHE"
       OSUTIL="$D/linuxutil.sh"
-      alias sosutil='source "$D/linuxutil.sh" && sourced+=("$D/linuxutil.sh")'
+      alias sosutil='source "$D/linuxutil.sh"'
       alias vosutil="vim $D/linuxutil.sh && sosutil"
       ;;
     "MacOS")
       CACHE="$HOME/Library/Application Support/Caches"
       OSUTIL="$D/macutil.sh"
-      alias sosutil='source "$D/macutil.sh" && sourced+=("$D/macutil.sh")'
+      alias sosutil='source "$D/macutil.sh"'
       alias vosutil="vim $D/macutil.sh && vosutil"
       ;;
   esac
@@ -1618,12 +1618,10 @@ function user_feedback() {
   $logger "${meta_message[@]}"
 }
 
-alias sall="sbrc; sglobals; sutil; sosutil"
-
 # initialized the helper library for the package installer
 # for whatever the detected os environment is; good for interactive
 # use below for scripts
-alias i='source "$D/installutil.sh" && sourced+=("$D/installutil.sh")'
+alias i='source "$D/installutil.sh"'
 
 # TODO: deprecate
 alias install_util_load=i

@@ -1,103 +1,30 @@
 #!/usr/bin/env bash
+# for MacOS's zsh nag text
+BASH_SILENCE_DEPRECATION_WARNING=1
 
-#set -Eo pipefail -o functrace
-if ! is_function in_array; then
-  source "$D/filesystemarrayutil.sh" && sourced+=("$D/filesystemarrayutil.sh")
-
-err_handler() {
-	pc="${1:-}"
-	src="${2:-}"
-	line="${3:-}"
-  cmd="${4:-}"
-	ret="${5:-}"
-	if [ -z "$src" ]; then
-		echo "$pc"
-		return 0
-	fi
-	if [ -z "$LOGFILE" ]; then
-	  LOGFILE="$LOGDIR/macutil.log"
-	fi
-	bn=$(basename "$src")
-	error "$bn: $line"
-	logvars=(src line cmd ret); d=$(debug); [ -n "$d" ] && trace $ret "$d"; return 0
-
-	trace $ret
-	return 0
+declare -F is_function > /dev/null 2>&1 || is_function() {
+  ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
 }
+export -f is_function
 
-# https://unix.stackexchange.com/questions/39623/trap-err-and-echoing-the-error-line
-## Outputs Front-Mater formatted failures for functions not returning 0
-## Use the following line after sourcing this file to set failure trap
-##    trap 'failure "LINENO" "BASH_LINENO" "${BASH_COMMAND}" "${?}"' ERR
-trace() {
-    local _code="${1:-0}"
-		local _debug="${2:-}"
-    local -n _lineno="${3:-LINENO}"
-    local -n _bash_lineno="${4:-BASH_LINENO}"
-    local _last_command="${5:-${BASH_COMMAND}}"
-
-		echo "$_debug"
-
-    ## Workaround for read EOF combo tripping traps
-    if ! ((_code)); then
-        return "${_code}"
-    fi
-
-    local _last_command_height="$(wc -l <<<"${_last_command}")"
-
-    local -a _output_array=()
-    _output_array+=(
-        '---'
-        "lines_history: [${_lineno} ${_bash_lineno[*]}]"
-        "function_trace: [${FUNCNAME[*]}]"
-        "exit_code: ${_code}"
-    )
-
-    if [[ "${#BASH_SOURCE[@]}" -gt '1' ]]; then
-        _output_array+=('source_trace:')
-        for _item in "${BASH_SOURCE[@]}"; do
-            _output_array+=("  - ${_item}")
-        done
-    else
-        _output_array+=("source_trace: [${BASH_SOURCE[*]}]")
-    fi
-
-    if [[ "${_last_command_height}" -gt '1' ]]; then
-        _output_array+=(
-            'last_command: ->'
-            "${_last_command}"
-        )
-    else
-        _output_array+=("last_command: ${_last_command}")
-    fi
-
-    _output_array+=('---')
-    printf '%s\n' "${_output_array[@]}" >&2
-    return 0
-}
-
-#trap 'previous_command=$this_command; this_command=$BASH_COMMAND; err_handler "$previous_command" "${BASH_SOURCE[0]}" "${BASH_LINENO[*]}" "${BASH_COMMAND}" "${?}"' ERR
-
-# Setting PATH for Python 3.12 and to ensure we get modern bash from brew
-# in /usr/local/bin before that MacOS crap in /bin
-if ! [[ "${PATH}" =~ .*.pathsource.* ]]; then
-  PATH="/usr/local/bin:$HOME/.pathsource:$HOME/.local/bin:/Library/Frameworks/Python.framework/Versions/3.12/bin:${PATH}"
+if [ -z "${D}" ]; then
+  if [ -d "$HOME/src/github/dots" ]; then
+    export D="$HOME/src/github/dots"
+  else
+    echo "Please export D=path/to/dots from"
+    echo "https://github.com/trustdarkness/dots"
+    echo "before attempting to use this file"
+    sleep 5 && exit 1
+  fi
 fi
 
-HOMEBREW_NO_INSTALL_FROM_API=1
-export EDITOR=vim
+if ! is_function se; then
+  source "$D/util.sh"
+fi
 
-# for now, we consider dependency on my bashrc, osutil, and util hard
-# requirements with a TODO to untangle the mess.
-# D is the path to this directory, usually on my systems, should be
-# $HOME/src/github/dots, but if not set, some things not happy
-# if [ -z "${D}" ]; then
-#   D=$(dirname "${BASHSOURCE[0]}")
-#   if ! [ -f "$D/util.sh" ]; then
-#     >&2 printf "Tried to set D=${D} but no util.sh"
-#     >&2 printf "there perhaps be dragons..."
-#   fi
-# fi
+if ! is_function in_array; then
+  source "$D/filesystemarrayutil.sh"
+fi
 
 # definition of modern bash to at least include associative arrays
 # and pass by reference
@@ -111,35 +38,44 @@ MACOS_LOG_TSFMT="$MACOS_LOG_DATEFMT %H:%M:%S"
 APP_REGEX='.*.app'
 APP_IN_APPLICATIONS_FOLDER_REGEX='^/Applications/.*.app'
 
-TO_APPLEPATH="$D/applescripts/getApplepathFromPOSIXPath.applescript"
+TO_APPLEPATH_ASCRIPT="$D/applescripts/getApplepathFromPOSIXPath.applescript"
 
+# TODO: move to dpHelpers
 # FSDATEFMT and FSTSFMT in util.sh
-function fsdate_to_logfmt {
-  to_convert="${1:-}"
-  date -jf "${FSDATEFMT}" "${to_convert}" +"${MACOS_LOG_DATEFMT}"
-}
+# function fsdate_to_logfmt {
+#   to_convert="${1:-}"
+#   date -jf "${FSDATEFMT}" "${to_convert}" +"${MACOS_LOG_DATEFMT}"ß
+# }
 
-function fsts_to_logfmt {
-  to_convert="${1:-}"
-  date -jf "${FSTSFMT}" "${to_convert}" +"${MACOS_LOG_TSFMT}"
-}
+# function fsts_to_logfmt {
+#   to_convert="${1:-}"
+#   date -jf "${FSTSFMT}" "${to_convert}" +"${MACOS_LOG_TSFMT}"
+# }
 
 function b2i() {
   source "$HOME/src/bellicose/venv-intel/bin/activate"
   "$HOME/src/bellicose/venv-intel/bin/python3" "$HOME/src/bellicose/bellicose.py" install "$@"
 }
 
-alias bvi="bellicose -v install"
-alias bSi="bellicose -S install"
-alias bSvi="bellicose -Sv install"
-alias bu="bellicose unarchive"
-bRi() { bellicose -R "${1:-}" install; }
-bRu() { bellicose -R "${1:-}" unarchive; }
-bSRi() { bellicose -S -R "${1:-}" install; }
 _s="$HOME/Downloads/_staging"
 
-# for MacOS's zsh nag text
-BASH_SILENCE_DEPRECATION_WARNING=1
+# temporary for debugging bellicose.sh
+xbi() {
+  export DEBUG=true
+  export LEVEL=Debug
+  d=$(fsdate)
+  t=$(date +"$USCLOCKTIMEFMT")
+  slugified_dt=$(echo \"${d}_${t}\"| sed 's/ /_/g' |sed 's/[^[:alnum:]\t]//g')
+  xf="$LOGDIR/xbi_$slugified_dt"
+  if ! [ -f "$xdebug_f" ]; then
+    mkdir -p "$LOGDIR"
+    touch "$xf"
+  fi
+  exec 99> "$xf"
+  ßBASH_XTRACEFD=99
+  export PS4='$0.$LINENO+ '
+  "$D/bellicose.sh" -S install $@
+}
 
 # this is used in localback.sh
 OLDHOME="/Volumes/federation/Users/mt"
@@ -207,26 +143,56 @@ APP_FOLDERS=(
 
 function load_services() {
   source "$D/macservices.sh"
+  return 0
 }
-alias s="load_services"
 
 # Sets the position of the Dock and restarts the Dock
-# Args: string, one of left, right, bottom, no error checking
-# writes the default 'orientation' to 'com.apple.dock' && pkill Dock
+# Args: string, one of left, right, bottom
+# If provided position matches current, return 0, otherwise
+# writes the default 'orientation' to 'com.apple.dock' && pkill Dock,
+# returning 0.  If the defaults command to update the position fails,
+# return with the upstream error
 function dockpos() {
-  defaults write 'com.apple.dock' 'orientation' -string ""${1:-}""
+  local desired="${1,,:-}"
+  local current="$(defaults read com.apple.dock orientation)"
+  if [[ "$desired" == "$current" ]]; then
+    return 0
+  fi
+  possible=("left", "right", "top", "bottom")
+  Usage() {
+		cat << EOF
+			dockpos <position>
+
+			Where <position> is one of ${possible[@]}.  If provided position
+      matches current, return 0, otherwise update to user provided and
+      kill the dock, forcing it to relocate, and return 0.  If the
+      defaults command to update the position fails, return with the
+      upstream error.
+EOF
+    return 0
+	}
+  if ! in_array "${desired}" "possible"; then
+    Usage
+    return 1;
+  fi
+  if ! defaults write 'com.apple.dock' 'orientation' -string "${1:-}"; then
+    return $?
+  fi
   pkill Dock
+  return 0
 }
 
 # like many of the functions here, mostly to remind myself that it exists
 function defaults_find() {
   defaults find $@
+  return $?
 }
 
 # Finds apps that have written entries to "favorites"
-# no args or explicit return, runs defaults find LSSharedFileList
+# runs defaults find LSSharedFileList
 function favorites_find_apps() {
   defaults find LSSharedFileList
+  return $?
 }
 
 # for compatibility with the similar linux command
@@ -246,6 +212,7 @@ function fc-list() {
 # https://stackoverflow.com/questions/16375519/how-to-get-the-default-shell
 function getusershell() {
   dscl . -read ~/ UserShell | sed 's/UserShell: //'
+  return $?
 }
 
 # runs du, asking for sudo if needed for the specified dirs
@@ -312,16 +279,19 @@ function trashZeros() {
     ((ctr++))
   done
   ctr=0
+  failures=0
   for fileln in $(echo "$files"); do
     if in_array "$ctr" "to_trash"; then
       filename="$(echo \"$fileln\" |awk '{print$9}')"
       if [ -f "$filename" ] && ! [ -L "$filename" ]; then
         se "$filename is zero bytes, trashing"
-        trash "$filename"
+        if ! trash "$filename"; then
+          failures++
+        fi
       fi
     fi
   done
-  return 0
+  return $failures
 }
 
 # used to be I receieved .command files on the MacOS for certain things
@@ -377,32 +347,32 @@ function showHidden {
   fi
 }
 
-OLDSYS="/Volumes/federation"
-OLDHOME="/Volumes/federation/Users/$(whoami)"
-F="/Volumes/federation/Users/mt/Downloads"
-# sources localback so that its functions are available in the working env
-function b() {
-  source $D/localback.sh
+function bluetooth_get_info() {
+  system_profiler SPBluetoothDataType
+  return $?
 }
 
-# Creates a Mac alias to the provided application in /Applications
-function appalias() {
-  local target="${1:-}"
-  if [ -n "${target}" ]; then
-    if stat "${target}"; then
-      local tbase=$(basename "${target}")
-      tq=$(printf '%s' "${target}")
-      tbq=$(printf '%s' "${tbase}")
-  cat <<END
-tell application "Finder"
-set myApp to POSIX file "${tq}" as alias
-make new alias to myApp at "Babylon:Applications"
-set name of result to "${tbq}"
-end tell
-END
-  echo "return $?"
+function bluetooth_scan() {
+  if ! type -p blueutil > /dev/null 2>&1; then
+    echo "blueutil is required to use bluetooth from the command line."
+    if ! confirm_yes "install it with homebrew? (Y/n)?"; then
+      return 1
+    fi
+    if ! brew install blueutil; ret=$?; then
+      echo "brew install blueutil failed with code $ret"
+      return $ret
     fi
   fi
+  blueutil --inquiry
+  return $ret
+}
+
+# sources localback so that its functions are available in the working env
+function b() {
+  OLDSYS="/Volumes/federation"
+  OLDHOME="/Volumes/federation/Users/$(whoami)"
+  F="/Volumes/federation/Users/mt/Downloads"
+  source $D/localback.sh
 }
 
 # returns 0 if the provided string is a path valid for Applescript
@@ -416,7 +386,7 @@ function isvalidapplepath() {
   return 1
 }
 
- toapplepath() {
+toapplepath() {
 	usage() {
 		cat << EOF
 			toapplepath some/posix/path
@@ -440,17 +410,16 @@ EOF
 		return 1
 	fi
 	local abspath=$(realpath "$posixpath")
-	# if [[ $(resolvepath "$posixpath") != $(resolvepath "$abspath") ]]; then usage; return 2; fi
 
-	if ! [ -x "$TO_APPLEPATH" ]; then
-	  if [ -f "$TO_APPLEPATH" ]; then
-		  if ! chmod +x "$TO_APPLEPATH"; then
-			  warn "$TO_APPLEPATH exists but couldn't be marked +x"
+	if ! [ -x "$TO_APPLEPATH_ASCRIPT" ]; then
+	  if [ -f "$TO_APPLEPATH_ASCRIPT" ]; then
+		  if ! chmod +x "$TO_APPLEPATH_ASCRIPT"; then
+			  warn "$TO_APPLEPATH_ASCRIPT exists but couldn't be marked +x"
 				mangle=true
 			fi
-		elif [ -n "$TO_APPLEPATH" ]; then
-		  w="global TO_APPLEPATH in ${BASH_SOURCE[0]} should point to an applescript "
-			w+="that converts paths properly but is $TO_APPLEPATH"
+		elif [ -n "$TO_APPLEPATH_ASCRIPT" ]; then
+		  w="global TO_APPLEPATH_ASCRIPT in ${BASH_SOURCE[0]} should point to an applescript "
+			w+="that converts paths properly but is $TO_APPLEPATH_ASCRIPT"
 			warn "$w"
 		  mangle=true
 		fi
@@ -459,11 +428,11 @@ EOF
 	  applepath=$(echo "${abspath:1}"|tr '/' ':'); ret=$?
 		if ! isvalidapplepath "$applepath"; then
 		  # TODO link to github
-			error "Converting / to : was not sufficient.  Try again after setting TO_APPLEPATH."
+			error "Converting / to : was not sufficient.  Try again after setting TO_APPLEPATH_ASCRIPT."
 			return 3
 		fi
 	else
-	  applepath=$( ( eval "$TO_APPLEPATH" "$posixpath") 2> /dev/null); ret=$?
+	  applepath=$( ( eval "$TO_APPLEPATH_ASCRIPT" "$posixpath") 2> /dev/null); ret=$?
 	fi
 	echo "$applepath"
 	return $ret
@@ -529,30 +498,11 @@ end tell
 END
 }
 
-# creates a Mac style alias of a VST3 plugin in the system plugins folder
-function vst3alias() {
-  local target="${1:-}"
-  if [ -n "${target}" ]; then
-    if stat "${target}"; then
-      local tbase=$(basename "${target}")
-      tq=$(printf '%s' "${target}")
-      tbq=$(printf '%s' "${tbase}")
-  osascript <<END
-tell application "Finder"
-set myPlug to POSIX file "${tq}" as alias
-make new alias to myPlug at "Foundation:Library:Audio:Plug-Ins:VST3"
-set name of result to "${tbq}"
-end tell
-END
-        return $?
-    fi
-  fi
-}
-
 # Shows launchds logs since the last reboot (LAST_DATEFMT defined in util.sh)
 function show_last_boot_logs() {
-  last_reboot_lastfmt=$(last reboot |head -n1 |awk '{print$3 $4 $5 $6}')
-  last_reboot_logfmt=$(date -jf +"$LAST_DATEFMT" -d "$last_reboot_lastfmt" +"$MACOS_LOG_DATEFMT")
+  last_reboot_lastfmt=$(last reboot |head -n1 |awk -F'   ' '{print$NF}')
+  last_reboot_lastfmt="${last_reboot_lastfmt##+([[:space:]])}"
+  last_reboot_logfmt=$(date -jf "$LAST_DATEFMT" "$last_reboot_lastfmt" +"$MACOS_LOG_DATEFMT")
   log show --predicate "processID == 0" --start "$last_reboot_logfmt" --debug
 }
 
@@ -1424,6 +1374,131 @@ function bslift() {
     source "$D/bootstraps.sh"
   fi
 }
+
+function pkg_search_installed() {
+  optspec="r:v:h"
+  unset OPTIND
+  unset optchar
+  local regex=
+  local volume="/"
+  while getopts "${optspec}" optchar; do
+    case "${optchar}" in
+      r)
+        regex="${OPTARG}"
+        ;;
+      v)
+        volume="${OPTARG}"
+        ;;
+      h)
+        usage
+        return 0
+        ;;
+    esac
+  done
+  usage() {
+    cat <<-'EOF'
+pkg_search_installed - searches the pkg receipt db for bundle IDs
+  of user installed packages, use the same search parameters with
+  pkg_rm_installed to rm all installed files from that package
+  and make the db "forget" about it.
+
+Args:
+  -r - the term following -r in quotes will be interpreted as a
+       regex following conventions in man re_format(7).  Any other
+       command line term is ignored (except speficied by flag).
+  -v - specify a volume to search pkgs on.  Defaults to "/"
+  -h - shows this text.
+
+If -r is not specified, we do a case insensitive substring search
+  using the first whole word argument supplied.  Essentially
+  pkg_search_installed -r "(?i).*searchterm.*"
+EOF
+  }
+  shift $(($OPTIND - 1))
+  nextarg="${1:-}"
+  if [ -z "$regex" ]; then
+    printf -v regex '(?i).*%s.*' "${1:-}"
+  fi
+  pkgutil --volume / --pkgs="$regex"
+  return $?
+}
+
+function pkg_rm_installed() {
+  optspec="r:v:h"
+  unset OPTIND
+  unset optchar
+  local regex=
+  local volume="/"
+  while getopts "${optspec}" optchar; do
+    case "${optchar}" in
+      r)
+        regex="${OPTARG}"
+        ;;
+      v)
+        volume="${OPTARG}"
+        ;;
+      h)
+        usage
+        return 0
+        ;;
+    esac
+  done
+  usage() {
+    cat <<-'EOF'
+pkg_rm_installed - searches the pkg receipt db for bundle IDs
+  of user installed packages, use the same search parameters with
+  pkg_search_installed to make sure you have only the packages
+  you want.  This function does not ask for confirmation, PROCEED
+  AT YOUR OWN RISK.
+
+Args:
+  -r - the term following -r in quotes will be interpreted as a
+       regex following conventions in man re_format(7).  Any other
+       command line term is ignored (except speficied by flag).
+  -v - specify a volume to search pkgs on.  Defaults to "/"
+  -h - shows this text.
+
+If -r is not specified, we do a case insensitive substring search
+  using the first whole word argument supplied.  Essentially
+  pkg_search_installed -r "(?i).*searchterm.*"
+EOF
+  }
+  shift $(($OPTIND - 1))
+  nextarg="${1:-}"
+  IFS='' read -r -d '' warning <<'EOF'
+  Please use pkg_search_installed to make sure you have only the packages
+  you want to remove.  This function does not ask for confirmation, PROCEED
+  AT YOUR OWN RISK.
+EOF
+  echo "$warning"
+  if ! confirm_yes_default_no "OK to proceed? (y/N)?"; then
+    return 5
+  fi
+  if [ -z "$regex" ]; then
+    printf -v regex '(?i).*%s.*' "${1:-}"
+  fi
+  files=()
+  dirs=()
+  for pkg in $(pkgutil --volume / --pkgs="$regex"); do
+    while IFS=$'\n' read -r line ; do
+      files+=( "$line" )
+    done < <(pkgutil --files "$pkg" --only-files)
+    while IFS=$'\n' read -r line ; do
+      dirs+=( "$line" )
+    done < <(pkgutil --files "$pkg" --only-dirs)
+  done
+  for file in "${files[@]}"; do
+    echo "rm -f $file"
+  done
+  for dir in "${dirs[@]}"; do
+    echo "rmdir $dir"
+  done
+  for pkg in $(pkgutil --volume / --pkgs="$regex"); do
+    sudo pkgutil --forget "$pkg"
+  done
+  return $?
+}
+
 
 # https://stackoverflow.com/questions/54995983/how-to-detect-availability-of-gui-in-bash-shell
 function check_macos_gui() (
