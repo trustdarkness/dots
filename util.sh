@@ -19,6 +19,9 @@
 #####################  internal logging and bookkeeping funcs
 #############################################################
 
+declare -i EX_DATAERR=65 #data format error
+declare -i EINVAL=22 # nvalid argument
+
 declare -F is_function > /dev/null 2>&1 || is_function() {
   ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
 }
@@ -40,19 +43,43 @@ path_append "$D"
 # to stderr, canonical in existence # TODO, check namerefs on resource
 if undeclared "se"; then
   # Args:
-  #  Anything it recieves gets echoed back.  If theres
+  #  -u - do not add a newline when printing, similar to one of the use
+  #       cases for printf vs echo.
+  #
+  #  Otherwise, se echoes to stderr anything it recieves, and If theres
   #  no newline in the input, it is added. if there are substitutions
   #  for printf in $1, then $1 is treated as format string and
-  #  $:2 are treated as substitutions
+  #  $:2 are treated as substitutions.  se replaces any literal '-' with
+  # '\x2D', the hex char code for '-' otherwise there are cases where
+  # printf will try to interpret these as flags.
   # No explicit return code
   function se() {
-    if [[ "$*" == *'%'* ]]; then
-      >&2 printf "${1:-}" "${@:2}"
-    else
-      >&2 printf "$@"
+    local nonewline
+    nonewline=false
+    if [[ "${1:-}" == "-u" ]]; then
+      nonewline=true
+      shift
     fi
-    if ! [[ "$*" == *'\n'* ]]; then
-      >&2 printf '\n'
+    if [[ "$*" == *'%'* ]]; then
+      sub="${@:2}"
+      # if the provided string contains a '-' in the first column, printf
+      # will try to interpret it as a command line flag
+      if ! >&2 printf "${1:-/'-'/'\x2D'}" "${sub/'-'/'\x2D'}"; then
+        return "$EINVAL"
+      fi
+    else
+      if [ -n "$*" ]; then # like echo, sometimes se is used just to emit \n
+        if ! >&2 printf "${@/'-'/'\x2D' }"; then
+          return 1
+        fi
+      fi
+    fi
+    if untru "$nonewline"; then
+      if [[ "$*" != *$'\n'* ]]; then # match on the ANSI Cstring
+        if ! >&2 printf '\n'; then
+          return 1
+        fi
+      fi
     fi
   }
 fi
@@ -154,9 +181,12 @@ function is_int() {
 
 # Args: first term larger int than second term.
 #     if first term is "". we treat it as 0
+# if term2 is not an int or param 3 is set to true, indicating both args
+# must be ints, return 2
 function gt() {
   term1="${1:-}"
   term2="${2:-}"
+  mustbeint="${3:-false}"
   if is_int ${term1}; then
     if is_int ${term2}; then
       if [ ${term1} -gt ${term2} ]; then
@@ -167,6 +197,8 @@ function gt() {
     else
       return 2
     fi
+  elif "$mustbeint"; then
+    return 2
   elif [[ "${term1}" == "" ]]; then
     return 1
   fi
@@ -174,9 +206,12 @@ function gt() {
 
 # Args: first term we hope is less than the second.
 # returns 0 if it is, 1 otherwise. if first term is "", return 1
+# if term2 is not an int or param 3 is set to true, indicating both args
+# must be ints, return 2
 function lt() {
   term1="${1:-}"
   term2="${2:-}"
+  mustbeint="${3:-false}"
   if is_int ${term1}; then
     if is_int ${term2}; then
       if [ ${term1} -lt ${term2} ]; then
@@ -187,6 +222,8 @@ function lt() {
     else
       return 2
     fi
+  elif "$mustbeint"; then
+    return 2
   elif [[ "${term1}" == "" ]]; then
     return 1
   fi
@@ -194,9 +231,12 @@ function lt() {
 
 # Args: first term we hope is less than the second.
 # returns 0 if it is, 1 otherwise. if first term is "", return 1
+# if term2 is not an int or param 3 is set to true, indicating both args
+# must be ints, return 2
 function le() {
   term1="${1:-}"
   term2="${2:-}"
+  mustbeint="${3:-false}"
   if is_int ${term1}; then
     if is_int ${term2}; then
       if [ ${term1} -le ${term2} ]; then
@@ -207,8 +247,64 @@ function le() {
     else
      return 2
     fi
+  elif "$mustbeint"; then
+    return 2
   elif [[ "${term1}" == "" ]]; then
     return 1
+  fi
+}
+
+# Takes 3 ints as args, returns 0 if
+# Arg2 > Arg1 > Arg3 or Arg2 < Arg1 < Arg3
+# returns 1 otherwise
+function in_between_exclusive() { # TODO: make sure assumptions handle negatives
+  between="${1:-}"
+  t1="${2:-}"
+  t2="${3:-}"
+  mustbeint=true
+  if  [[ "$t1" == "-1" ]]; then
+    ((between++))
+    t1=0
+    ((t2++))
+  fi
+  if gt ${between} ${t1} "$mustbeint"; then
+    if lt ${between} ${t2} "$mustbeint"; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+# Takes 3 ints as args, returns 0 if
+# Arg2 => Arg1 => Arg3 or Arg2 <= Arg1 <= Arg3
+# returns 1 otherwise
+function in_between_inclusive() { # TODO: make sure assumptions handle negatives
+  between="${1:-}"
+  t1="${2:-}"
+  t2="${3:-}"
+  mustbeint=true
+  if  [[ "$t1" == "-1" ]]; then
+    ((between++))
+    t1=0
+    ((t2++))
+  fi
+  if gt ${between} ${t1} "$mustbeint" || $between == $t1; then
+    if lt ${between} ${t2} "$mustbeint" || $betweem == $t2; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+function in_between() {
+  between="${1:-}"
+  t1="${2:-}"
+  t2="${3:-}"
+  exclusive="${4:-true}"
+  if "${exclusive}"; then
+    in_between_exclusive "${between}" "${t1}" "${t2}"; return $?;
+  else
+    in_between_inclusive "${between}" "${t1}" "${t2}"; return $?;
   fi
 }
 
@@ -343,9 +439,10 @@ _log() {
     shift
   fi
   if [ $# -gt 1 ]; then
-    printf -v message "${1:-}" "${@:2}"
+    sub="${@:2}"
+    printf -v message "${1:-/'-'/'\x2D'}" "${sub/'-'/'\x2D'}"
   else
-    local message="$@"
+    local message="${@/'-'/'\x2D'}"
   fi
   if [ -z "$LOGFILE" ]; then
     if [[ "$srcp" == "environment" ]]; then
@@ -1354,9 +1451,9 @@ function printcolrange() {
 }
 
 function is_absolute() {
-  local dir="${1:-}"
-  if [ -d "${dir}" ]; then
-    if startswith "/" "${dir}"; then
+  local dirorfile="${1:-}"
+  if [ -d "${dirorfile}" ] || [ -f "${dirorfile}" ]; then
+    if startswith "/" "${dirorfile}"; then
       return 0
     fi
   fi

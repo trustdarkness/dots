@@ -16,11 +16,11 @@ SHOPTS=(
   cdspell
   cmdhist
   dirspell
-  dotglob
+  # dotglob
   expand_aliases
-  extglob
-  failglob
-  globstar
+  # extglob
+  # failglob
+  # globstar
   gnu_errfmt
   histappend
   histreedit
@@ -328,6 +328,9 @@ export GH="$HOME/src/github"
 
 if [ -f "$HOME/.localrc" ]; then
   source "$HOME/.localrc"
+  if [[ "$TERM" =~ tmux.* ]]; then
+    source "$HOME/.local_lhrc"
+  fi
 fi
 
 _bashrc_fs() {
