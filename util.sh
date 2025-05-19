@@ -544,6 +544,10 @@ dgrep() {
         addl_dirs+=( $potential )
       fi
       shift
+    elif [[ "${1:-}" =~ \-D ]]; then
+      local D="${2:-}"
+      shift
+      shift
     else
       grepargs+=( "${1:-}" )
       shift

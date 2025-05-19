@@ -152,22 +152,23 @@ PS1="\[$PINK\][\@] \[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39
 pPS1="$PS1"
 
 ps4_prompt() {
-  local bminusc="bec:-c $BASH_EXECUTION_STRING "
-  local bc="bc: $BASH_COMMAND "
-  lineno='$LINENO '
-  func='${FUNCNAME[0]} '
-  bline='${BASH_LINENO[0]} '
-  bsrcup='${BASH_SOURCE[0]} '
-  bsrc='${BASH_SOURCE[0]}'
-  ss='$BASH_SUBSHELL '
-  sl='$SHLVL '
-  cllr='$(caller)'
-  PROGNAME=$(basename $0)
-  pn='${PROGNAME}'
-  cat < <({
-  printf "%s%s: %s - caller: %s\n" "$bminusc" "$bc" "$lineno" "$cllr"
-  printf "⎯sl:%sss:%s $(funcsourceline) >" "$sl" "$ss"  #"$bsrcup" "$bline" "$bsrc"
-  })
+  :ß
+  # local bminusc="bec:-c $BASH_EXECUTION_STRING "
+  # local bc="bc: $BASH_COMMAND "
+  # lineno='$LINENO '
+  # func='${FUNCNAME[0]} '
+  # bline='${BASH_LINENO[0]} '
+  # bsrcup='${BASH_SOURCE[0]} '
+  # bsrc='${BASH_SOURCE[0]}'
+  # ss='$BASH_SUBSHELL '
+  # sl='$SHLVL '
+  # cllr='$(caller)'
+  # PROGNAME=$(basename $0)
+  # pn='${PROGNAME}'
+  # cat < <({
+  # printf "%s%s: %s - caller: %s\n" "$bminusc" "$bc" "$lineno" "$cllr"
+  # printf "⎯sl:%sss:%s $(funcsourceline) >" "$sl" "$ss"  #"$bsrcup" "$bline" "$bsrc"
+  # })
 }
 
 function powerline_init() {
@@ -223,7 +224,7 @@ function h() {
 function setxdebug() {
   export DEBUG=true
   export LEVEL=DEBUG
-  powerline_disable
+  # powerline_disable
   date=$(fsdate)
   xdebug_f="$LOGDIR/xdebug_$date"
   if ! [ -f "$xdebug_f" ]; then
@@ -232,11 +233,17 @@ function setxdebug() {
   fi
   exec 99> "$xdebug_f"
   BASH_XTRACEFD=99
-  export PS4="$(ps4_prompt)"
+  export PS4='$0.$LINENO+ '
   set -x
 }
 
+
 function unsetxdebug() {
+  if [[ "${1:-}" == '-r' ]]; then
+    if [ -f "$xdebug_f" ]; then
+      rm "$xdebug_f"
+    fi
+  fi
   set +x
   DEBUG= ; unset DEBUG
   powerline_init
