@@ -16,11 +16,7 @@ SHOPTS=(
   cdspell
   cmdhist
   dirspell
-  # dotglob
   expand_aliases
-  # extglob
-  # failglob
-  # globstar
   gnu_errfmt
   histappend
   histreedit
@@ -150,26 +146,6 @@ PS1="\[$PINK\][\@] \[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39
 
 # keep PS1 in env for powerline_disable
 pPS1="$PS1"
-
-ps4_prompt() {
-  :ß
-  # local bminusc="bec:-c $BASH_EXECUTION_STRING "
-  # local bc="bc: $BASH_COMMAND "
-  # lineno='$LINENO '
-  # func='${FUNCNAME[0]} '
-  # bline='${BASH_LINENO[0]} '
-  # bsrcup='${BASH_SOURCE[0]} '
-  # bsrc='${BASH_SOURCE[0]}'
-  # ss='$BASH_SUBSHELL '
-  # sl='$SHLVL '
-  # cllr='$(caller)'
-  # PROGNAME=$(basename $0)
-  # pn='${PROGNAME}'
-  # cat < <({
-  # printf "%s%s: %s - caller: %s\n" "$bminusc" "$bc" "$lineno" "$cllr"
-  # printf "⎯sl:%sss:%s $(funcsourceline) >" "$sl" "$ss"  #"$bsrcup" "$bline" "$bsrc"
-  # })
-}
 
 function powerline_init() {
   if { [[ $(uname) == "Darwin" ]] && [[ "$(launchctl getenv POWERLINE)" == "TRUE" ]]; } ||
