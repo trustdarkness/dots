@@ -2,6 +2,8 @@
 
 default_installer=undefined
 
+# PS1=$(printf "$PS1TEMPLATE" "📦")
+
 if [[ $(uname) == "Linux" ]]; then
   distro="$(lsb_release -d 2>&1|grep -E Desc|awk -F':' '{print$2}'|xargs)"
 elif [[ $(uname) == "Darwin" ]]; then
@@ -93,7 +95,17 @@ if string_contains "(arch|Manjaro|endeavour)" "$distro"; then
   function yRO() {
     yay -R "$(yay -Qtd|awk '{print$1}'|xargs)"
   }
+  function installed_groups_list() {
+    # https://bbs.archlinux.org/viewtopic.php?id=251788
+    pacman -Qg | cut -d' ' -f1 | sort -u | {
+      while read group; do
+        grep -q "Running 'pacman.*-S[yu]* $group" /var/log/pacman.log &&
+          echo $group
+      done
+    }
+  }
 fi
+
 
 if string_contains "(fedora|nobara)" "$distro"; then
   default_installer=dnf
