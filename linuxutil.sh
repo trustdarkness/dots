@@ -18,6 +18,11 @@
 # .bashrc (where util.sh is sourced from) amd existence.sh (also
 # sourced from .bashrc)
 
+declare -i ENXIO=6 # No such device or address
+declare -i EINVAL=22 # nvalid argument
+declare ARROW=$'\u27f6'
+
+export HNB='(egdod|City|BB|Back|skins|theme|icon|locale)'
 export BLK="(home|problem|egdod|ConfSaver|headers|man|locale|themes|icons)"
 alias du0="du -h --max-depth=0"
 alias du1="du -h --max-depth=1"
@@ -37,6 +42,35 @@ alias globals="vimcat $HOME/.globals"
 alias mgrep="grep -E -v \"$BLK\"|grep -E"
 alias slhu="source $LH/util.sh"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
+alias journalctl="grc journalctl"
+alias journalctl_categories='journalctl --list-catalog'
+alias journalctl_errplus="journalctl -p err..alert"
+alias journalctl_authlog="journalctl SYSLOG_FACILITY=10"
+alias diff='diff --color=auto'
+export LESS='-R --use-color -Dd+r$Du+b$'
+
+# locate with regex exclusions
+function mL() {
+  posregex="${1:-}"
+  dHNP="$(dref "${HNP}")"
+  dBLK="$(deref "${BLK}")"
+  ignore="${dHNP}\|${dBLK}"
+  printf -v regexstr '^/(?!%s)(%s)$' "$ignore" "$posregex"
+  plocate "$regexstr"
+}
+
+function deref() {
+  # sort of like a derference operator, we want to strip the outer
+  # pair of whatevers off a string var in bash
+  v="${1:-}"
+  l="${#v}"
+  echo "${v:1:-1}"
+  return 0
+}
+
+# make journalctl wrap instead of truncate:
+# https://wiki.archlinux.org/title/Systemd/Journal
+export SYSTEMD_LESS=FRXMK
 
 DISTRO="$(lsb_release -d 2>&1|grep -E Desc|awk -F':' '{print$2}'|xargs)"
 _etc_passwd_globals() {
@@ -378,7 +412,7 @@ function whodesktop() {
   if [ -n "${DESKTOP_SESSION}" ]; then
     echo "${DESKTOP_SESSION}"
   else
-    e=$PS "e16"
+    e=$(pgrep "e16")
     r=$?
     if $r; then
       # sometimes e16 isn't able to set this up on its own
@@ -403,7 +437,7 @@ function p32winetricks() {
 }
 
 pola32wine() {
-  WINEARCH=win32 WINEPREFIX="/home/mt/.PlayOnLinux/wineprefix/Audio32/" wine $@
+  WINEARCH=win32 WINEPREFIX="/home/mt/.PlayOnLinux/wineprefix/Audio32/" wine "$@"
 }
 
 pola32winetricks() {
@@ -530,6 +564,22 @@ function fontsinstalluser() {
   return 0
 }
 
+function find_ui_text() {
+  likelydirs=(
+    /usr/lib
+    /usr/share
+    /etc
+    /bin
+    /usr/bin
+    $HOME/.config
+    $HOME/.local/share
+  )
+  potentials=()
+  for dir in "${likelydirs[@]}"; do
+    grep --color -A3 -B3 --exclude=\*.o -rnw -I -e "${1:-}"
+  done
+}
+
 # some useful aliases for kde plasma
 alias skutil="source $D/kutil.sh"
 alias vkutil="vim $D/kutil.sh && skutil"
@@ -547,11 +597,15 @@ function k() {
       ;;
 
   esac
+  case $- in
+    *i*)
+    s['linuxutil.sh']="${s['linuxutil.sh']}+$D/kutil.sh" ;;
+  esac
   skutil
 }
 
 # if we think this is plasma, load the kutil
-desktop=whodesktop 2> /dev/null
+desktop=$(whodesktop 2> /dev/null)
 if [[ "$desktop" == "plasma" ]]; then
   k
 fi
@@ -563,6 +617,10 @@ if [ -n "$CARGO" ]; then
     path_append "$HOME/.cargo/bin"
   fi
   if [ -f "$HOME/.cargo/env" ]; then
+  case $- in
+    *i*)
+    s['linuxutil.sh']="${s['linuxutil.sh']}+$HOME/.cargo/env"
+  ;; esac
     source "$HOME/.cargo/env"
   fi
 fi
@@ -619,6 +677,7 @@ EOF
 # them the next time i reimage a box :(
 #export NO_ATI_BUS=1
 
+# TODO make pythonpath use our bash pathlib
 if [[ "${PYTHONPATH}" != "*.local/sourced*" ]]; then
   export PYTHONPATH="$PYTHONPATH:/usr/lib/python3.11:/usr/lib/python3/dist-packages:$HOME/.local/sourced"
 fi
@@ -630,6 +689,24 @@ fi
 if [[ "${PATH}" != *"$HOME/src/github/eww/target/release"* ]]; then
   path_append "$HOME/src/github/eww/target/release"
 fi
+
+# This is hard to remember the variables for without something
+# like Dspy to help
+function dbus_session_method_call() {
+  bus_dest="${1:-}"
+  interface="${2:-}"
+  objectpath="${3:-}"
+  method="${4:-}"
+IFS='' read -r -d '' dbuscmd <<EOF
+  dbus-send --session \
+    --dest="${bus_dest}" \
+    --type=method_call \
+    --print-reply ${objectpath} \
+    ${interface}.${method}
+EOF
+echo "$dbuscmd"
+eval "$dbuscmd"
+}
 
 function dbus_session_services() {
   # https://stackoverflow.com/questions/19955729/how-to-find-methods-exposed-in-a-d-bus-interface
@@ -776,7 +853,8 @@ samepath() {
     err "${e[3]}" "$onemount"
     return 3
   else
-    err "${e[4]}" "$onemount" "$twomount"
+    printf -v msg "${e[4]}" "$onemount" "$twomount"
+    err "$msg"
     return 4
   fi
 }
@@ -797,5 +875,145 @@ safe_mount_x() {
     else
       sudo mount "$disk" "$mnt"
     fi
+  fi
+}
+
+# mentined on forums as a type of reset, this is an explicit way given by
+# kernel developers for a user to deauthorize certain devices.  This
+# function forces a device to reset by deauthing and then reauthing the
+# device's connection
+function usb_device_deauthorize_reset_by_vendor_prod() {
+  local vendor="${1:-}"
+  local product="${2:-}"
+  usb_deauth_device "$vendor" "$product"
+  sleep 0.5
+  usb_auth_device "$vendor" "$product"
+}
+
+function usb_deauth_device() {
+  local vendor="${1:-}"
+  local product="${2:-}"
+  local quiet="${3:-false}"
+  usb_device_push_authorization_value "${vendor}" "${product}" "0" "$quiet"
+  return $?
+}
+
+function usb_auth_device() {
+  local vendor="${1:-}"
+  local product="${2:-}"
+  local quiet="${3:-false}"
+  usb_device_push_authorization_value "${vendor}" "${product}" "1" "$quiet"
+  return $?
+}
+
+# https://www.kernel.org/doc/html/latest/usb/authorization.html
+function usb_device_push_authorization_value() {
+  local vendor="${1:-}"
+  local product="${2:-}"
+  local auth="${3:-}"
+  local quiet="${4:-true}"
+  declare -ga found=()
+  usage() {
+    cat <<-'EOF'
+usb_device_push_authorization_value - sets authorization value for usb device
+
+Positional Args:
+  vendor = 4 digit hex value representing device vendor
+  product = 4 digit hex value representing device product
+  auth = 0 - deauthorizes any devices with this vendor:product from interfacing
+             with usb on this system
+         1 - authorizes vendor:product devices on this system
+         2 - authorize by default only devices connected to internal USB ports
+  quiet = true|false whether to print status to console
+
+Returns:
+  0 on success
+  EINVAL=22 # nvalid argument on malformed args
+  ENXIO=6 # No such device or address if no devices found
+EOF
+  }
+  if ! [[ "${vendor}" =~ [0-9A-Fa-f]{4} ]] ||
+    ! [[ "${product}" =~ [0-9A-Fa-f]{4} ]]; then
+    se "vendor or product string malformed"
+    usage
+    return $EX_USAGE
+  fi
+  if ! in_between_inclusive "$auth" "0" "2"; then
+    se "auth must be 0, 1, or 2"
+    usage
+    return $EX_USAGE
+  fi
+  for DIR in $(find /sys/bus/usb/devices/ -maxdepth 1 -type l); do
+    if [[ -f $DIR/idVendor && -f $DIR/idProduct &&
+          $(cat $DIR/idVendor) == $VENDOR && $(cat $DIR/idProduct) == $PRODUCT ]]; then
+            found+=( "${DIR}" )
+            echo "$auth" > "$DIR/authorized"
+    fi
+  done
+
+  if [ "${#found[@]}}" -gt 0 ]; then
+    if ! "$quiet"; then
+      se "Set authorization to $auth for these devices:"
+      for device_dir in "${found[@]}"; do
+        se "$ARROW $device_dir"
+      done
+    fi
+    return 0
+  else
+    if ! "$quiet"; then
+      se "No devices found with vendor:product ${vendor}:${product}"
+    fi
+    return "$ENXIO"
+  fi
+}
+
+# https://askubuntu.com/questions/645/how-do-you-reset-a-usb-device-from-the-command-line
+function usb_ports_reset_all() {
+  for i in /sys/bus/pci/drivers/[uoex]hci_hcd/*:*; do
+    [ -e "$i" ] || continue
+    sudo sh -c "echo \"${i##*/}\" > \"${i%/*}/unbind\""
+    sudo sh -c "echo \"${i##*/}\" > \"${i%/*}/bind\""
+  done
+}
+
+function usb_controller_reset() {
+  echo -n "0000:00:1a.0" | tee /sys/bus/pci/drivers/ehci_hcd/unbind
+  echo -n "0000:00:1d.0" | tee /sys/bus/pci/drivers/ehci_hcd/unbind
+  echo -n "0000:00:1a.0" | tee /sys/bus/pci/drivers/ehci_hcd/bind
+  echo -n "0000:00:1d.0" | tee /sys/bus/pci/drivers/ehci_hcd/bind
+}
+
+function usb_drivers_reset:() {
+  # USB drivers
+  rmmod xhci_pci
+  rmmod ehci_pci
+
+  # uncomment if you have firewire
+  #rmmod ohci_pci
+
+  modprobe xhci_pci
+  modprobe ehci_pci
+
+  # uncomment if you have firewire
+  #modprobe ohci_pci
+}
+
+
+function diskinfo() {
+  # TODO: consider adding modes for different utilities info, i.e.
+  # https://serverfault.com/questions/190685/whats-the-best-way-to-get-info-about-currently-unmounted-drives#
+  # lshw -class disk
+  # sfdisk -l
+  # lsscsi --scsi_id
+  # fdisk -l
+  # parted -l
+  # find -L /sys/bus/scsi/devices
+  # more for individual disks, particularly
+  # hdparm -I <disk>
+  # lsscsi (for rescan location)
+  if [ -n "${1:-}" ]; then
+    smartctl -ix "${1:-}"
+  else
+    grc lsblk -s -M -t -o NAME,FSTYPE,LABEL,FSSIZE,FSAVAIL,FSUSE%,TRAN,MOUNTPOINTS
   fi
 }
