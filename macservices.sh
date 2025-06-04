@@ -462,6 +462,7 @@ plist_dirs_locations=(
   "$HOME/Library/Preferences"
   "/Library/Preferences"
   "$HOME/Library/Preferences/ByHost"
+  "/Library/Managed Preferences/$(whoami)"
 )
 
 app_associated_locations=(
@@ -493,22 +494,41 @@ plist_dirs_Containers=(
 container_pref_folder="Data/Library/Preferences"
 
 prefs_search() {
-  sterm="${1:-}"
+  local sterm="${1:-}"
+  local search_sudo=false
   hits=()
   _search() {
     arrayname=$1[@]
     array=("${!arrayname}")
     for tld in "${array[@]}"; do
-      while IFS= read -r -d '' dirorfile; do #maybe separate these
-        hits+=( "$dirorfile" );
-        echo "$dirorfile"
-      done < <(ssudo _lc find "$tld" -iname "*$sterm*")
+      if tru "$search_sudo" && ! can_i_read "$tld"; then
+        while IFS= read -r -d '' dirorfile; do #maybe separate these
+          hits+=( "$dirorfile" );
+        done < <(sudo find "$tld" -iname "*$sterm*" -print0 2> /dev/null)
+      else
+        debug "searching $tld with: find \"$tld\" -iname \"*$sterm*\""
+        while IFS= read -r -d '' dirorfile; do #maybe separate these
+          hits+=( "$dirorfile" );
+        done < <(find "$tld" -iname "*$sterm*" -print0 2> /dev/null)
+      fi
     done
   }
   _search 'plist_dirs_locations'
   if [ "${#hits[@]}" -eq 0 ]; then
     warn "no hits in plist_dirs_locations, broadening to app_associated_locations"
+    if confirm_yes "include locations which may require sudo access?"; then
+      search_sudo=true
+    fi
     _search 'app_associated_locations'
+  fi
+  if [ "${#hits[@]}" -gt 0 ]; then
+    for hit in "${hits[@]}"; do
+      echo "$hit"
+    done
+    return 0
+  else
+    echo "No prefs found for \'$sterm*\'"
+    return 2
   fi
 }
 
