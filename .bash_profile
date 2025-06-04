@@ -65,6 +65,14 @@ export -f is_function
 # until we sync everything up
 if [ -n "$DEBUG" ] && $DEBUG; then LEVEL=DEBUG; fi
 
+# don't put duplicate lines or lines starting with space in the history.
+# See bash(1) for more options
+HISTCONTROL=ignoreboth
+
+# for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
+unset HISTFILESIZE
+HISTSIZE=1000000
+
 source "$HOME/.bashrc"
 
 if [[ $(uname) == "Darwin" ]] then
