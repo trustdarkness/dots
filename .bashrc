@@ -12,11 +12,13 @@ set -o pipefail
 
 SHOPTS=(
   direxpand
+  dotglob
   cdable_vars
   cdspell
   cmdhist
   dirspell
   expand_aliases
+  globstar
   gnu_errfmt
   histappend
   histreedit
@@ -36,12 +38,17 @@ declare -F is_function > /dev/null 2>&1 || is_function() {
 }
 export -f is_function
 
+declare ARROW=$'\u27f6'
+declare BULLET='•'
+
 alias reallineno='[ -n "$FUNCNAME" ] && lineno_in_func_in_file -f "${BASH_SOURCE[0]}" -F "$FUNCNAME" -l'
 alias funcsourceline='[ -n "$BASH_SOURCE" ] && [ -n "$FUNCNAME" ] && { printf "[$FUNCNAME] $BASH_SOURCE" && [ -n "$LINENO" ] && echo ":$(reallineno $LINENO)"; }'
-
+declare -A s
+export s
 SBRC=true
 case $- in
     *i*)
+      s['.bashrc']="${s['.bashrc']}+util.sh"
       source "$D/util.sh"
       ;;
   *)
@@ -49,6 +56,26 @@ case $- in
   { [[ "$BASH_KIND_ENV" == sourced ]] && return 0; } || exit 0;
   ;;
 esac
+# since declare -Ap s will print like a blob as follows, we'll something nicer
+# declare -Ax s=([.bashrc]="⟶'util.sh'⟶'.localrc'" [linuxutil.sh]="⟶
+# '/home/mt/src/github/dots/kutil.sh'" [util.sh]="⟶'existence.sh'⟶'
+# filesystemarrayutil.sh'⟶'user_prompts.sh'⟶
+#'/home/mt/src/github/dots/linuxutil.sh'" )
+function show_sourced() {
+  # seen=()
+  for sourcer in "${!s[@]}"; do
+    echo "$sourcer"
+    # branch=$(("${#sourcer}"-2))
+    # printf "%${branch}s\n" '\_'
+    local IFS="+"
+    for sourcee in ${s[$sourcer]}; do
+      if [ -n "$sourcee" ]; then
+        printf " $BULLET $sourcee\n"
+      fi
+    done
+    printf '\n'
+  done
+}
 
 
 # see requires_modern_bash below
@@ -90,12 +117,50 @@ function symlinks_setup() {
 
 # don't put duplicate lines or lines starting with space in the history.
 # See bash(1) for more options
-HISTCONTROL=ignoreboth
+HISTCONTROL=ignoreboth:erasedups
 
 # for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
-HISTSIZE=1000000
-HISTFILESIZE=2000000
+unset HISTFILESIZE
+HISTFILESIZE=-1
+HISTSIZE=-1
 # HISTTIMEFORMAT is set to $FSTSFMT in util.sh
+if declare -p FSTSFMT > /dev/null 2>&1; then
+  HISTTIMEFORMAT="$FSTSFMT"
+fi
+HISTIGNORE="&:exit:pwd:rm *:history *:[ \t]*"
+
+# remove duplicates while preserving input order
+function dedup {
+   awk '! x[$0]++' $@
+}
+
+# removes $HISTIGNORE commands from input
+function remove_histignore {
+   if [ -n "$HISTIGNORE" ]; then
+      # replace : with |, then * with .*
+      local IGNORE_PAT=$(echo "$HISTIGNORE" | sed s/\:/\|/g | sed s/\*/\.\*/g)
+      # negated grep removes matches
+      grep -vx "$IGNORE_PAT" $@
+   else
+      cat $@
+   fi
+}
+
+# clean up the history file by remove duplicates and commands matching
+# $HISTIGNORE entries
+function history_cleanup {
+   local HISTFILE_SRC=~/.bash_history
+   local HISTFILE_DST=/tmp/.$USER.bash_history.clean
+   if [ -f $HISTFILE_SRC ]; then
+      \cp $HISTFILE_SRC $HISTFILE_SRC.backup
+      dedup $HISTFILE_SRC | remove_histignore >| $HISTFILE_DST
+      \mv $HISTFILE_DST $HISTFILE_SRC
+      chmod go-r $HISTFILE_SRC
+      history -c
+      history -r
+   fi
+}
+
 
 # check the window size after each command and, if necessary,
 # update the values of LINES and COLUMNS.
@@ -125,9 +190,9 @@ fi
 if type exa >/dev/null 2>&1; then
   alias ll='exa -alF'
 else
-  alias ll='ls -alF'
+  alias ll='ls -alF'ff
 fi
-alias la='ls -A'
+alias la='ls -Afdeclare -A'
 alias l='ls -CF'
 alias tac='tail -r'
 
@@ -141,6 +206,10 @@ RST="$(tput sgr0)"
 # colored GCC warnings and errors
 GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
+# use printf to add icons when special capabilities are available, like install
+# PS1TEMPLATE="%s\[${PINK}\]\@\[${RST} \[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w$RST %s \[$(tput setaf 208)\]$\[$RST\] "
+# M="🎱"
+# PS1=$(printf "$PS1TEMPLATE" "☕" "$M")
 # for pre, post, and non-powerline setup
 PS1="\[$PINK\][\@] \[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[$(tput setaf 208)\]$\[$RST\] "
 
@@ -189,7 +258,7 @@ function powerline_disable() {
 }
 
 if [[ $(uname) != "Darwin" ]]; then
-  PROMPT_COMMAND='last_exit=$?; history -a'
+  PROMPT_COMMAND='last_exit=$?; history -a;'
 fi
 function h() {
   history | grep "${1:-}"
@@ -302,9 +371,12 @@ alias mrsync="rsync $RSYNCOPTS"
 IMGx="\\.(jpe?g|png|jpg|gif|bmp|svg|PNG|JPE?G|GIF|BMP|JPEG|SVG)$"
 export GH="$HOME/src/github"
 
+
 if [ -f "$HOME/.localrc" ]; then
+  s['.bashrc']="${s['.bashrc']}+.localrc"
   source "$HOME/.localrc"
   if [[ "$TERM" =~ tmux.* ]]; then
+    s['.bashrc']="${s['.bashrc']}+.local_lhrc"
     source "$HOME/.local_lhrc"
   fi
 fi
