@@ -283,3 +283,33 @@ sddm-theme-plasma6-compatible() {
   fi
   return $failures
 }
+
+function add_to_install_on_lower_tab() {
+  :
+}
+
+function konsole_get_next_session_text() {
+
+  wnum="${KONSOLE_DBUS_WINDOW: -1}"
+  sessnum="${KONSOLE_DBUS_SESSION: -1}"
+  target_sess=$((sessnum+1))
+  objectpath="${KONSOLE_DBUS_SESSION:0:-1}$target_sess"
+  bus_dest="$KONSOLE_DBUS_SERVICE"
+  i=org.kde.konsole.Session # interface
+  m=getAllDisplayedText # method
+  current_text="$(dbus_session_method_call "$bus_dest" "$i" "$objectpath" "$m")"
+  echo "$current_text"
+}
+
+function set_konsole_title() {
+  echo -ne "\033]2;${1:-}\007"
+}
+
+if [ -n "$KONSOLE_DBUS_WINDOW" ]; then
+  if [ -n "$KONSOLE_DBUS_SESSION" ]; then
+    wnum="${KONSOLE_DBUS_WINDOW: -1}"
+    sessnum="${KONSOLE_DBUS_SESSION: -1}"
+    shell_title="konsole${wnum}pane${sessnum}"
+    set_konsole_title "$shell_title"
+  fi
+fi
