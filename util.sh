@@ -21,6 +21,7 @@
 
 declare -i EX_DATAERR=65 #data format error
 declare -i EINVAL=22 # nvalid argument
+declare ARROW=$'\u27f6'
 
 declare -F is_function > /dev/null 2>&1 || is_function() {
   ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
@@ -287,8 +288,8 @@ function in_between_inclusive() { # TODO: make sure assumptions handle negatives
     t1=0
     ((t2++))
   fi
-  if gt ${between} ${t1} "$mustbeint" || $between == $t1; then
-    if lt ${between} ${t2} "$mustbeint" || $betweem == $t2; then
+  if gt ${between} ${t1} "$mustbeint" || [[ $between == $t1 ]]; then
+    if lt ${between} ${t2} "$mustbeint" || [[ $between == $t2 ]]; then
       return 0
     fi
   fi
@@ -632,6 +633,7 @@ dgrep() {
   grepargs=()
   grep=grep
   onlyfiles=false
+  print_command=false
   addl_dirs=()
   ignore= ; unset ignore; ignore=()
   while [[ "${1:-}" == "-"* ]]; do
@@ -654,6 +656,9 @@ dgrep() {
       local D="${2:-}"
       shift
       shift
+    elif [[ "${1:-}" =~ \-\-print_command ]]; then
+      print_command=true
+      shift
     else
       grepargs+=( "${1:-}" )
       shift
@@ -670,6 +675,12 @@ dgrep() {
   file_searcher() {
     # if there are ever more exceptions, make this more visible
     { [ -f "$item" ] && [[ "$item" != *LICENSE ]] && file=$item; } || return
+    if tru "$print_command"; then
+      printf "$ARROW searching with %s -n " "$grep"
+      printf "%s " "${grepargs[@]}"
+      printf "%s %s" "$sterm" "$file"
+      printf "\n"
+    fi
     found=$($grep -n ${grepargs[@]} "$sterm" "$file"); ret=$?||true
     if [ $ret -eq 0 ]; then
       bn=$(basename "$file")
@@ -1520,8 +1531,8 @@ function is_my_git_repo() {
 
  # super sudo, enables sudo like behavior with bash functions
 function ssudo () {
-  [[ "$(type -t $1)" == "function" ]] &&
-    ARGS="$@" && sudo bash -c "$(declare -f $1); $ARGS"
+  [[ "$(type -t "$1")" == "function" ]] &&
+    ARGS="$@" && sudo -E bash -l -c "$(declare -f $1); \"$ARGS\""
 }
 alias ssudo="ssudo "
 

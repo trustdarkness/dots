@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # for MacOS's zsh nag text
 BASH_SILENCE_DEPRECATION_WARNING=1
+declare ARROW=$'\u27f6'
 
 declare -F is_function > /dev/null 2>&1 || is_function() {
   ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
@@ -40,6 +41,9 @@ APP_IN_APPLICATIONS_FOLDER_REGEX='^/Applications/.*.app'
 
 TO_APPLEPATH_ASCRIPT="$D/applescripts/getApplepathFromPOSIXPath.applescript"
 
+# also in root's .bash_profile as alias updatedb="/usr/libexec/locate.updatedb"
+alias updatedb="sudo /usr/libexec/locate.updatedb"
+
 # TODO: move to dpHelpers
 # FSDATEFMT and FSTSFMT in util.sh
 # function fsdate_to_logfmt {
@@ -52,10 +56,10 @@ TO_APPLEPATH_ASCRIPT="$D/applescripts/getApplepathFromPOSIXPath.applescript"
 #   date -jf "${FSTSFMT}" "${to_convert}" +"${MACOS_LOG_TSFMT}"
 # }
 
-function b2i() {
-  source "$HOME/src/bellicose/venv-intel/bin/activate"
-  "$HOME/src/bellicose/venv-intel/bin/python3" "$HOME/src/bellicose/bellicose.py" install "$@"
-}
+# function b2i() {
+#   source "$HOME/src/bellicose/venv-intel/bin/activate"
+#   "$HOME/src/bellicose/venv-intel/bin/python3" "$HOME/src/bellicose/bellicose.py" install "$@"
+# }
 
 _s="$HOME/Downloads/_staging"
 
@@ -119,19 +123,53 @@ VSTREGEX=".*.${VSTEXT}$"
 AUREGEX=".*.${AUEXT}$"
 PLUGINREGEXES=( "${VST3REGEX}" "${VSTREGEX}" "${AUREGEX}" )
 
+# after I install programs, I keep the installers here
+HOSTNAME=$(hostname)
+UNQUALED_HOSTNAME="${HOSTNAME%%.*}"
+INSTALLERS="$HOME/Downloads/_installed_${UNQUALED_HOSTNAME}"
+
 # extended regex seems a bit more reliable for or groups
 # requires egrep, find -E, grep -E, etc
 printf -v PLUGIN_EREGEX '(%s|%s|%s)' "${PLUGINREGEXES[@]}"
 
 # setup the environment and make functions available from dpHelpers
 function cddph() {
-  DPHELPERS="$HOME/src/dpHelpers"
-  sleep 0.5
+  export DPHELPERS="$HOME/src/dpHelpers"
   cd "$DPHELPERS"
   source "$DPHELPERS/lib/bash/lib_dphelpers.sh"
-  source "$DPHELPERS/lib/bash/lib_plugins.sh"
-  source "venv/bin/activate"
   return 0
+}
+
+function b2i() {
+  start() {
+    python $HOME/src/bellicose/bellicose.py install "${1:-}"
+  }
+  if [[ "$PS1" == ^venv\-.* ]]; then
+    if path-contains "bellicose"; then
+      start "${1:-}"
+      return $?
+    fi
+    deactivate
+  fi
+  swd="$(pwd)"
+  cd "$HOME/src/bellicose" || return 2
+  arch=$(uname -m)
+  # i've gotten in the good habit of creting venvs as venv-$(uname -m)
+  # unfortunately that was after i did this one.  TODO: fix
+  case "$arch" in
+    arm64)
+      musharch="$(find . -name 'venv-a*')"
+      ;;
+    x86_64)
+      musharch="$(find . -name 'venv-i*' -o -name 'venv-x*')"
+      ;;
+  esac
+  mushenv="${musharch:2}"
+  if [ -n "$musharch" ]; then
+    . "$HOME/src/bellicose/${mushenv}/bin/activate" || return 2
+    cd "$swd" && start "${1:-}"
+  fi
+  return $?
 }
 
 APP_FOLDERS=(
@@ -333,7 +371,7 @@ function showHidden {
         ;;
       "true"|"yes"|1)
         se "Finder already set to show all files, kill anyway?"
-        if confirm_yes "(Y/n)"; then
+        if confirm_yes "(Y/n) "; then
           killall Finder
         fi
         ;;
@@ -355,7 +393,7 @@ function bluetooth_get_info() {
 function bluetooth_scan() {
   if ! type -p blueutil > /dev/null 2>&1; then
     echo "blueutil is required to use bluetooth from the command line."
-    if ! confirm_yes "install it with homebrew? (Y/n)?"; then
+    if ! confirm_yes "install it with homebrew? (Y/n)? "; then
       return 1
     fi
     if ! brew install blueutil; ret=$?; then
@@ -515,16 +553,6 @@ function reset_tcc_dialogs() {
   fi
 }
 
-# prints a long form verbose=3 codesign response to the console
-function codesign_get() {
-  codesign -dv --verbose=3 "$@" 2>&1
-}
-
-# prints the cdhash itself to the console
-function get_codesig() {
-  codesign -dv --verbose=3 "$@" 2>&1 |grep '^CDHash='|awk -F'=' '{print$2}'
-}
-
 # Returns 0 if the file provided as arg1 is a pkg (or mpkg) installable
 # by the macos installer program
 function ispackage() {
@@ -556,7 +584,7 @@ function isapp() {
 function is_codesigned() {
   candidate="${1:-}"
   bn=$(basename "$candidate")
-  codesign=$(codesign_get "${candidate}")
+  codesign=$(coesign_read "${candidate}")
   if string_contains "not signed" "$codesign"; then
     se "$bn does not appear to be codesigned"
     return 1
@@ -572,7 +600,7 @@ function is_machO_bundle() {
       if ! is_codesigned "${bundledir}"; then
         return 2
       fi
-      confirmed_machO_bundle=$(codesign_get "${bundledir}" \
+      confirmed_machO_bundle=$(coesign_read "${bundledir}" \
         |grep "Mach-O"|grep "bundle"|awk -F'=' '{print$2}')
       # redundant, but handles return readably
       grep "bundle" <<< "${confirmed_machO_bundle}"
@@ -619,7 +647,7 @@ is_machO_exe() {
   exe="${1:?Please provide full path to executable binary}"
   bn=$(basename "$exe")
   if [ -f "${exe}" ]; then
-    codesign=$(codesign_get "${exe}" 2>&1)
+    codesign=$(coesign_read "${exe}" 2>&1)
     echo "$codesign"|grep "not signed" > /dev/null 2>&1
     if [ $? -eq 0 ]; then
       se "$bn does not appear to be codesigned"
@@ -779,7 +807,7 @@ function isapplication() {
     exe="${maybeapp}"
   fi
   if machO=$(stat "${bundledir}/Contents/MacOS"); then
-    confirmed_machO=$(codesign_get "${bundledir}"|grep "Mach-O"|awk -F'=' '{print$2}')
+    confirmed_machO=$(coesign_read "${bundledir}"|grep "Mach-O"|awk -F'=' '{print$2}')
     if [ $? -eq 0 ]; then
       se "is ${confirmed_machO}"
       return 0
@@ -1309,28 +1337,28 @@ function sip_disabled() {
 }
 
 # Simulate trashing from a bash function, may require ssudo
-# Args: files to trash
-function trash () {
+# Args: file to trash
+function trash() {
   local path
-  for path in "$@"; do
-    # ignore any arguments
-    if [[ "$path" = -* ]]; then :
-    else
-      # remove trailing slash
-      local mindtrailingslash=${path%/}
-      # remove preceding directory path
-      local dst=${mindtrailingslash##*/}
-      # append the time if necessary
-      while [ -e ~/.Trash/"$dst" ]; do
-        dst="`expr "$dst" : '\(.*\)\.[^.]*'` `date +%H-%M-%S`.`expr "$dst" : '.*\.\([^.]*\)'`"
-      done
-      if ! ret=$(mv "$path" ~/.Trash/"$dst"); then
-        se "mv returned $ret on $path. aborting."
-        return $ret
-      fi
+  failures=0
+  path="${1:-}"
+  # ignore any arguments
+  if [[ "$path" = -* ]]; then :
+  else
+    echo "trashing \"$path\""
+    # remove trailing slash
+    local mindtrailingslash="${path%/}"
+    # remove preceding directory path
+    local dst="${mindtrailingslash##*/}"
+    # append the time if necessary
+    while [ -e "$HOME/.Trash/$dst" ]; do
+      dst="$(expr "$dst" : '\(.*\)\.[^.]*') $(date +%H-%M-%S).$(expr "$dst" : '.*\.\([^.]*\)')"
+    done
+    if ! mv -f "$path" "$HOME/.Trash/$dst"; then
+      ((failures++))
     fi
-  done
-  return 0
+  fi
+  return $failures
 }
 
 # presumably this exists on the system somewhere
@@ -1375,6 +1403,181 @@ function bslift() {
   fi
 }
 
+function installer_search() {
+  additional_dirs=()
+  if [[ "${1:-}" =~ \-d ]]; then
+    additional_dirs+=("${2:-}")
+  fi
+  local sterm="${1:-}"
+  local local_installers=false
+  local brew_installers=false
+  declare -ga installers_found=()
+  echo "searching $INSTALLERS..."
+  output="$(
+    (
+      while IFS= read -r -d $'\0'; do
+        echo "$REPLY"
+      done < <(find "${INSTALLERS}" -type f -iname "*${sterm}*" -print0 2> /dev/null)
+    )
+  )"
+  i="${#additional_dirs[@]}"
+  while [ "${#additional_dirs[@]}" -gt 0 ]; do
+    ((i--))
+    echo "searching ${additional_dirs[i]}..."
+    omore="$(
+      (
+        while IFS= read -r -d $'\0'; do
+          echo "$REPLY"
+        done < <(find "${additional_dirs[i]}" -type f -iname "*${sterm}*" -print0 2> /dev/null)
+      )
+    )"
+    if [ -n "$omore" ]; then
+      output="$output\n$omore"
+    fi
+    additional_dirs=( "${additional_dirs[@]:0:i}" )
+  done
+  if [ -n "$output" ]; then
+    local_installers=true
+    echo "Found the following installers in ${INSTALLERS}:"
+  else
+    if output="$(brew search "$sterm")"; then
+      brew_installers=true
+      echo "No local installers found in ${INSTALLERS}, but brew found:"
+    fi
+  fi
+  if [ -n "$output" ]; then
+    local IFS=$'\n'
+    i=0
+    for installer in $output; do
+      # increment first, choices will be off-by-one
+      if [ -n "$installer" ]; then
+        ((i++))
+        echo "${i}. $installer"
+        installers_found+=( "$installer" )
+      else
+        ((i--)) # this handles blank lines in the brew output
+      fi
+    done;
+    echo
+    echo "Would you like to install any of them now? (1-$i, ctrl-c to exit)"
+    choice=$(get_keypress)
+    if in_between_inclusive "$choice" 1 $i; then
+      installer="${installers_found[$((i-1))]}"
+      if $local_installers; then
+        if ! b2i "${installer}"; then
+          echo "Could not install.  See errors above."
+          return 2
+        fi
+      elif $brew_installers; then
+        if ! brew install "${installer}"; then
+          echo "Could not install.  See errors above."
+          return 2
+        fi
+      fi
+    else
+      echo "Choice must be between 1 and $i"
+      return 2
+    fi
+    return 0
+  fi
+  return 1
+}
+
+function volumes_get_installable() {
+  declare -ga installable_volumes=()
+  output=$(
+    (
+     while IFS= read -r -d $'\0'; do
+       echo "$REPLY"
+     done < <(find /Volumes -type d -maxdepth 1 -print0 2> /dev/null)
+    )
+  );
+  local IFS=$'\n'
+  for findline in $output; do
+    c_basename="${findline:9}" # chop /Volumes/ off the front
+    if [ -n "$c_basename" ]; then
+      if diskinfo="$(diskutil info "$c_basename" 2> /dev/null)"; then
+        readonly="$(echo "$diskinfo" | grep "Volume Read Only" | cut -d":" -f2 | xargs)"
+        if [[ "$readonly" == "No" ]]; then
+          installable_volumes+=( "$c_basename" )
+        fi
+      fi
+    fi
+  done
+  if [ "${#installable_volumes[@]}" -gt 0 ]; then
+    return 0
+  fi
+  return 1
+}
+
+function installed_apps_get_all() {
+  optspec="bv:PNh"
+  unset OPTIND
+  unset optchar
+  local bundle_ids=false
+  local paths=false
+  local app_names=false
+  local volume="all"
+  declare -ga installable_volumes=()
+  declare -ga installed_app_names=()
+  declare -ga installed_bundles=()
+  while getopts "${optspec}" optchar; do
+    case "${optchar}" in
+      b)
+        bundle_ids=true
+        ;;
+      p)
+        app_paths=true
+        ;;
+      n)
+        app_names=true
+        ;;
+      v)
+        volumes="$OPTARG"
+        ;;
+      h)
+        usage
+        return 0
+        ;;
+    esac
+  done
+  if ! $bundle_ids && ! $paths && ! $app_names; then
+    app_names=true # default to app_names
+  fi
+  if [[ "$volumes" == "all" ]]; then
+    volumes_get_installable
+  else
+    for vol in $volumes; do
+      installable_volumes+=( "$vol" )
+    done
+  fi
+  for volume in "${installable_volumes[@]}"; do
+    while IFS=$'\n' read -r -d bundle_id; do
+      installed_bundles+=( "$bundle_id" )
+      if "$app_names"; then
+        installed_app_names+="$(osascript "applescripts/getAppNamefromBundleId.applescript" "$bundle_id")"
+      fi
+      if "$app_paths"; then
+        installed_app_paths+="$(osascript "applescripts/getPathFromBundleId.applescript" "$bundle_id")"
+      fi
+    done < <(pkgutil --pkgs --volume "$volume")
+  done
+  ctr=0
+  for bundle_id in "${installed_bundles[@]}"; do
+    info_line=''
+    if $bundles_ids; then
+      info_line+="$info_line\t$bundle_id"
+    fi
+    if $app_names; then
+      info_line="$info_line\t${installed_app_names[$ctr]}"
+    fi
+    if $app_paths; then
+      info_line="$info_line\t${installed_app_paths[$ctr]}"
+    fi
+    echo "$info_line" | column
+  done
+}
+
 function pkg_search_installed() {
   optspec="r:v:h"
   unset OPTIND
@@ -1406,7 +1609,8 @@ Args:
   -r - the term following -r in quotes will be interpreted as a
        regex following conventions in man re_format(7).  Any other
        command line term is ignored (except speficied by flag).
-  -v - specify a volume to search pkgs on.  Defaults to "/"
+  -v - specify a volume to search pkgs on.  Defaults to "/" should
+       be given as a fully qualified path such as /Volumes/disk.
   -h - shows this text.
 
 If -r is not specified, we do a case insensitive substring search
@@ -1419,16 +1623,18 @@ EOF
   if [ -z "$regex" ]; then
     printf -v regex '(?i).*%s.*' "${1:-}"
   fi
-  pkgutil --volume / --pkgs="$regex"
+  echo "searching like:  pkgutil --volume \"$volume\" --pkgs=\"$regex\" --regexp"
+  pkgutil --volume "$volume" --pkgs="$regex" --regexp
   return $?
 }
 
 function pkg_rm_installed() {
-  optspec="r:v:h"
+  optspec="dr:v:h"
   unset OPTIND
   unset optchar
   local regex=
   local volume="/"
+  local dry=false
   while getopts "${optspec}" optchar; do
     case "${optchar}" in
       r)
@@ -1436,6 +1642,9 @@ function pkg_rm_installed() {
         ;;
       v)
         volume="${OPTARG}"
+        ;;
+      d)
+        dry=true
         ;;
       h)
         usage
@@ -1456,6 +1665,7 @@ Args:
        regex following conventions in man re_format(7).  Any other
        command line term is ignored (except speficied by flag).
   -v - specify a volume to search pkgs on.  Defaults to "/"
+  -d - dry run, just show what would be done, don't take any action
   -h - shows this text.
 
 If -r is not specified, we do a case insensitive substring search
@@ -1470,33 +1680,102 @@ EOF
   you want to remove.  This function does not ask for confirmation, PROCEED
   AT YOUR OWN RISK.
 EOF
-  echo "$warning"
-  if ! confirm_yes_default_no "OK to proceed? (y/N)?"; then
-    return 5
+  local IFS=$'\n'
+  if ! $dry; then
+    echo "$warning"
+    if ! confirm_yes_default_no "OK to proceed? (y/N)? "; then
+      echo
+      return 5
+    fi
+    echo "continuing"
+  else
+    echo "Running in dry mode, no changes will be made."
   fi
   if [ -z "$regex" ]; then
     printf -v regex '(?i).*%s.*' "${1:-}"
   fi
   files=()
   dirs=()
-  for pkg in $(pkgutil --volume / --pkgs="$regex"); do
+  for pkg in $(pkgutil --volume "$volume" --pkgs="$regex"); do
     while IFS=$'\n' read -r line ; do
+      if [[ "$volume" != "/" ]]; then
+        # when the volume is not /, for some reason it mangles the paths
+        # such that we need to look for the *.app files and prepend them
+        # with "$volume/Applications/"
+        if [[ "$line" =~ ^.*.app.* ]]; then
+          line="$volume/Applications/$line"
+        else
+          # for files other than the Application, we still need to prepend
+          # the volume
+          line="$volume/$line"
+        fi
+      # even when volume is / we need to prepend the /
+      else
+        line="$volume$line"
+      fi
       files+=( "$line" )
-    done < <(pkgutil --files "$pkg" --only-files)
+    done < <(pkgutil --files "$pkg" --only-files --volume "$volume")
     while IFS=$'\n' read -r line ; do
+      if [[ "$volume" != "/" ]]; then
+        # when the volume is not /, for some reason it mangles the paths
+        # such that we need to look for the *.app files and prepend them
+        # with "$volume/Applications/"
+        if [[ "$line" =~ ^.*.app.* ]]; then
+          line="$volume/Applications/$line"
+        else
+          line="$volume/$line"
+      fi
+      # even when volume is / we need to prepend the /
+      else
+        line="$volume$line"
+      fi
       dirs+=( "$line" )
-    done < <(pkgutil --files "$pkg" --only-dirs)
+    done < <(pkgutil --files "$pkg" --only-dirs --volume "$volume")
   done
+  ctr=0
+  echo -ne "\\r[${BAR_SIZE:0:0}] 0 %$CLEAR_LINE"
+  total=${#files[@]}
   for file in "${files[@]}"; do
-    echo "rm -f $file"
+    if $dry; then
+      printf "rm -f '%s'\n" "$file"
+    else
+      progress "$ctr" "$total" "rm'ing ${file:0:10}..."
+      if can_i_write "${file}"; then
+        rm -f "$file"
+      else
+        sudo rm -f "$file"
+      fi
+      ((ctr++))
+    fi
   done
+  ctr=0
+  echo -ne "\\r[${BAR_SIZE:0:0}] 0 %$CLEAR_LINE"
+  total=${#files[@]}
   for dir in "${dirs[@]}"; do
-    echo "rmdir $dir"
+    if $dry; then
+      printf "rmdir '%s'\n" "$dir"
+    else
+      progress "$ctr" "$total" "rm'ing ${dir:0:10}..."
+      if can_i_write "$dir"; then
+        rmdir "$dir"
+      else
+        sudo rmdir "$dir"
+      fi
+    fi
   done
-  for pkg in $(pkgutil --volume / --pkgs="$regex"); do
-    sudo pkgutil --forget "$pkg"
+  for pkg in $(pkgutil --volume "$volume" --pkgs="$regex"); do
+    if $dry; then
+      printf 'sudo pkgutil --forget "%s" --volume "%s"\n' "$pkg" "$volume"
+    else
+      sudo pkgutil --forget "$pkg" --volume "$volume"
+    fi
   done
   return $?
+}
+
+# for parity with linuxutil, more or less
+function diskinfo() {
+  sudo diskutil -l
 }
 
 

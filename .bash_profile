@@ -97,6 +97,10 @@ else # assume linux
   fi
 fi
 
+if [[ "$BASH_COMMAND" == *'-c'* ]] && [[ "$BASH_COMMAND" == *"sudo"* ]]; then
+  source util.sh
+fi
+
 _bash_profile_fs() {
   function_finder -f "$D/.bash_profile"
 }

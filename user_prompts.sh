@@ -17,7 +17,7 @@
 # Note: pressing enter will return a null string. Perhaps a version terminated with X and then remove it in caller?
 # See https://unix.stackexchange.com/a/367880/143394 for dealing with multi-byte, etc.
 function get_keypress {
-  prompt="${1:-'something something give me a char'}"
+  prompt="${1:-}"
   local IFS=
   >/dev/tty printf '%s' "${prompt}"
   # [[ $ZSH_VERSION ]] && read -rk1  # Use -u0 to read from STDIN
@@ -53,12 +53,14 @@ function confirm_yes {
 export -f confirm_yes
 
 function confirm_yes_default_no() {
-  userkey=$(get_keypress "${1:-(y/N)}")
-  if [[ $userkey =~ Yy.* ]]; then
-    return 0;
-  else
-    return 1
-  fi
+  while REPLY=$(get_keypress "${1:-(y/N)?}"); do
+    [[ $REPLY ]] && printf '\n' # $REPLY blank if user presses enter
+    case "$REPLY" in
+      Y|y)  return 0;;
+      N|n)  return 1;;
+        *)  return 1;;
+    esac
+  done
 }
 
 # TODO: add "break_for_cancel_timeout_continue"

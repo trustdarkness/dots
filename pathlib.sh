@@ -20,6 +20,14 @@ path-search() {
   return $?
 }
 
+function path_contains() {
+  printf -v sterm "${1:-"please provide a search term"}"
+  if [[ "$PATH" == *"$sterm"* ]]; then
+    return 0
+  fi
+  return 1
+}
+
 # Appends Arg1 to the shell's PATH and exports
 function path_append() {
   to_add="${1:-}"
