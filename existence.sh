@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+declare -i EINVAL=22 # nvalid argument
+declare -i EX_DATAERR=65 #data format error
+
 # Comopsable, predictable bash version info, since we use >= bash 4.2
 # features quite often and certain prominent POSIX OSs :cough: MacOS
 # ship ancient ones
@@ -94,19 +97,43 @@ function is_declared() {
 # to stderr, normally declared in util.sh, sourced from .bashrc
 if ! is_declared "se"; then
   # Args:
-  #  Anything it recieves gets echoed back.  If theres
+  #  -u - do not add a newline when printing, similar to one of the use
+  #       cases for printf vs echo.
+  #
+  #  Otherwise, se echoes to stderr anything it recieves, and If theres
   #  no newline in the input, it is added. if there are substitutions
   #  for printf in $1, then $1 is treated as format string and
-  #  $:2 are treated as substitutions
+  #  $:2 are treated as substitutions.  se replaces any literal '-' with
+  # '\x2D', the hex char code for '-' otherwise there are cases where
+  # printf will try to interpret these as flags.
   # No explicit return code
   function se() {
-    if [[ "$*" == *'%'* ]]; then
-      >&2 printf "${1:-}" "${@:2}"
-    else
-      >&2 printf "$@"
+    local nonewline
+    nonewline=false
+    if [[ "${1:-}" == "-u" ]]; then
+      nonewline=true
+      shift
     fi
-    if ! [[ "$*" == *'\n'* ]]; then
-      >&2 printf '\n'
+    if [[ "$*" == *'%'* ]]; then
+      sub="${@:2}"
+      # if the provided string contains a '-' in the first column, printf
+      # will try to interpret it as a command line flag
+      if ! >&2 printf "${1:-/'-'/'\x2D'}" "${sub/'-'/'\x2D'}"; then
+        return "$EINVAL"
+      fi
+    else
+      if [ -n "$*" ]; then # like echo, sometimes se is used just to emit \n
+        if ! >&2 printf "${@/'-'/'\x2D' }"; then
+          return 1
+        fi
+      fi
+    fi
+    if untru "$nonewline"; then
+      if [[ "$*" != *$'\n'* ]]; then # match on the ANSI Cstring
+        if ! >&2 printf '\n'; then
+          return 1
+        fi
+      fi
     fi
   }
 fi
@@ -182,7 +209,13 @@ function undefined() {
 
 # To make operation on booleans slightly more readable and less error
 # prone.  Returns zero if the arg is a variable that exists and is
-# set to "true" or the corresponding commannd, 1 otherwise
+# set to "true" or the corresponding commannd, If the output of a command
+# is given to its standard in, that can create a situation where we're
+# evaluating whether programX completed properly. That results in the
+# situation that may feel strange to those whove written code elsewhere
+# and might expect true=1, but in bash you'll notice even hte booleans
+# 'true' and 'false' are commands themselves, where true returns 0 and
+# false 1.  1 otherwise
 function tru() {
   is_it="${1:-}"
   if [ -n "${is_it}" ]; then
@@ -198,13 +231,13 @@ function tru() {
 }
 
 function untru() {
-  is_isnt="${1:-}"
+  it_isnt="${1:-}"
   if is_int ${it_isnt}; then
-    if [ ${it_isnt} -ne 0 ]; then
-      return 0
+    if [ ${it_isnt} -eq 0 ]; then # because its bash 0 == true
+      return 1
     fi
-  elif [[ "${it_isnt}" != "true" ]]; then
-    return 0
+  elif [[ "${it_isnt}" == "true" ]]; then
+    return 1
   fi
   # we want to default to an object being false unless its explicitly
   # 0 or true
@@ -213,7 +246,7 @@ function untru() {
 
 # Use grep to check how a name was declared using a provided regex
 # Args:
-#   1 the declared name to check
+#   1 the declared nasyntax error: operand expected me to check
 #   2 the regex to check against
 # returns the ret code from grep
 function search_declareopts() {

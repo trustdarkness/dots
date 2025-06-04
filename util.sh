@@ -102,7 +102,6 @@ printf -v FSTSFMT '%s_%%H%%M%%S' "$FSDATEFMT" # our preferred ts fmt for files/f
 LAST_DATEFMT="%a %b %e %k:%M" # used by the "last" command
 PSTSFMT="%a %b %e %T %Y" # date given by (among others) ps -p$pid -o'lstart' ex: Thu Dec 26 21:17:01 2024
 USCLOCKTIMEFMT="%k:%M %p"
-HISTTIMEFORMAT="$FSTS"
 
 function fsdate() {
   date +"${FSDATEFMT}"
@@ -609,8 +608,18 @@ MODERN_BASH="4.3"
 
 # TODO: what requires these?
 if ! is_function exists; then
+  case $- in
+    *i*)
+    s['util.sh']="${s['util.sh']}+existence.sh"
+  ;; esac
   source "$D/existence.sh"
 fi
+
+  case $- in
+    *i*)
+    s['util.sh']="${s['util.sh']}+filesystemarrayutil.sh"
+    s['util.sh']="${s['util.sh']}+user_prompts.sh"
+  ;;esac
 
 source "$D/filesystemarrayutil.sh"
 source "$D/user_prompts.sh"
@@ -1259,14 +1268,16 @@ EOF
 # - bash_profile
 #  * is_function
 load-function() {
+  # set -x
   usage() {
     cat <<-'EOF'
     Help!!!
 EOF
   }
-  functionname="${1:-}"
-  xtradir="${2:-}"
+
   load-it() {
+    functionname="${1:-}"
+    xtradir="${2:-}"
     #set -x
     e=(
       [0]="N\A"
@@ -1332,21 +1343,22 @@ EOF
   fname="${1:-}"
 
   if is_function "$fname"; then
-    if ! $quiet && ! $force; then
-      echo "$fname already loaded in env as:"
-      declare -pf "$fname"
-      echo "to explicit force reload, run load-function -f $fname"
+    if tru $force; then
+      unset -f "$fname"
+    else
+      if untru "$quiet"; then
+        echo "$fname already loaded in env as:"
+        declare -pf "$fname"
+        echo "to explicit force reload, run load-function -f $fname"
+        return 0
+      fi
       return 0
     fi
-    if $force; then
-      unset -f "$fname"
-    fi
-    if $quiet; then return 0; fi
   fi
   if ! load-it "$fname" "$also_search"; ret=$?; then
     if [[ $LEVEL == "DEBUG" ]]; then
-      ff="$(function_finder -F $fname -S)"
-      debug "ff: $ff  pf: $(print_function -f $ff $fname)"
+      ff="$(function_finder -F "$fname" -S)"
+      debug "ff: $ff  pf: $(print_function -f "$ff" "$fname")"
     fi
     return $ret;
   fi
@@ -1545,6 +1557,10 @@ function get_cache_for_OS () {
 }
 get_cache_for_OS
 shopt -s expand_aliases
+  case $- in
+    *i*)
+    s['util.sh']="${s['util.sh']}+$OSUTIL"
+  ;; esac
 sosutil
 
 function user_feedback() {
