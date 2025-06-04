@@ -13,6 +13,13 @@ in-path() {
   return 0
 }
 
+path-search() {
+  search_term="${1:-}"
+  printf -v glob '*%s*' "$search_term"
+  in-path "$glob"
+  return $?
+}
+
 # Appends Arg1 to the shell's PATH and exports
 function path_append() {
   to_add="${1:-}"
