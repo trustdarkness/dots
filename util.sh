@@ -57,27 +57,38 @@ if undeclared "se"; then
   function se() {
     local nonewline
     nonewline=false
+    color=
     if [[ "${1:-}" == "-u" ]]; then
       nonewline=true
+      shift
+    fi
+    if [[ "${1:-}" =~ "-c=(.*)" ]]; then
+      color="${BASH_REMATCH[1]}"
       shift
     fi
     if [[ "$*" == *'%'* ]]; then
       sub="${@:2}"
       # if the provided string contains a '-' in the first column, printf
       # will try to interpret it as a command line flag
+      if [ -n "$color" ]; then printf "$color"; fi
       if ! >&2 printf "${1:-/'-'/'\x2D'}" "${sub/'-'/'\x2D'}"; then
+        if [ -n "$color" ]; then printf "${RST}"; fi
         return "$EINVAL"
       fi
     else
       if [ -n "$*" ]; then # like echo, sometimes se is used just to emit \n
+        if [ -n "$color" ]; then printf "$color"; fi
         if ! >&2 printf "${@/'-'/'\x2D' }"; then
+          if [ -n "$color" ]; then printf "${RST}"; fi
           return 1
         fi
       fi
     fi
     if untru "$nonewline"; then
       if [[ "$*" != *$'\n'* ]]; then # match on the ANSI Cstring
+        if [ -n "$color" ]; then printf "$color"; fi
         if ! >&2 printf '\n'; then
+          if [ -n "$color" ]; then printf "${RST}"; fi
           return 1
         fi
       fi
@@ -96,6 +107,8 @@ VAR=$(tput setaf 170) # lightpink
 CMD=$(tput setaf 36) # aqua
 MSG=$(tput setaf 231) # barely yellow
 RST=$(tput sgr0) # reset
+
+errcolor()(set -o pipefail;"$@" 2>&1>&3|sed $'s,.*,\e[31m&\e[m,'>&2)3>&1
 
 # preferred format strings for date for storing on the filesystem
 FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
@@ -578,13 +591,13 @@ progress-init() {
   echo -ne "\\r[${BAR_SIZE:0:0}] 0 %$CLEAR_LINE"
 }
 
-start-spinner() {
+spinner-start() {
   set +m
   { spin & } 2>/dev/null
   spinner_pid=$!
 }
 
-stop-spinner() {
+spinner-stop() {
   { kill -9 $spinner_pid && wait; } 2>/dev/null
   set -m
   echo -en "\033[2K\r"
@@ -798,6 +811,41 @@ ip-get-external() {
   return $?
 }
 
+function wget-download-size() {
+  verbose=false
+  if [[ "${1:-}" =~ \-v ]]; then verbose=true; shift; fi
+  url="${1:-}"
+  # not all servers will return headers with content length before sending the
+  # file, but the alternative is to download the file to get the size, which
+  # we would just as soon prefer to avoid
+  response="$(wget --spider --server-response "$url" 2>&1)"
+  if $verbose; then >&2 echo "${INF}url: $url response: ${WRN}$response${RST}"; fi
+  if [ -n "$response" ]; then
+    length="$(echo "$response"|grep -m1 "Length"|awk '{print$2}')"
+    if [ -n "$length" ] && is_int "$length"; then
+      echo "$length"
+      return 0
+    fi
+  fi
+  # if we're here, that didn't work, and we download
+  if [ -t 1 ]; then
+    se "unable to get length from server headers, downloading file, ctrl-c to cancel"
+    spinner-start
+  fi
+  length="$(xargs wget -qO- | wc -c)"
+  if [ -t 1 ]; then
+    spinner-stop
+    echo "$CLEAR_LINE"
+  fi
+  if is_int "$length"; then
+    echo "$length"
+    return 0
+  else
+    se "an error occurred attempting to download the file and length could not be determined."
+    return 1
+  fi
+}
+
 # Normalize os detection for consistency, hopefully reducing the chance
 # of simple typo, etc mistakes and increasing readability
 function is_mac() {
@@ -942,6 +990,48 @@ function is_bash_script() {
     err "$script does not seem to be a file, try full path?"
     return 2
   fi
+}
+
+bytes_converter() {
+  # adapted from https://gist.github.com/sanjeevtripurari/6a7dbcda15ae5dec7b56
+  valid_tos=( "KB" "MB" "GB" "TB" "PB" )
+  converterusage() {
+    cat <<-EOF
+bytes_converter - takes a numeric bytes value and converts to human friendly formats
+
+Example:
+  $ bytes_converter 2094196 MB
+
+Second argument must be one of ${valid_tos[@]}
+EOF
+  }
+  if [ $# -lt 2 ] || [[ "${1:-}" =~ \-(h|?) ]]; then
+    converterusage
+    return 1
+  fi
+  bytes="${1:-}"
+  to="${2:-}"
+
+  load-function -q in_array
+  if ! in_array "$to" "valid_tos"; then
+    converterusage
+    return 1
+  fi
+  # echo "scale=4; $n1/($n2)" |bc
+  k_ilo=1024;
+  m_ega=$k_ilo*$k_ilo;
+  g_iga=$m_ega*$k_ilo;
+  t_era=$g_iga*$k_ilo;
+  p_eta=$t_era*$k_ilo;
+  case $to in
+    KB) let pn=$k_ilo;;
+    MB) let pn=$m_ega;;
+    GB) let pn=$g_iga;;
+    TB) let pn=$t_era;;
+    PB) let pn=$p_eta;;
+  esac
+  converted=$(echo "scale=4; $bytes/($pn)" |bc)
+  echo "$converted $to"
 }
 
 VALID_POSIXPATH_EL_CHARS='\w\-. '
@@ -1420,6 +1510,16 @@ function is_quoted() {
   return 1
 }
 
+function stripquotes() {
+  string="${1:-}"
+  if is_quoted "${string}"; then
+    echo "${string:1:-1}"
+    return 0
+  fi
+  echo "$string"
+  return 0
+}
+
 # for a multiline string, returns a string with doublequotes surrounding
 # each line of the given string as a part of the string
 function shellquotes() {
@@ -1548,25 +1648,96 @@ function sata_bus_scan() {
   sudo sh -c 'for i in $(seq 0 4); do echo "0 0 0" > /sys/class/scsi_host/host$i/scan; done'
 }
 
-function get_cache_for_OS () {
+function setup_working_env() {
+  # this can be used for an application to setup cache, data, state, log
+  # dirs, but when used with no arguments, sets those up for interactive
+  # use of functions available by use of the dots repo
+  local app="${1:-com.trustdarkness.dots}"
+  local targets=( config cachedir statedir datadir logdir )
+  local homes=( CONFIGHOME CACHEHOME STATEHOME DATAHOME )
   case $(what_os) in
     'GNU/Linux')
-      CACHE="$HOME/.local/cache"
-      mkdir -p "$CACHE"
-      OSUTIL="$D/linuxutil.sh"
-      alias sosutil='source "$D/linuxutil.sh"'
-      alias vosutil="vim $D/linuxutil.sh && sosutil"
+      { [ -n "$XDG_CONFIG_HOME" ] && CONFIGHOME="$XDG_CONFIG_HOME"; } || \
+        CONFIGHOME="$HOME/.config"
+      { [ -n "$XDG_CACHE_HOME" ] && CACHEHOME="$XDG_CACHE_HOME"; } || \
+        CACHEHOME="$HOME/.local/cache"
+      { [ -n "$XDG_STATE_HOME" ] && STATEHOME="$XDG_STATE_HOME"; } || \
+        STATEHOME="$HOME/.local/state"
+      { [ -n "$XDG_DATA_HOME" ] && DATAHOME="$XDG_DATA_HOME"; } || \
+        DATAHOME="$HOME/.local/share"
+
+      if [[ "$app" == "com.trustdarkness.dots" ]]; then
+        OSUTIL="$D/linuxutil.sh"
+        alias sosutil='source "$D/linuxutil.sh"'
+        alias vosutil="vim $D/linuxutil.sh && sosutil"
+      fi
       ;;
     "MacOS")
-      CACHE="$HOME/Library/Application Support/Caches"
-      OSUTIL="$D/macutil.sh"
-      alias sosutil='source "$D/macutil.sh"'
-      alias vosutil="vim $D/macutil.sh && vosutil"
+      # using python's platformdirs for home locations
+      CONFIGHOME="$HOME/Library/Application Support"
+      CACHEHOME="$HOME/Library/Caches"
+      STATEHOME="$CONFIGHOME"
+      DATAHOME="$CONFIGHOME"
+      LOGSHOME="$HOME/Library/Logs"
+
+      if [[ "$app" == "com.trustdarkness.dots" ]]; then
+        OSUTIL="$D/macutil.sh"
+        alias sosutil='source "$D/macutil.sh"'
+        alias vosutil="vim $D/macutil.sh && vosutil"
+      fi
       ;;
   esac
-  export CACHE
+  if [[ "$app" == "com.trustdarkness.dots" ]]; then
+    # trying to cover ground or inherit, rather, for code that's
+    # already out there, there's a bit of redundancy (see below)
+    CONFIG="$CONFIGHOME/$app"
+    CACHE="$CACHEHOME/$app"
+    STATEDIR="$STATEHOME/$app"
+    DATADIR="$DATAHOME/$app"
+    if [[ $(what_os) == 'GNU/Linux' ]]; then
+      LOGDIR="$DATADIR/logs"
+    fi
+    # redundancy:
+    CONFIGDIR="$CONFIG"
+    CACHEDIR="$CACHE"
+  else
+    workingdirs=()
+    se "working dirs for $app setup as..."
+    local index=0
+    for target in "${targets[@]}"; do
+      if [[ "$target" == "logdir" ]]; then
+        case $(what_os) in
+          'GNU/Linux')
+            declare -n datadir="${app}_datadir"
+            declare "${app}_logdir"="$datadir/logs"
+            workingdirs+=( "$datadir/logs" )
+            se "  ${app}_logdir=\"$datadir/logs\""
+            ;;
+          'MacOS')
+            declare "${app}_logdir"="$LOGSHOME/$app"
+            workingdirs+=( "$LOGSHOME/logs" )
+            se "  ${app}_logdir=\"$LOGSHOME/$app\""
+            ;;
+        esac
+      else
+        declare -n home=${homes[$index]}
+        declare "${app}_${target}"="$home/$app"
+        workingdirs+=( "$home/$app" )
+        se "  ${app}_${target}=\"$home/$app\""
+      fi
+      ((index++))
+    done
+
+    declare -gn "${app}_workingdirs"=workingdirs
+    se
+    se "These directories have not been created yet, to create them all"
+    se "now, run:"
+    se "for dir in \"\${${app}_workingdirs[@]}; do mkdir -p \"\$dir\"; done"
+    se
+    se "or make sure to makedir -p \$LOGDIR, etc before trying to use each"
+  fi
 }
-get_cache_for_OS
+setup_working_env
 shopt -s expand_aliases
   case $- in
     *i*)
