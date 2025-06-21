@@ -33,9 +33,7 @@ declare -F detect_d > /dev/null 2>&1 || detect_d() {
 
 if [ -z "${D}" ]; then
   if [ -d "$HOME/src/github/dots" ]; then
-    # export D="$HOME/src/github/dots"
-    # temporary until the laptop is synced up
-    export D="$HOME/src/github/ff_dots"
+    export D="$HOME/src/github/dots"
   else
     detect_d
   fi
