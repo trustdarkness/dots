@@ -157,7 +157,7 @@ ssource() {
   local d='|'
   local ts=$(date +%s%N)
   local caller="$(caller)"
-  if [[ "${1:-}" == \-f ]]; then
+  if [[ "${1:-}" =~ \-f ]]; then
     force=true
     shift
   fi
