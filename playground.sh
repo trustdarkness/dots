@@ -293,3 +293,40 @@ EOF
 #   --arg 'declare -F' "$(jq -n $(declare_to_jqconst 'declare -F') '\$ARGS.named')" \
 #   --arg 'set -o posix; set' "$(jq -n $(setoposix_to_jqconst) '\$ARGS.named')"
 # EOF
+
+
+function exit_handler() {
+  retval="${1:-}"
+  lineno="${2:-}"
+  shift; shift # the remainder of args are source files or function names
+  se "exit caught."
+  return
+}
+
+function strict_mode_set() {
+  # using this within the context of running functions in an
+  # interactive shell will cause you to lose your shell in a way
+  # that is unconducive to a productive working environment
+  trap 'exit_handler $? $LINENO ${BASH_SOURCE[*]} ${FUNCNAME[*]}' EXIT
+  declare -gA SAVED_SET_OPTS
+  local opts_to_save=( "errexit" "nounset" "pipefail" )
+  # get current status of relevant opts
+  while IFS=$'\n' read -r line; do
+    for opt in "${opts_to_save[@]}"; do
+      if [[ "$line" =~ $opt[:space:]([:alnum:]) ]]; then
+        SAVED_SET_OPTS[$opt]="${BASH_REMATCH[1]}"
+      fi
+    done
+  done < <(set -o)
+  set -euo pipefail
+}
+
+function unset_strict() {
+  for opt in "${!SAVED_SET_OPTS[@]}"; do
+    if [[ "${SAVED_SET_OPTS[$opt]}" == "off" ]]; then
+      set +o $opt
+    else
+      set -o $opt
+    fi
+  done
+}

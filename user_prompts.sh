@@ -122,6 +122,9 @@ function choices() {
                           find -print0
       -d | --something-different let the user specify something different
                           and return it like any other choice
+      -l | --last-element-different only applies with -d, when used together
+                          the last element in the choices array will be
+                          prompt text for the "something different"
       -c | --continue     add a continue option
       -e | --exit         add an exit option
       -r | --return       overrides exit and returns instead, text
@@ -145,18 +148,19 @@ function choices() {
       before you can catch the return \(suggest trapping\)
 EOF
   }
-  actions=false
+  ch_actions=false
   separator='\0'
   ucontinue=false
   ureturn=false
   uexit=false
   different=false
+  lasteldiff=false
   something_different= ; unset something_different
   positional_arguments=()
   while [ $# -gt 0 ]; do
     case "${1:-}" in
       '-a'|'--with-actions')
-        actions=true
+        ch_actions=true
         shift
         ;;
       '-s'|'--separator')
@@ -180,6 +184,10 @@ EOF
         different=true
         shift
         ;;
+      "-l"|"--last-element-different")
+        lasteldiff=true
+        shift
+        ;;
       "-h"|"-?"|"--help")
         help
         shift
@@ -187,85 +195,98 @@ EOF
       *)
         if [[ "${1:-}" != \-* ]]; then
           positional_arguments+=("${1:-}")
+          shift
         else
           help
+          return 1
         fi
-        shift
         ;;
     esac
   done
   local unknown="${positional_arguments[0]}"
   if [ -n "${unknown}" ]; then
-  declareopts=$(declare -p "${unknown}")
-    if tru $DEBUG; then
-
-      se "declareopts: $declareopts unknown: $unknown"
-    fi
-
-    # TODO: how to handle -A
-    if string_contains "\-a" "$declareopts"; then
-      prompts_name="$unknown[@]"
-      debug "$prompts_name"
-      prompts_arr=("${!prompts_name}") # we know this is an array
-      debug "-a ${#prompts_arr[@]}"
-    elif [ ${#unknown[@]} -eq 1 ]; then
-      # arg1 is a string
-      prompts_arr=()
-      prompts="${unknown}"
-      printf -v s '%s' "${separator}"
-      local IFS=$"$s"
-      for prompt in $prompts; do
-        prompts_arr+=("$prompt")
-      done
-    fi
-    debug "${prompts_arr[@]}"
-    # use lower case alphabet for the users choice to keep single
-    # character entry viable when more than 9 choices
-    declare -a a
-    a=()
-    for x in {a..z}; do
-      a+=("$x")
-    done
-    pctr=0
-    # TODO: stdout seems fucked here, so using stderr for ui
-    # which is probably bad for whatever else that means.
-    for prompt in "${prompts_arr[@]}"; do
-      se "${a[$pctr]}. $prompt"
-      ((pctr++))
-    done
-    if $ucontinue; then
-      ((pctr++))
-      se "${a[$pctr]}. Continue, doing nothing."
-    fi
-    if boolean_or $uexit $ureturn; then
-      ((pctr++))
-      se "${a[$pctr]}. Terminate execution and exit."
-    fi
-    if tru $different; then
-      ((pctr++))
-      se "${a[$pctr]}. something else..."
-      user_diff_choice=${a[$pctr]}
-    fi
-    set +x
-    while read -t 1 discard; do :; done # Flush input
-
-    chosen_letter=$(get_keypress "Enter choice a.. ${a[$pctr-1]}: ")
-    while read -t 1 discard; do :; done # Flush input
-    if [[ "$chosen_letter" == "$user_diff_choice" ]]; then
-      while read -t 1 discard; do :; done # Flush input
-      se "fn: ${FUNCNAME[*]} bn: ${BASH_SOURCE[*]}"
-      read -p "something different then... : " something_different < /dev/tty
-      echo "$something_different"
-      return 0
-    elif [[ "${#chosen_letter}" -eq 1 ]]; then
-      for i in "${!a[@]}"; do
-        if [[ "$chosen_letter" == "${a[$i]}" ]]; then
-          echo "$i"
-          return 0
-        fi
-      done
-    fi
+    declareopts=$(declare -p "${unknown}")
+    debug "declareopts: $declareopts unknown: $unknown"
   fi
+  # TODO: how to handle -A
+  if string_contains "\-a" "$declareopts"; then
+    prompts_name="$unknown[@]"
+    debug "$prompts_name"
+    prompts_arr=("${!prompts_name}") # we know this is an array
+    debug "-a ${#prompts_arr[@]}"
+  elif [ ${#unknown[@]} -eq 1 ]; then
+    # arg1 is a string
+    prompts_arr=()
+    prompts="${unknown}"
+    printf -v s '%s' "${separator}"
+    local IFS=$"$s"
+    for prompt in $prompts; do
+      prompts_arr+=("$prompt")
+    done
+  fi
+  debug "${prompts_arr[@]}"
+  # use lower case alphabet for the users choice to keep single
+  # character entry viable when more than 9 choices
+  declare -a a
+  a=()
+  for x in {a..z}; do
+    a+=("$x")
+  done
+  pctr=0
+  # TODO: stdout seems fucked here, so using stderr for ui
+  # which is probably bad for whatever else that means.
+  for prompt in "${prompts_arr[@]}"; do
+    se "${a[$pctr]}. $prompt"
+    ((pctr++))
+    last_prompt="$prompt"
+  done
+  if tru $different && tru $lasteldiff; then
+    user_diff_choice=${a[$pctr-1]}
+    udc_counter=$pctr-1
+    user_diff_choice_text="$last_prompt"
+  fi
+  if $ucontinue; then
+    ((pctr++))
+    se "${a[$pctr]}. Continue, doing nothing."
+  fi
+  logvars=(uexit ureturn user_diff_choice user_diff_choice_text udc_counter); debug "why return?"
+  if boolean_or $uexit $ureturn; then
+    ((pctr++))
+    se "${a[$pctr]}. Terminate execution and exit."
+  fi
+  if tru $different && untru $lasteldiff; then
+    ((pctr++))
+    se "${a[$pctr]}. something else..."
+    user_diff_choice=${a[$pctr]}
+  fi
+  set +x
+  while read -t 1 discard; do :; done # Flush input
+
+  chosen_letter=$(get_keypress "Enter choice a.. ${a[$pctr-1]}: ")
+  while read -t 1 discard; do :; done # Flush input
+  if [[ "$chosen_letter" == "$user_diff_choice" ]]; then
+    while read -t 1 discard; do :; done # Flush input
+    debug "fn: ${FUNCNAME[*]} bn: ${BASH_SOURCE[*]}"
+    if tru $lasteldiff; then
+      read -p "$user_diff_choice_text: " something_different < /dev/tty
+    else
+      read -p "something different then... : " something_different < /dev/tty
+    fi
+    # echo "$something_different"
+    choice="$something_different"
+    export choice
+    return 0
+  elif [[ "${#chosen_letter}" -eq 1 ]]; then
+    for i in "${!a[@]}"; do
+      if [[ "$chosen_letter" == "${a[$i]}" ]]; then
+        # echo "$i"
+        choice="$i"
+        export choice
+        return 0
+      fi # end if chosen_letter
+    done # iterating over keys
+  fi # either one chosen letter or user_diff_choice
+
   #       se " "
   #     actions="${2:-}"
   #     if [ -n "$actions" ]; then
