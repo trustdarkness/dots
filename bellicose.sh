@@ -1,17 +1,18 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 
 # Current known issues:
 # Run again prompt gives you no easy / obvious way to continue
 ############################## Configuration ##################################
+echo "running bash as "
+bash --version
 
-# assume D will be in env TODO: clean this up
-# D=$HOME/src/github/dots
+D=$HOME/src/github/dots
 #source $D/existence.sh
 if ! declare -F "util_env_load" > /dev/null 2>&1; then
   source "$D/util.sh"
 fi
 if ! declare -F "finddir_array" > /dev/null 2>&1; then
-  util_env_load -f 
+  util_env_load -f
 fi
 
 # Actions are explicit, so by default we don't prompt before taking them,
@@ -28,18 +29,18 @@ EXCLUDE_DIR='.app'
 ARCHIVE_TYPE_DESC="archive"
 ARCHIVE_EXTENSIONS="zip rar 7z tar.gz tar.xz tgz"
 
-# Disk Images: Any type of virtual disk image that needs to be mounted to 
-#              reveal additional files of types supported below. Since this is 
+# Disk Images: Any type of virtual disk image that needs to be mounted to
+#              reveal additional files of types supported below. Since this is
 #              MacOS, we try to refer to them generically as dmg files.
 DMG_TYPE_DESC="disk image"
 DMG_EXTENSIONS="dmg img iso"
 
-# Packages: Any type of package that is installed using Apple's built in 
+# Packages: Any type of package that is installed using Apple's built in
 #           installer program.
 PKG_TYPE_DESC="installer package"
 PKG_EXTENSIONS="pkg mpkg"
 
-# These are the base flags sent with every invocation of the MacOS 
+# These are the base flags sent with every invocation of the MacOS
 # installer util.  We add others later and instantiate with the package
 # location.
 function install_base_flags() {
@@ -47,16 +48,16 @@ function install_base_flags() {
   export INSTALL_BASE_FLAGS=("-verboseR" "-pkg" "${pkg}" "-target")
 }
 
-# App Files: When found in disk images, we will try to install *.app files to 
+# App Files: When found in disk images, we will try to install *.app files to
 #            /Applications
 APP_TYPE_DESC="application"
 APP_EXTENSIONS="app"
 
 # Audio Plugins: The MacOS supports a variety of audio plugins, we support the
-#                three that are generally available in most audio programs, 
-#                Apple's AU format, also known as components, vst and vst3.  
-#                We try to uniformly refer to AUs as components except where 
-#                its particularly convenient to use the shorter name. 
+#                three that are generally available in most audio programs,
+#                Apple's AU format, also known as components, vst and vst3.
+#                We try to uniformly refer to AUs as components except where
+#                its particularly convenient to use the shorter name.
 PLUGIN_TYPE_DESC="audio plugin"
 PLUGIN_EXTENSIONS="vst vst3 component"
 #override, only install one type
@@ -71,40 +72,40 @@ SYSTEM_PLUGROOT="/Library/Audio/Plug-Ins"
 USER_PLUGROOT="${HOME}${SYSTEM_PLUGROOT}"
 
 # bellicose uses a few types of "workworm material" space, which we try to do
-# in a user-courteous way consistent with MacOS norms, but you may change the 
+# in a user-courteous way consistent with MacOS norms, but you may change the
 # defaults below.
 # 1. We keep a history file which contains ACTION, FILEHASH, TS, FILENAME
 #    if you try to process the same file multiple times (because it
 #    came packaged in multiple archives, for instance), you can choose to skip
 #    processing the same file again at runtime.  We don't do any version check
-#    so you may get false positives if a software distributor always uses the 
-#    same filename for updates. 
+#    so you may get false positives if a software distributor always uses the
+#    same filename for updates.
 # 2. We use space to unarchive compressed files.  This defaults to a created
 #    directory in whatever working directory you launched bellicose from. It
 #    is sometimes conveneint to launch it from read only media, so a fallback
 #    should be provided.  We default to ~/Downloads.  In either case, we create
-#    a directory named "bellicose_extracted" and folders within that 
-#    named correspondingly with the archive they were generated from. If 
-#    one of the unarchive tools goes screwball, we try to fallback to 
-#    directories we created (at worst). 
+#    a directory named "bellicose_extracted" and folders within that
+#    named correspondingly with the archive they were generated from. If
+#    one of the unarchive tools goes screwball, we try to fallback to
+#    directories we created (at worst).
 CACHE="$HOME/Library/Caches/bellicose"
 USAGESTATS="$CACHE/usage_stats" # unlike, well pretty much everything these days
-                                # we don't upload anything, but in case you're 
+                                # we don't upload anything, but in case you're
                                 # curious, we might track some things here.
 HISTORY="${CACHE}/history"
 HISTORY_TS_FMT="%Y%m%d_%H%M%S"
 EXTRACTED_DIRNAME="bellicose_extracted"
 
-# The existence and locations of files we want to keep track of 
+# The existence and locations of files we want to keep track of
 # while running (so that we can extract and install them)
 # we will track in a temp folder... this will also be the parent
-# directory where we mount image files during the install. 
-# we declare it here and trap is so that it is cleaned up on 
+# directory where we mount image files during the install.
+# we declare it here and trap is so that it is cleaned up on
 # abnormal exit.
 ts=$(date +"$HISTORY_TS_FMT")
 TMPDIR="${CACHE}/run/${ts}"
 $(mkdir -p "${CACHE}/run/${ts}")
-# note: we used to use mktemp -d for this and then notced that 
+# note: we used to use mktemp -d for this and then notced that
 # we weren't able to clean up after ourselves... upon further
 # investigation, some of our temp files were hanging around for
 # 3 days.  So now we use cache, trap and rmemove.
@@ -114,7 +115,7 @@ function finish() {
   if ! ${DEBUG}; then
     >&2 printf "removing TMPDIR\n"
     rm -rf "${TMPDIR}"
-    
+
   fi
   se "bellicose graceful shutdown"
   exit 5
@@ -122,23 +123,24 @@ function finish() {
 trap "finish; exit 6" 0 1 2 15
 trap "finish; exit 7" EXIT HUP INT TERM
 
-# We grab the working directory at launch so we don't have to 
+
+# We grab the working directory at launch so we don't have to
 # call pwd all over the place.  We don't go to great lengths to
-# protect system resources.  Be warned. (and we still call pwd if 
+# protect system resources.  Be warned. (and we still call pwd if
 # theres any doubt)
 WD=$(pwd)
 
 ############################# Logging #########################################
-# By default, we print strings to the console when there's information you 
+# By default, we print strings to the console when there's information you
 # should know or information we need from you.  There's some extra debugging
-# information and some ridiculous "verbose" information, each of which can 
+# information and some ridiculous "verbose" information, each of which can
 # be enabled with runtime flags.  Debug and Verbose, along with any outright
 # errors go to stderr by default, but will go to the logfile specified below
-# or with the -f flag.  UI strings (and a copy of errors, when LOGFILE is 
+# or with the -f flag.  UI strings (and a copy of errors, when LOGFILE is
 # anything other than stderr) go to stdout.  Listing files and contents goes
 # to stdout by default, but that can be changed below. If you change logfile
 # below, errors from utilities called may still go to stderr, though we try
-# redirect. 
+# redirect.
 LOGFILE="/dev/stderr"
 STDOUT="/dev/stdout"
 
@@ -166,7 +168,7 @@ EXTS+=( "${APP_EXTENSIONS}" )
 EXTS+=( "${PKG_EXTENSIONS}" )
 EXTS+=( "${PLUGIN_EXTENSIONS}" )
 
-# a uniform way of packing an array into a string so that we can 
+# a uniform way of packing an array into a string so that we can
 # simulate associative arrays of arrays
 # Args; the nameref (name of the array, not the array itself) of
 # the array to be packed, echos the packed string to the console
@@ -176,13 +178,13 @@ function pack_list() {
   list=("${!name}")
   verbose "l ${list[@]}"
   packed=""
-  if gt "${#list[@]}" 0; then 
+  if gt "${#list[@]}" 0; then
     packed=""
-    for i in "${list[@]}"; do 
+    for i in "${list[@]}"; do
       #term=$(echo "${i}"| sed 's/ /__/g')
       if [ -n "${term}" ]; then
         packed="${term} ${packed}"
-      fi 
+      fi
     done
     verbose " p ${packed}"
     echo "${packed}"
@@ -191,7 +193,7 @@ function pack_list() {
   return 1
 }
 
-# UNCACHED is meant to be an array that points at other arrays, 
+# UNCACHED is meant to be an array that points at other arrays,
 # one for each type, so any time we've update the type arrays, we
 # rebuild uncached tp correspond accurately.
 declare -a UNCACHED
@@ -204,14 +206,14 @@ function rebuild_uncached() {
   if packed=$(pack_list NEW_DMGS); then
     UNCACHED[1]="${packed}"
   fi
-  if packed=$(pack_list NEW_APPS); then 
-    UNCACHED[2]="${packed}" 
+  if packed=$(pack_list NEW_APPS); then
+    UNCACHED[2]="${packed}"
   fi
   if packed=$(pack_list NEW_PKGS); then
     UNCACHED[3]="${packed}"
   fi
   if packed=$(pack_list NEW_PLUGINS); then
-    UNCACHED[4]="${packed}" 
+    UNCACHED[4]="${packed}"
   fi
   verbose "uncached: ${UNCACHED[@]}"
 }
@@ -257,7 +259,7 @@ EOF
 
 IFS='' read -r -d '' CACHED_EXPECTS_COUNT_TYPE_AND_EXTS <<'EOF'
   %s of the %s %s files (%s) found are in bellicose's cache
-  meaning you've processed a file with the same name recently. 
+  meaning you've processed a file with the same name recently.
   Do you want to...
 EOF
 
@@ -279,7 +281,7 @@ GET_CHOICE_1_6="Please enter a choice from 1-6: "
 IFS='' read -r -d '' FATAL_ERR <<'EOF'
   Fatal error. Something bad happened and we can't continue.
   If this error is reproducable and you're willing to tell us something
-  about the files it happened on, you can produce a detailed report to 
+  about the files it happened on, you can produce a detailed report to
   help us debug by running the command in the same directory with the same
   options that produce the error, but add -R and -f filename for the report.
 EOF
@@ -293,7 +295,7 @@ NOT_FOUND_EXPECTS_TYPE_AND_EXTS="No %s files (%s) found in %s"
 IFS='' read -r -d '' PAXFILE_ERR <<'EOF'
   Unable to open paxfile, if you'd like to help us debug and are
   willing to share some details about the package it failed on, please
-  run again in the same directory with the same options that produce 
+  run again in the same directory with the same options that produce
   the error, but add -R and -f filename for the report.
 EOF
 
@@ -304,7 +306,7 @@ IFS='' read -r -d '' SECONDARY_BACKUP_EXPECTS_COUNT_CRITERIA_DEST <<'EOF'
 EOF
 
  IFS='' read -r -d '' COULD_NOT_PARSE <<'EOF'
-  It looks like you passed me a single file or dir, but I could not 
+  It looks like you passed me a single file or dir, but I could not
   parse it.  Make sure if there are spaces or special characters in your
   string that there is no double quoting (such as slash escaping inside
   quotes).
@@ -318,7 +320,7 @@ EOF
 # Args: String - log level, for printing to the logfile
 #       String  - message, log message to be printed
 # Globals: reads the following globals to construct a log line:
-#          LOG_TEMPLATE 
+#          LOG_TEMPLATE
 #          BASH_LINENO[-2]
 #          FUNCNAME[-2]
 #          LOGFILE
@@ -335,10 +337,10 @@ function log() {
 function err() {
   verbose "func ${FUNCNAME[0]} $@"
   local message="$@"
-  if [[ "${LOGFILE}" == "/dev/stderr" ]]; then 
+  if [[ "${LOGFILE}" == "/dev/stderr" ]]; then
     printf "${message}\n" > ${LOGFILE}
   else
-    echo "${message}\n" 
+    echo "${message}\n"
     log "ERROR" "${message}"
   fi
 }
@@ -350,17 +352,17 @@ function err() {
 function debug() {
   local message="$@"
   local ts="$(date '+%Y%m%d %H:%M:%S')"
-  if $DEBUG || ${VERBOSE}; then 
+  if $DEBUG || ${VERBOSE}; then
      log "DEBUG" "${message}"
   fi
 }
 
 # ui is a convenience method for printing to stdout that adds functionality
-# including: 
+# including:
 # - echoing the same output to a logfile when bellicose run with -v
-# - does not add a newline when run with -u (this function) to make easier 
+# - does not add a newline when run with -u (this function) to make easier
 #   printing info from multiple sources in a unified way for the user.
-# - better readability so when reading the code, its obvious what is ui and 
+# - better readability so when reading the code, its obvious what is ui and
 #   what is pipeline and other programmatic echo
 # Args: (optional) -u, prints with terminating " " instead of "\n"
 #       String  - message to be printed to stdout (and echoed to the
@@ -370,7 +372,7 @@ function debug() {
 function ui() {
   local nonewline
   nonewline=false
-  if [[ "${1:-}" =~ \-u ]]; then 
+  if [[ "${1:-}" =~ \-u ]]; then
     nonewline=true
     shift
   fi
@@ -381,8 +383,8 @@ function ui() {
   else
     echo "${message}"
   fi
-  if $VERBOSE; then  
-    if [[ "${LOGFILE}" != "/dev/stderr" ]]; then 
+  if $VERBOSE; then
+    if [[ "${LOGFILE}" != "/dev/stderr" ]]; then
        log "INFO" "${message}"
     fi
   fi
@@ -420,7 +422,7 @@ function non_fatal_error_request() {
 # Globals: FUNCNAME
 #          BASH_LINENO
 #          BASH_SOURCE
-function stacktrace() { 
+function stacktrace() {
    STACK=""
    local i message="${1:-""}"
    local stack_size=${#FUNCNAME[@]}
@@ -462,21 +464,21 @@ function goodbye() {
   fi
 }
 ######################### List and Content Functions ##########################
-# these were originally inspired by the mac app Pacifist, but it does a much 
-# better job at this functionality than bellicose will ever do, and the other 
-# things it does, like allowing installation of single files or subsets of 
+# these were originally inspired by the mac app Pacifist, but it does a much
+# better job at this functionality than bellicose will ever do, and the other
+# things it does, like allowing installation of single files or subsets of
 # files from an installer, bellicose will never do.  Bellicose is the hammer
-# to Pacifist's scalpel.  I wanted to be able to install lots of things 
-# quickly on the command line and it looked like Pacifist would do this.  When 
-# I found out it wouldn't and basically nothing else did either, I wrote 
+# to Pacifist's scalpel.  I wanted to be able to install lots of things
+# quickly on the command line and it looked like Pacifist would do this.  When
+# I found out it wouldn't and basically nothing else did either, I wrote
 # bellicose.  You're welcome, I'm sorry.
 
 # Args: int layer layer of logging we're at (for nested / recursive calls)
 #       String line_header - when we're working on nested files, an indicator
 #         of the parent file
-#       String filepath - the fullpath of either the file being displayed 
+#       String filepath - the fullpath of either the file being displayed
 #         or the parent, depending on the level of nesting
-#       String content_header - similar to line header, but for the file / 
+#       String content_header - similar to line header, but for the file /
 #         content itself
 #       int lineno - lineno this item orginated from, if file contents
 #       String line - the content line
@@ -593,21 +595,101 @@ function list_special_package_file() {
 
 ############################ Shared Utility Functions #########################
 
+# internal copy function, uses rsync with progress as available
+# args:
+#  -e run elevated
+#
+# examples:
+#   bcopy $src $dest
+# if bcopy -e $src $dest; then echo "bcopy succeed! yay!"; fi
+# returns retcode from rsync or 99 if user cancels sudo.
+function bcopy() {
+  local copycmd
+  local optspec="eq"
+  unset OPTIND
+  unset optchar
+  Usage() {
+    cat <<-'EOF'
+bcopy - drop in rsync replacement that handles or can be invoked with sudo
+
+Args:
+  -e elevate to sudo
+  -q quiet, no prompts (still status and sudo prompts)
+  -h print this text
+
+If -e not specified and the user running bellicose can't write to dest,
+bcopy will prompt about escalating.  If -q is specified, it will just
+call sudo and rely on its handling.  Returns 99 if user says no to sudo,
+return value of rsync otherwise.
+
+Ex:
+  examples:
+    bcopy $src $dest
+  if bcopy -e $src $dest; then echo "bcopy succeed! yay!"; fi
+ function my_fancy_function() {
+   echo foo
+ }
+EOF
+  }
+  while getopts "${optspec}" optchar; do
+    case "${optchar}" in
+      e)
+        sudo -v # cache creds
+        copycmd="sudo rsync"
+        ;;
+      q)
+        quiet=true
+        ;;
+      ?|h)
+        Usage
+        return 0
+        ;;
+    esac
+  done
+  shift $(($OPTIND -1))
+  local loaded=false
+  local src="${1:-}"
+  local dest="${1:-}"
+  if ! is_function can_i_write; then
+    load-function -q can_i_write
+    loaded=true
+  fi
+  if ! can_i_write "${dest}"; then
+    if ! $quiet; then
+      if confirm_yes "Trying to copy files to $dest but no write privs, sudo?";
+        then
+          copycmd="sudo bcopy"
+      else
+        return 99
+      fi
+    else
+      copycmd="sudo bcopy"
+    fi
+  fi
+  if $loaded; then unset -f can_i_write; fi
+  common_opts="-rlut"
+  if type -p tqdm > /dev/null 2>&1; then
+    set -o pipefail
+    $copycmd "${common_opts}" "${src}" "${dest}" | tqdm --unit_scale | wc -l
+    return $?
+  else
+    $copycmd "${common_opts}" --progress --stats "${src}" "${dest}"
+    return $?
+  fi
+}
+
 # Takes maybe an int as arg1, returns 0 if is an int, 1 otherwise
 function is_int() {
   local string="${1:-}"
-  case $string in
-    ''|*[!0-9]*) return 1 ;;
-    *) return  ;;
-  esac
+  [ ! -z "${string##*[!0-9]*}" ] && return 0 || return 1;
 }
 
-# Args: first term larger int than second term.  
+# Args: first term larger int than second term.
 #     if first term is "". we treat it as 0
 function gt() {
   term1="${1:-}"
   term2="${2:-}"
-  if is_int ${term1}; then 
+  if is_int ${term1}; then
     if is_int ${term2}; then
       if [ ${term1} -gt ${term2} ]; then
         return 0
@@ -627,7 +709,7 @@ function gt() {
 function lt() {
   term1="${1:-}"
   term2="${2:-}"
-  if is_int ${term1}; then 
+  if is_int ${term1}; then
     if is_int ${term2}; then
       if [ ${term1} -lt ${term2} ]; then
         return 0
@@ -642,14 +724,14 @@ function lt() {
   fatal_error
 }
 
-# Takes 3 ints as args, returns 0 if 
+# Takes 3 ints as args, returns 0 if
 # Arg2 > Arg1 > Arg3 or Arg2 < Arg1 < Arg3
 # returns 1 otherwise
 function in_between() { # TODO: make sure assumptions handle negatives
   between="${1:-}"
   t1="${2:-}"
   t2="${3:-}"
-  if  [[ "$t1" == "-1" ]]; then 
+  if  [[ "$t1" == "-1" ]]; then
     ((between++))
     t1=0
     ((t2++))
@@ -671,7 +753,7 @@ function count_space_separated {
   for thing in ${to_count}; do
     ((count+=1))
   done
-  return $count  
+  return $count
 }
 
 # Read a single char from /dev/tty, prompting with "$*"
@@ -700,11 +782,17 @@ function get_yes_keypress {
   local REPLY
   # [[ ! $prompt ]] && prompt="[y/n]? "
   while REPLY=$(get_keypress "$prompt"); do
-    [[ $REPLY ]] && printf '\n' # $REPLY blank if user presses enter
+    [[ $REPLY ]] && printf '\n'; # $REPLY blank if user presses enter
     case "$REPLY" in
-      Y|y)  return 0;;
-      N|n)  return 1;;
-      '')   [[ $enter_return ]] && return "$enter_return"
+      Y | y)
+        return 0;
+        ;;
+      N | n)
+        return 1;
+        ;;
+      '')
+        [[ $enter_return ]] && return "$enter_return"
+        ;;
     esac
   done
 }
@@ -716,17 +804,17 @@ function get_yes_keypress {
 #   if ! $(get_yes_keypress "$prompt" 0); then
 #     ui "Since you said no, we're going to play it safe and bail now."
 #     ui "if expected a different outcome, it could indicate a bug."
-#     ui "" 
+#     ui ""
 #     ui "If you'd like assistance or to help impprove the program,"
 #     ui "open a github issue with as mmuch of the surreounding text"
 #     ui "as you can cope, opr if its rerproducable, re run with -R"
 #     ui "and include that output with any addionql information that"
-#     ui "may be relevant." 
+#     ui "may be relevant."
 #     exit 1
 #   fi
 # }
 
-# Read a single char from /dev/tty, prompting with "$*" 
+# Read a single char from /dev/tty, prompting with "$*"
 # times out after 7 seconds
 # Args: String to prompt the user with
 function get_timed_keypress {
@@ -772,7 +860,7 @@ function stringContains {
 function boolean_or {
   for b in "$@"; do
     verbose "testing ${b}"
-    if [ -n "${b}" ]; then 
+    if [ -n "${b}" ]; then
       if is_int ${b}; then
         if [ ${b} -eq 0 ]; then
           return 0
@@ -823,7 +911,7 @@ function is_in_types() {
   if [ -n "${exists}" ]; then
     verbose "${f} is in ${exts}"
     return 0
-  else 
+  else
     verbose "${f} not in ${exts}"
     return 1
   fi
@@ -839,7 +927,7 @@ function counts_with_completed {
   local IFS=$' '
   for ext in ${extensions}; do
     gobblefind_by_ext "${ext}"
-    for filename in "${gobbled[@]}"; do 
+    for filename in "${gobbled[@]}"; do
       if completed "${filename}"; then
         PREVIOUSLY_CACHED+=( "${filename}" )
         ((cached_count+=1))
@@ -911,13 +999,13 @@ function completed() {
   #   filepath=$(echo "${filepath}" | sed 's/__/ /g')
   # fi
   local filename
-  if [[ "$filepath" == */* ]]; then 
+  if [[ "$filepath" == */* ]]; then
     filename=$(basename "${filepath}")
-  else 
+  else
     filename="$filepath"
   fi
   verbose "checking completed ${filename}"
-  lines=( grep "${filename}" "$HISTORY" ) 
+  lines=( grep "${filename}" "$HISTORY" )
   if [ $? -ne 0 ]; then
     verbose  "${filename} not in cache"
   fi
@@ -925,7 +1013,7 @@ function completed() {
     oldhash=$(echo "$line"|awk -F',' '{print$5}')
     newhash=$(shasum -a 256 "${filepath}"|awk '{print$1}')
     verbose "NH OH ($newhash) ($oldhash)"
-    if [[ "$oldhash" == "$newhash" ]]; then 
+    if [[ "$oldhash" == "$newhash" ]]; then
       verbose "${filename} in cache"
       return 0
     fi
@@ -945,22 +1033,22 @@ uncompleted_larger() {
     return 0
   fi
   return 1
-} 
+}
 
 # Kicks off things needed to process a single file of any type.
 # Args: absolute path to the file to be processed. Returns 0
 # after processing completed successfully, 1 if something breaks
-# in this function, depends on the callee to return and bubble up 
+# in this function, depends on the callee to return and bubble up
 # errors otherwisee.
 process_file() {
   spin
   verbose "func ${FUNCNAME[0]} $1 $2"
   local filenamepath="${1:-}"
   filenamepath=$(echo "${filenamepath}"|xargs)
-  if ! [ -n "${filenamepath}" ]; then
+  if [ -z "${filenamepath}" ]; then
     return 1
   fi
-  
+
   # if stringContains '\-\-' "${filenamepath}"; then
   #   filenamepath="$(sed -i 's/__/ /g' ${filenamepath})"
   # fi
@@ -971,7 +1059,7 @@ process_file() {
       process_archive_file "${filenamepath}"
       return $?
       ;;
-    1) 
+    1)
       process_dmg "${filenamepath}"
       return $?
       ;;
@@ -992,7 +1080,7 @@ process_file() {
   return 1
 }
 
-# Echos the type number for the given absolute path to a file to be 
+# Echos the type number for the given absolute path to a file to be
 # processed where type numbers are as follows;
 #  0 - archive
 #  1 - image
@@ -1006,7 +1094,7 @@ function get_type_from_file() {
   ctr=0
   for extgroups in "${EXTS[@]}"; do
     verbose "checking $extgroups for *${filenamepath##*.}*"
-    if [[ "${filenamepath}" =~ '.*.tar.[A-z]z$' ]]; then 
+    if [[ "${filenamepath}" =~ '.*.tar.[A-z]z$' ]]; then
       echo 0
       return 0
     fi
@@ -1039,7 +1127,7 @@ function new_only() {
 # After a user choice prompt, this operates on all files, overwriting
 # any that may have been seen before.
 function overwrite() {
-  spim
+  spin
   verbose "func ${FUNCNAME[0]} $@"
   local type="${1:-}"
   case ${type} in
@@ -1047,7 +1135,7 @@ function overwrite() {
       process_archives
       return $?
       ;;
-    1) 
+    1)
       process_dmgs
       ;;
     2)
@@ -1055,7 +1143,6 @@ function overwrite() {
       ;;
     3)
       process_pkgs
-      return $?
       ;;
     4)
       process_plugins
@@ -1077,7 +1164,7 @@ function sort_array_uniq() {
   local -n name="${1:-}"
   to_sort=("${!name[@]}")
   SORTED=()
-  if gt "${#to_sort[@]}" 0; then 
+  if gt "${#to_sort[@]}" 0; then
     readarray -t SORTED < <(printf '%s\0' "${to_sort[@]}"| sort -zu|xargs -0n1)
   fi
   to_sort=("${SORTED[@]}")
@@ -1090,11 +1177,11 @@ function show_diff() {
   endspin
   ui " "
   ui "New files not yet processed by us:"
-  for file in "${UNCACHED[@]}"; do 
+  for file in "${UNCACHED[@]}"; do
     ui "${file}"
   done
   ui "Previously Processed" #TODO: add timestamps
-  for file in "${PREVIOUSLY_CACHED[@]}"; do 
+  for file in "${PREVIOUSLY_CACHED[@]}"; do
     ui "${file}:"
     get_install_history "${file}"
     ui " "
@@ -1125,7 +1212,7 @@ choices+=( "return 0" )
 choices+=( "goodbybe 1" )
 
 # This prompts the user when there are files in the cwd that are also
-# present in the install history and asks if they'd like to 
+# present in the install history and asks if they'd like to
 # 1. only operate on new files
 # 2. do everything, overwriting as necessary
 # 3. clear the history
@@ -1133,14 +1220,14 @@ choices+=( "goodbybe 1" )
 function  userchoice_cache() {
   trap finish INT
   verbose "func ${FUNCNAME[0]} $@"
-  set -x 
+  #set -x
   local type="${1:-}"
   ui "${PROMPT_CACHE_CHOICE}"
-  response=$(get_keypress "${GET_CHOICE_1_6}") 
+  response=$(get_keypress "${GET_CHOICE_1_6}")
   ui ""
-  if untru "$VERBOSE"; then 
-    
-    if between 0 $response 6; then 
+  if untru "$VERBOSE"; then
+
+    if between 0 $response 6; then
       spin
       ret=$(eval "${choices[$response]}")
       endspin
@@ -1157,7 +1244,7 @@ function  userchoice_cache() {
 # for install if type is non-zero
 function actions() {
   local type="${1:-}"
-  if [[ ${type} == 0 ]]; then 
+  if [[ ${type} == 0 ]]; then
     echo "${UNARCHIVE}"
     return 0
   else
@@ -1173,22 +1260,22 @@ function actions() {
 # 2 - apps
 # 3 - packages
 # 4 - plugins
-# checks the history for any existing install records, prompts the user if 
-# necessary, counting how many of each type have and have not been processed in 
+# checks the history for any existing install records, prompts the user if
+# necessary, counting how many of each type have and have not been processed in
 # the work queue (normally the list of files covered by our extensions in the cwd
 # and all its children)
 function init_mode() {
-  if ! in_between ${1:-} -1 5; then 
+  if ! in_between ${1:-} -1 5; then
     fatal_error "bad mode selection: ${1:-}"
     goodbye 10
   fi
   verbose "func ${FUNCNAME[1]} $@"
   local type="${1:-}"
-  if tru ${PROMPT_FOR_ACTIONS} > /dev/null; then 
+  if tru ${PROMPT_FOR_ACTIONS} > /dev/null; then
     local prompt=$(printf "${PROMPT_PROCESS_CALL_EXPECTS_TYPE_EXTS_AND_WD}" \
       "${TYPE_DESCS[${type}]}" "${EXTS[${type}]}" "${WD}")
     if ! confirm_yes "Welcome: ${prompt}"; then
-      return 11 # abort per user 
+      return 11 # abort per user
     fi
   fi
   if [[ "${hcompleted}" != *"${type}"* ]]; then
@@ -1200,15 +1287,15 @@ function init_mode() {
   verbose "of ${total_count} there are ${cached_count} cached ${EXTS[${type}]}"
   this_type=$(actions ${type})
   if  boolean_or ${LIST} ${CONTENTS} ${this_type}; then
-    if tru ${this_type}; then 
+    if tru ${this_type}; then
       if gt ${cached_count} 0; then
-        if [[ $cached_count == $total_count ]]; then 
+        if [[ $cached_count == $total_count ]]; then
           return 0
         fi
         ui $(printf "${CACHED_EXPECTS_COUNT_TYPE_AND_EXTS}" "${cached_count}" \
          "${total_count}" "${TYPE_DESCS[${type}]}" "${EXTS[${type}]}")
         choice=$(ex userchoice_cache ${type})
-        if [[ $choice == 5 ]]; then 
+        if [[ $choice == 5 ]]; then
           return 0
         fi
       elif gt ${total_count} 0; then
@@ -1230,7 +1317,7 @@ function init_mode() {
         ui "Completing ${TYPE_DESCS[${type}]} processing,"
         ui "the remaining unprocessed files look like:"
         rebuild_uncached
-        for packed in "${UNCACHED[@]}"; do 
+        for packed in "${UNCACHED[@]}"; do
           IFS=$' '
           for unpacked in "${packed}"; do
             ui "${unpacked}"
@@ -1248,19 +1335,19 @@ function init_mode() {
       overwrite ${type}
       return $?
     fi
-  fi  
+  fi
 
 }
 
 function safe_basename() {
   in="${1:-}"
-  match='^.*.[A-z]*[0-9]*'                      
-  if [[ "$in" == "*/*" ]]; then 
+  match='^.*.[A-z]*[0-9]*'
+  if [[ "$in" == "*/*" ]]; then
     in="$(basename \"$in\")"
   fi
   grep "$match" "$in"
   echo "$i"
-}                                                                        
+}
 
 
 # Args: dir to search from/under
@@ -1268,19 +1355,21 @@ function safe_basename() {
 # Globals: haggussed - array cleared and populated.  Haggus, what's haggus?
 #   Sheep's stomach filled with meat and barley.  That sounds revolting.
 function gobblefind() {
-  export haggussed=() 
+  export haggussed=()
   local dir=$(echo "${1:-$(pwd)}"| tr -s /)
-  verbose "gobblefind ${dir}"
+  verbose "gobblefind ${dir}"; start=$SECONDS;
   if stringContains "${EXCLUDE_DIR}" "${dir}"; then
     while IFS= read -r -d $'\0'; do
       haggussed+=("$REPLY") # REPLY is the default
-    done < <(find "${dir}" -print0 2> /dev/null)
+    done < <(find "${dir}" -print0 2> /dev/null; ret=$?)
   else
     ex=$(printf '*%s*' "${EXCLUDE_DIR}")
     while IFS= read -r -d $'\0'; do
       haggussed+=("$REPLY") # REPLY is the default
-    done < <(find "${dir}" ! -path "${ex}" -print0 2> /dev/null)
+    done < <(find "${dir}" ! -path "${ex}" -print0 2> /dev/null; ret=$?)
   fi
+  verbose "gobblefind finished in $((SECONDS-start))"
+  return $ret
 }
 
 # Args: ext, only one at a time
@@ -1294,15 +1383,15 @@ function gobblefind_by_ext() {
   notregex='.*.app\/.*'
   ex=$(printf '*%s*' "${EXCLUDE_DIR}")
   verbose "gobblefind ${ext} with regex ${regex} and ! ${ex} in $(pwd)"
-  if [[ ${ext} == "app" ]]; then 
+  if [[ ${ext} == "app" ]]; then
     while IFS= read -r -d $'\0'; do
       gobbled+=("$REPLY") # REPLY is the default
-    done < <(find ~+ ! -regex "${notregex}" -regex "${regex}" -print0 2> /dev/null)
+    done < <(find ~+ -mindepth 1 ! -regex "${notregex}" -regex "${regex}" -print0 2> /dev/null)
     no_nested_apps
   else
     while IFS= read -r -d $'\0'; do
       gobbled+=("$REPLY") # REPLY is the default
-    done < <(find ~+ ! -path "${ex}" ! -regex "${notregex}" -regex "${regex}" -print0 2> /dev/null)
+    done < <(find ~+ -mindepth 1 ! -path "${ex}" ! -regex "${notregex}" -regex "${regex}" -print0 2> /dev/null)
     no_nested_apps
   fi
   set +x
@@ -1342,7 +1431,7 @@ function remove_install_history() {
   done
   # lets double check
   lines=$(grep "$name" "$HISTORY"|grep "$date")
-  if [ -n "$lines" ]; then 
+  if [ -n "$lines" ]; then
     verbose "non-fatal error: tried to delete lines from the install history"
     verbose "during an overwrite operation, but could not delete thiese with sed:"
     verbose "$lines"
@@ -1363,40 +1452,40 @@ function get_installs_newer_than() {
   local fsts="${1:-}"
   local name="${2:-}"
   ts=$(fsts_to_unixtime $fsts)
-  declare -a history 
+  declare -a history
   if [ -n "$name" ]; then
-    if [[ "$name" == */* ]]; then 
+    if [[ "$name" == */* ]]; then
       name=$(dirname "$name")
     fi
     printf -v entries_cmd 'grep %s %s' "$name" "$HISTORY"
   else
     entries_cmd="cat $HISTORY"
   fi
-  for entry in eval "$entries_cmd"; do 
+  for entry in eval "$entries_cmd"; do
     history+=( "$entry" )
   done
-  for entry in "${history[@]}"; do 
+  for entry in "${history[@]}"; do
     entry_fsts=$(echo entry | awk -F',' '{print$1}')
     entry_ts=$(fsts_to_unixtime $entry_fsts)
-    if gt $ts $entry_ts; then 
+    if gt $ts $entry_ts; then
       echo entry |awk -F',' '{print$1 $2 $3 $4}'
     fi
-  done 
+  done
 }
 
 function get_install_history() {
-  while [ $# -gt 0 ]; do 
-    if is_fsts "${1:-}"; then 
+  while [ $# -gt 0 ]; do
+    if is_fsts "${1:-}"; then
       # get history newer than
       local lfsts="${1:-}"
       shift
       :
-    elif is_fsdate "${1:-}"; then 
+    elif is_fsdate "${1:-}"; then
       # get history for the day
       local lfsdate="${1:-}"
       shift
       :
-    elif [ -f "${1:-}" ]; then 
+    elif [ -f "${1:-}" ]; then
       #search for the name
       local lpath="${1:-}"
       shift
@@ -1408,20 +1497,20 @@ function get_install_history() {
     return $?
   fi
   local path=$lpath
-  if [[ "$path" == */* ]]; then 
+  if [[ "$path" == */* ]]; then
     local name="$(basename \"$path\")"
   else
     name="$path"
   fi
-  if is_fsdate "$date"; then 
-    verbose "searching $name in history for $date" 
+  if is_fsdate "$date"; then
+    verbose "searching $name in history for $date"
     lines=( $(grep "$name" "$HISTORY"|grep "$date") )
   elif is_fsts "$date"; then
     verbose "searching $name in history for itens newer than $date"
   else
     lines=( $(grep "$name" "$HISTORY") )
   fi
-  if [ -z "$lines" ]; then 
+  if [ -z "$lines" ]; then
     return 1
   fi
   declare -ga install_histories
@@ -1435,7 +1524,7 @@ function get_install_history() {
 function get_install_history() {
   name=$(basename "${1:-}")
   lines=( $(grep "$name" "$HISTORY") )
-  if [ -z "$lines" ]; then 
+  if [ -z "$lines" ]; then
     return 1
   fi
   declare -ga install_histories
@@ -1455,20 +1544,20 @@ function record_install_history() {
   local filepath="${3:?$pathmissing}"
   local ts=$(date +$HISTORY_TS_FMT)
   local hash
-  if [ -f "${filepath}" ]; then 
+  if [ -f "${filepath}" ]; then
     hash=$(shasum -a 256 "${filepath}")
-  elif [ -d "${filepath}" ]; then 
-    hash=$(get_codesig "${filepath}")
+  elif [ -d "${filepath}" ]; then
+    hash=$(codesign_read_cdhash "${filepath}")
   else
     err "${filepath} does not appear to be a hashable file from $(pwd)"
     hash=6666666666666666666666
-  fi 
+  fi
   local filename=$(basename "${filepath}")
-  if exists_install_history "${filename}"; then 
+  if exists_install_history "${filename}"; then
     remove_install_history "${filename}"
   fi
-  args=( 
-    "${ts}"  
+  args=(
+    "${ts}"
     "${action}"
     "${type}"
     "${filename}"
@@ -1478,15 +1567,15 @@ function record_install_history() {
   echo "${entry}" >> "$HISTORY"
 }
 
-# a wrapper function to try to handle errors properly 
+# a wrapper function to try to handle errors properly
 # depending on whether bellicose is running as a script
-# or was sourced and individual functions are being run 
+# or was sourced and individual functions are being run
 # separately.  Highly recommend not doing the latter.
 function goodbye() {
   exitcode=${1:-}
-  if [[ $BASH_KIND_ENV == "own" ]]; then 
+  if [[ $BASH_KIND_ENV == "own" ]]; then
     exit ${exitcode}
-  else 
+  else
     set -e
     (exit ${exitcode}) && true
     return ${exitcode}
@@ -1538,15 +1627,15 @@ function archive_ext_tools() {
     "rar")
       if tru ${CONTENTS}; then
         echo "burp"
-  
+
         files=$(unrar -inul ltb "${filepath}"|grep "Name"|awk -F":" '{print$2}')
       fi
       if tru ${UNARCHIVE}; then
-        if ! $(type -p unrar); then 
+        if ! $(type -p unrar); then
           err "Please install unrar before proceeding.  brew install rar works fine."
           goodbye 1
         fi
-        if unrar e -inul -p- -y -o+ -c- "${filepath}" -op "${extract_path}" 2> /dev/null  2>&1; then 
+        if unrar e -inul -p- -y -o+ -c- "${filepath}" -op "${extract_path}" 2> /dev/null  2>&1; then
           exsuccess=true
         fi
       fi
@@ -1555,7 +1644,7 @@ function archive_ext_tools() {
       if tru ${CONTENTS}; then
         files=$(tar -tf "${filepath}")
       fi
-      if tru ${UNARCHIVE}; then 
+      if tru ${UNARCHIVE}; then
         if tar -xf "${filepath}" -C "${extract_path}"; then
           exsuccess=true
         fi
@@ -1565,7 +1654,7 @@ function archive_ext_tools() {
       err "not implemented"
       ;;
   esac
-  if [ -n "${files}" ]; then 
+  if [ -n "${files}" ]; then
     print_archive "${filepath}" "${files}"
     lisuccess=true
   fi
@@ -1574,12 +1663,12 @@ function archive_ext_tools() {
     ui "recording an unarchive history for ${filename} from $(pwd)"
     $(record_install_history "unarchive" "archive" "${filepath}")
     if tru ${SINGLE}; then
-      if tru ${INSTALL}; then 
+      if tru ${INSTALL}; then
         ui "fixme"
         # ui "exploring what we just unarchiived"
         # export sa=$(pwd)
         # cd "${extract_path}"
-        # init_mode 0
+        # eat_the_world_starting_at 0
         # cd "${sa}"
       fi
       return 0
@@ -1634,12 +1723,12 @@ function process_archive_file() {
 function process_archives() {
   IFS=$' '
   failed=0
-  for ext in ${ARCHIVE_EXTENSIONS}; do 
+  for ext in ${ARCHIVE_EXTENSIONS}; do
     count=0
     counts "${ext}"
     if gt ${count} 0; then
       gobblefind_by_ext "${ext}"
-      for filenamepath in "${gobbled[@]}"; do 
+      for filenamepath in "${gobbled[@]}"; do
         if ! process_archive_file "${filenamepath}" true; then
           ((failed++))
         fi
@@ -1679,17 +1768,17 @@ function mount_dmg() {
   dmg_basename=$(basename "${dmg}")
   finddir_array -s "/Volumes"
   before_vols=( "${dirarray[@]}" )
-  exout=$(hdiutil attach "${dmg}") 
+  exout=$(hdiutil attach "${dmg}")
   if stringContains "failed" "${exout}"; then
     finddir_array -s "/Volumes"
     after_vols=( "${dirarray[@]}" )
     diff_vols=$(diff <(echo $before_vols) <(echo $after_vols))
-    if ! [ $? -gt 0 ]; then 
+    if ! [ $? -gt 0 ]; then
       err "Trying to mount the disk failed, sometimes that means its already"
       err "mounted.  If any of these are the software youre trying to"
       err "install, we can try to continue:"
       chosen=$(choices -r -s '\0' -c "${after_vols}")
-      if [ $chosen -le ${#after_vols} ]; then 
+      if [ $chosen -le ${#after_vols} ]; then
         mounted="${after_vols[$chosen]}"
       else
         return {$chosen}
@@ -1702,12 +1791,12 @@ function mount_dmg() {
     return 1
   fi
   mounted=$(echo "${exout}"|tr '\n' ' '|awk -F'\t' '{print$NF}'|xargs)
-  if [ $? -gt 0 ]; then 
+  if [ $? -gt 0 ]; then
     err "failed to mount ${dmg}"
     return 1
-  fi 
+  fi
   echo "${mounted}"
-  # echo "${mounted}" > "${TRACKMOUNTS}"   
+  # echo "${mounted}" > "${TRACKMOUNTS}"
   # MOUNTED+=( "${dmg_basename}" )
   return 0
 }
@@ -1729,7 +1818,7 @@ process_dmg() {
       # to our own array with a more sensible name for readability, but also because
       # we'll need to reuse haggussed from inside the loop
       ARGS=( "${mounted}" )
-      ex gobblefind 
+      ex gobblefind
       local files_on_dmg=("${haggussed[@]}")
       verbose "files_on_dmg: ${files_on_dmg[@]} haggussed: ${#haggussed[@]} ${haggussed[@]}"
       if gt ${#files_on_dmg[@]} 0; then
@@ -1770,7 +1859,7 @@ process_dmg() {
       if boolean_or ${retpkgs} ${retapps} ${retplugins}; then
         retvals=( ${retpkgs} ${retapps} ${retplugins} )
         strleads=()
-        for i in "${retvals[@]}"; do 
+        for i in "${retvals[@]}"; do
           case ${i} in
             0)
               strleads+=( "[✓]" )
@@ -1804,12 +1893,12 @@ function process_dmgs {
   verbose "process_dmgs: $(pwd)"
   IFS=$' '
   retvals=()
-  for ext in ${DMG_EXTENSIONS}; do 
+  for ext in ${DMG_EXTENSIONS}; do
     count=0
     counts "${ext}"
     if gt ${count} 0; then
       gobblefind_by_ext "${ext}"
-      for filenamepath in "${gobbled[@]}"; do 
+      for filenamepath in "${gobbled[@]}"; do
         process_dmg "${filenamepath}" true
         retvals+=( $? )
       done
@@ -1846,22 +1935,22 @@ tell application "Finder"
 set myApp to POSIX file "${tq}" as alias
 make new alias to myApp at "Babylon:Applications"
 set name of result to "${tbq}"
-end tell 
+end tell
 END
   echo "return $?"
     fi
   fi
 }
 
-function process_apps { 
+function process_apps {
   ext="${APP_EXTENSIONS}"
   verbose "process apps $@"
   count=0
   counts "${ext}"
   if gt ${count} 0; then
     gobblefind_by_ext "${ext}"
-    for filenamepath in "${gobbled[@]}"; do 
-      if process_app "${filenamepath}"; then 
+    for filenamepath in "${gobbled[@]}"; do
+      if process_app "${filenamepath}"; then
         return 0
       else
         return $?
@@ -1873,13 +1962,14 @@ function process_apps {
 
 # It seems rare that there would be more than one app in a dmg, but there might
 # be in a backup and its easy enough to handle multiple anyway
-# 
-# Args: String app - absolute path of the app to be listed, shown 
+#
+# Args: String app - absolute path of the app to be listed, shown
 #       contents, or installed
 function process_app() {
+  #set -x
   local app="${1:-}"
   local appname=$(basename "${app}")
-  if tru ${CONTENTS}; then 
+  if tru ${CONTENTS}; then
     gobblefind "${app}/"
     local files_in_contents=("${haggussed[@]}")
     verbose "files_in_contents: ${files_in_contents[@]} haggussed: "
@@ -1888,13 +1978,13 @@ function process_app() {
       IFS=$' '
       for filepath in "${files_in_contents[@]}"; do
         verbose "app: ${app} filepath: ${filepath}"
-        list_contents "${filepath}" "${app}"   
+        list_contents "${filepath}" "${app}"
       done
     fi
   fi
   if tru ${INSTALL}; then
     if [ -n "${ALT_INSTALL_LOC}" ]; then
-      if sudo rsync $RSYNC_OPTS "${app}" "${ALT_INSTALL_LOC}/Applications"; then
+      if bcopy "${app}" "${ALT_INSTALL_LOC}/Applications"; then
         if "${ALT_INSTALL_ALIAS}"; then
           if ! aalias "${ALT_INSTALL_LOC}/Applications/${appname}"; then
             err "creating an alias in /Applications for "
@@ -1902,36 +1992,36 @@ function process_app() {
           fi
         fi
         ui "recording an install history for ${app} from $(pwd)"
-        $(record_install_history "install" "app" "${app}")    
+        $(record_install_history "install" "app" "${app}")
         return 0
       else
         err "install to ${ALT_INSTALL_LOC} failed"
-        if "${ALT_INST_FALLBACK}"; then 
+        if "${ALT_INST_FALLBACK}"; then
           ui "attempting to install to /Applications since ALT_INST_FALLBACK is true."
         else
           return 1
         fi
       fi
     fi
-    if sudo rsync $RSYNC_OPTS "${app}" "/Applications"; then
+    if bcopy "${app}" "/Applications"; then
       ui "recording an install history for ${appname} from $(pwd)"
-      $(record_install_history "install" "app" "${appname}")
+      $(record_install_history "install" "app" "${app}")
       return 0
     else
       ret=$?
       err "install failed with error code ${ret}"
       return ${ret}
     fi
-  fi      
+  fi
 }
 
 
 ########################### Package Processing ################################
 
 function precedence_needed() {
-  if [ -n "${ALT_INSTALL_LOC}" ]; then 
+  if [ -n "${ALT_INSTALL_LOC}" ]; then
     if "${USER_INSTALL}"; then
-      if "${ALT_INSTALL_FALLBACK}"; then  
+      if "${ALT_INSTALL_FALLBACK}"; then
         if "${USER_INSTALL_FALLBACK}"; then
           return 0
         fi
@@ -1952,7 +2042,7 @@ function process_pkg() {
       list_contents "${pkg}" "${caller}"
       local contents_layer=3
     else
-      list_tl "${f}"
+      list_tl "${pkg}"
       local contents_layer=2
     fi
     if tru ${CONTENTS} && is_in_types "${pkg}" "${PKG_EXTENSIONS}"; then
@@ -1962,11 +2052,11 @@ function process_pkg() {
   if tru ${INSTALL}; then
     verbose "getting showChoiceChangesXML"
     bn=$(safe_basename "${pkg}")
-    # since some packages dont have any names or real info in 
+    # since some packages dont have any names or real info in
     # showChoiceChanges, we're just going to turn all the options on
     installer -pkg "${pkg}" -showChoiceChangesXML |sed 's/0/1/g' > "$TMPDIR/${bn}.xml"
     verbose "calling $(type -p installer) on ${pkg}"
-    if tru ${PROMPT_FOR_ACTIONS}; then 
+    if tru ${PROMPT_FOR_ACTIONS}; then
       confirm_yes $(printf "${PROMPT_INSTALL_PKG_EXPECTS_PKG}" "${pkg}")
     fi
     install_pkg
@@ -1974,16 +2064,16 @@ function process_pkg() {
   fi
 }
 
-function process_pkgs {
+function process_pkgs() {
   verbose "process_pkgs in $(pwd)"
-  local caller=caller
+  local caller=$(caller)
   local pkgtmp="${TMPDIR}/process_pkgs"
   mkdir -p "${pkgtmp}"
   count=0
   counts "${PKG_EXTENSIONS}"
   if gt ${count} 0; then
     IFS=$' '
-    for ext in $PKG_EXTENSIONS; do 
+    for ext in $PKG_EXTENSIONS; do
       count=0
       counts "${ext}"
       if gt ${count} 0; then
@@ -2003,7 +2093,7 @@ function process_pkgs {
 function install_pkg() {
   flags=( "${INSTALL_BASE_FLAGS[@]}" "/" )
   local bn=$(safe_basename "${pkg}")
-  if dump=$(sudo installer "${flags[@]}" -applyChoiceChangesXML "$TMPDIR/${bn}.xml"); then 
+  if dump=$(sudo installer "${flags[@]}" -applyChoiceChangesXML "$TMPDIR/${bn}.xml"); then
     local pkg="${flags[2]}" # See INSTALL_BASE_FLAGS
     ui "recording an install history for ${bn} from $(pwd)"
     $(record_install_history "install" "package" "${pkg}")
@@ -2028,20 +2118,21 @@ function list_package_contents() {
   local parent="${3:-}"
   pdir="/tmp/list_package_contents"
   pkgdir="${pdir}/${f%.*}"
-  if stat "${pkgdir@Q}"; then 
-    verbose "creating timestampted tmp"
-    local ts="$(date '+%Y%m%d %H:%M:%S')"
-    pkgdir="${TMPDIR}/list_package_contents/${f%.*}/${ts}"
-    
+  if [ -d "${pkgdir}" ]; then
+    rm -rf "${pkgdir}"
+
   fi
   mkdir -p "${pkgdir}"
   if ! pkgutil --expand "${f}" "${pkgdir}/pkg"; then
     non_fatal_error_request "$rc" "pkgutil --expand \"${f}\" \"${pkgdir}/pkg\""
   fi
   local paxfiles=()
-  ARGS=( "${pkgdir}" )
-  ex gobblefind 
-  for file in "${haggussed[@]}"; do 
+  # ARGS=( "${pkgdir}" )
+  # ex gobblefind
+  gobblefind "${pkgdir}"
+  sleep 1
+  for file in "${haggussed[@]}"; do
+    verbose "examining $file"
     if stringContains "bom" "${file}"; then
       local bomfile="${file}"
     elif stringContains "pax" "${file}"; then
@@ -2054,8 +2145,8 @@ function list_package_contents() {
     bomcontents=$(lsbom "${bomfile}")
     local lineno=0
     for line in ${bomcontents}; do
-      ((lineno+=1)) 
-      list_special_pacakage_file "bom" "${file}" ${lineno} "${line}" ${layer} \
+      ((lineno+=1))
+      list_special_package_file "bom" "${file}" ${lineno} "${line}" ${layer} \
         "${f}" "${parent}"
       verbose "bomcontents: ${line}"
     done
@@ -2063,18 +2154,18 @@ function list_package_contents() {
   if gt ${#paxfiles[@]} 0; then
     for paxfile in "${paxfiles[@]}"; do
       # ui "pax file: ${paxfile} with contents:"
-      if [[ "${paxfile}" == *.gz ]]; then 
+      if [[ "${paxfile}" == *.gz ]]; then
         paxcontents=$(gzcat "${paxfile}" | pax)
       elif [[ "${paxfile}" == *.xz ]]; then
         paxcontents=$(xzcat "${paxfile}" | pax)
-      elif [[ "${paxfile}" == *.pax ]]; then 
+      elif [[ "${paxfile}" == *.pax ]]; then
         paxcontents=$(pax < "${paxfile}")
-      else 
+      else
         err "${PAXFILE_ERR}"
       fi
       if [ -n "${paxcontents}" ]; then
-        for line in ${paxconents}; do 
-          list_special_pacakage_file "pax" "${file}" ${lineno} "${line}" \
+        for line in ${paxconents}; do
+          list_special_package_file "pax" "${file}" ${lineno} "${line}" \
             ${layer} "${f}" "${parent}"
           verbose "paxcontents (${paxfile}): ${line}"
         done
@@ -2113,7 +2204,6 @@ function process_plugin() {
   local path="${1-}"
   local filename=$(basename "${path}")
   local ext=$(echo "${path}"|awk -F'.' '{print$NF}'|sed 's:/::g')
-  local rsync_opts='-rltv'
   # echo "installing ${path} to ${dest}"
   # command=$(printf "${commandstrf}" "${path}" "${dest}")
   # verbose "running ${command}"
@@ -2125,7 +2215,7 @@ function process_plugin() {
     if tru ${PROMPT_FOR_ACTIONS}; then
       confirm_yes "OK?"
     fi
-    if ! sudo rsync "${rsync_opts}" "${path}" "${dest}"; then
+    if ! bcopy "${path}" "${dest}"; then
       err "install failed with error code $?"
     else
       syspluginstalled=true
@@ -2138,10 +2228,10 @@ function process_plugin() {
     if tru ${PROMPT_FOR_ACTIONS}; then
       confirm_yes "OK?"
     fi
-    if ! rsync "${rsync_opts}" "${path}" "${dest}"; then
+    if ! bcopy "${path}" "${dest}"; then
       ß
       err "install failed with error code ${ret}"
-           
+
     else
      userpluginstalled=true
 
@@ -2163,14 +2253,14 @@ function process_plugins {
     verbose "ext ${ext}"
     gobblefind_by_ext "${ext}"
     verbose "count ${#gobbled[@]} like ${gobbled[0]}"
-    for plug in "${gobbled[@]}"; do 
+    for plug in "${gobbled[@]}"; do
       verbose "operating on ${plug}"
       if tru ${LIST}; then
         list_tl "${plug}"
-      fi 
+      fi
       if tru ${CONTENTS}; then
         ARGS=( "${plug}/" )
-        ex gobblefind 
+        ex gobblefind
         for file in "${haggussed[@]}"; do
           list_contents "${file}" "${plug}"
           verbose $(printf "plugindir: %s contentfile: %s" "${plug}" "${file}")
@@ -2227,11 +2317,11 @@ function get_all_installed_plugins() {
   swd="$(pwd)"
   cd "${SYSTEM_PLUGROOT}/VST"
   ARGS=( "vst" )
-  ex gobblefind_by_ext 
+  ex gobblefind_by_ext
 
   SYS_INSTALLED_VSTS=( "${gobbled[@]}" )
   echo "${SYS_INSTALLED_VSTS[@]}"
-  cd "${USER_PLUGROOT}/VST"  
+  cd "${USER_PLUGROOT}/VST"
   ARGS=( "vst" )
   ex gobblefind_by_ext
 
@@ -2239,26 +2329,26 @@ function get_all_installed_plugins() {
   INSTALLED_VSTS=( "${SYS_INSTALLED_VSTS[@]}" "${USER_INSTALLED_VSTS[@]}" )
   cd "${SYSTEM_PLUGROOT}/VST3"
   ARGS=( "vst3" )
-  ex gobblefind_by_ext 
-  
+  ex gobblefind_by_ext
+
   SYS_INSTALLED_VST3S=( "${gobbled[@]}" )
-  cd "${USER_PLUGROOT}/VST3"  
-  gobbled=() 
+  cd "${USER_PLUGROOT}/VST3"
+  gobbled=()
   ARGS=( "vst3" )
-  ex gobblefind_by_ext 
+  ex gobblefind_by_ext
 
   USER_INSTALLED_VST3S=( "${gobbled[@]}" )
   INSTALLED_VST3S=( "${SYS_INSTALLED_VST3S[@]}" "${USER_INSTALLED_VST3S[@]}" )
   cd "${SYSTEM_PLUGROOT}/Components"
   ARGS=( "component" )
-  ex gobblefind_by_ext 
+  ex gobblefind_by_ext
   sleep 5
   SYS_INSTALLED_AUS=( "${gobbled[@]}" )
   sleep 4
-  cd "${USER_PLUGROOT}/Components"  
+  cd "${USER_PLUGROOT}/Components"
   echo "${SYS_INSTALLED_AUS[@]}"
   ARGS=( "component" )
-  ex gobblefind_by_ext 
+  ex gobblefind_by_ext
 
   USER_INSTALLED_AUS=( "${gobbled[@]}" )
   INSTALLED_AUS=( "${SYS_INSTALLED_AUS[@]}" "${USER_INSTALLED_AUS[@]}" )
@@ -2267,11 +2357,12 @@ function get_all_installed_plugins() {
 }
 
 # This is intended to be a blocking subshell execution call.  It was
-# implemented in rather a silly way attempting to reduce variables in 
+# implemented in rather a silly way attempting to reduce variables in
 # solving problems i didn't understand, and it just, surprise surprise
-# created more problems.  Until i've audited the code to see that its 
+# created more problems.  Until i've audited the code to see that its
 # not used, its staying, but yeah, probably, just, dont.
 function ex() {
+  set -x
   exout=""
   exresult=666
   d="$(date +%s)"
@@ -2279,21 +2370,22 @@ function ex() {
   tracktmp="/tmp/bellicose/ex.$1.${d}"
   mkdir -p ${tracktmp}
   trackcmd="${tracktmp}/$1"
-  trackout="${tracktmp}/$1.exout" 
+  trackout="${tracktmp}/$1.exout"
   trackret="${tracktmp}/$1.ret"
   printf '%s %s\n' "$@" "${ARGS[@]}" > "${trackcmd}"
   (
     exec 2>&1
     exec > "${trackout}"
-    "$@" "${ARGS[@]}"  
+    "$@" "${ARGS[@]}"
     ret=$?
     echo "retval ${ret}" > "${trackret}"
     touch "${tempfile}"
-    exit ${ret}
+    return ${ret}
   )
   while ! test -f "${tempfile}"; do sleep 1; done
   rm "${tempfile}"
   cat "${trackout}"
+  set +x
   return $(cat "${trackret}"|awk '{print$2}')
 }
 
@@ -2308,18 +2400,18 @@ function get_plugins_on_dmg() {
     swd="$(pwd)"
     cd "${mounted}"
     ARGS=( "vst" )
-    ex gobblefind_by_ext 
+    ex gobblefind_by_ext
     DMG_VSTS=( "${gobbled[@]}" )
     sort_array "${DMG_VSTS[@]}"
     ARGS=( "vst3" )
-    ex gobblefind_by_ext 
+    ex gobblefind_by_ext
     DMG_VST3S=( "${gobbled[@]}" )
     sort_array "${DMG_VST3S[@]}"
     ARGS=( "component" )
     ex gobblefind_by_ext
     DMG_AUS=( "${gobbled[@]}" )
     sort_array "${DMG_AUS[@]}"
-    DMG_PLUGINS=( "${DMG_VSTS[@]}" "${DMG_VST3S[@]}" "${DMG_AUS[@]}" ) 
+    DMG_PLUGINS=( "${DMG_VSTS[@]}" "${DMG_VST3S[@]}" "${DMG_AUS[@]}" )
     cd "${swd}"
     ARGS=( "unmount" "${mounted}" )
     ex diskutil
@@ -2340,7 +2432,7 @@ function update_mod_times() {
   get_plugins_on_dmg "${dmg}"
   same_plugin_same_type_diff_location "${INSTALLED_PLUGINS}" "${DMG_PLUGINS}"
   ui "requesting sudo for touch in system directories"
-  for plugin in "${SAMESAMEDIFF[@]}"; do 
+  for plugin in "${SAMESAMEDIFF[@]}"; do
     sudo touch "${plugin}"
   done
 }
@@ -2364,16 +2456,16 @@ function uninstall_plugins() {
   fi
   get_plugins_on_dmg "${dmg}"
   get_all_installed_plugins
-  if gt "${#DMG_PLUGINS[@]}" 0; then 
+  if gt "${#DMG_PLUGINS[@]}" 0; then
     for disk_file in "${DMG_PLUGINS[@]}"; do
       if extensiom_natch "${disk_file}"; then
-        disk_filename=$(basename "${disk_file}") 
+        disk_filename=$(basename "${disk_file}")
         verbose "looking for ${disk_filename}"
         for installed_file in "${INSTALLED_PLUGINS[@]}"; do
           if stringContains "${disk_filename}" "${installed_file}"; then
             ui "uninstalling ${installed_file}"
-            if [ -n "${rm_tp}" ]; then 
-              if ! sudo rsync "${RSYNC_OPTS}" "${installed_file}" "${rm_to}"; then
+            if [ -n "${rm_tp}" ]; then
+              if ! bcopy "${installed_file}" "${rm_to}"; then
                 err "return code $? while trying to rm ${installed_file} ro ${rm_to}"
               fi
             else
@@ -2391,7 +2483,7 @@ function uninstall_plugins() {
 # This isn't really used anymore, probably won't do what you want it to without
 # significant modification, and should probably be yanked, printed on a
 # dotmatrix printer, the kind with the guide strips you had to setup and then
-# tear off after printing, you should have to listen to that dotmatrix sound 
+# tear off after printing, you should have to listen to that dotmatrix sound
 # of two robots brains being smooshed together and then torn in half, and then
 # when you're done and have the printed code, you should burn it.
 
@@ -2403,13 +2495,13 @@ function bellibackup {
   verbose "Running backup from ${working_dir} with download root ${download_root}"
   local dir_to_back="${working_dir}"
   if [ -n "${download_root}" ]; then
-    if ! stringContains "${download_root}" "${BACKUP_EXCLUDED_DIRS}"; then 
+    if ! stringContains "${download_root}" "${BACKUP_EXCLUDED_DIRS}"; then
       dir_to_back="${downloads}/${download_root}"
     fi
   fi
   verbose "asking for user confirmation on backup to ${dir_to_back}"
   status=$(timed_confirm_yes "Backing up ${dir_to_back}")
-  if [ $? == 255 ]; then 
+  if [ $? == 255 ]; then
     return 2
   fi
   verbose "proceeding with backup, $? status, ${status} from timed_confirm_yes"
@@ -2417,17 +2509,17 @@ function bellibackup {
   secondarycount=$(echo "${secondaries}"|wc -l)
   cd "${downloads}" # so we're not in a dir we're moving
   if gt ${secondarycount} 0; then
-    ui $(printf "${INSTALLING_FILE_TO_DEST_EXPECTS_FILE_AND_DEST}" 
+    ui $(printf "${INSTALLING_FILE_TO_DEST_EXPECTS_FILE_AND_DEST}"
       "${secondarycount}" "${SECONDARY_CRITERIA}" "${SECONDARY_BACKUP_DIR}")
-    if ! rsync "${RSYNC_OPTS}" "${dir_to_back}" "${SECONDARY_BACKUP_DIR}"; then
+    if ! bcopy "${dir_to_back}" "${SECONDARY_BACKUP_DIR}"; then
       err "secondary backup failed."
     fi
   fi
   ui $(printf "${BACKUP_STR_EXPECTS_SRC_DEST}" "${dir_to_back}" \
     "${BACKUP}")
-  rsync "${RSYNC_OPTS}" "${dir_to_back}" "${BACKUP}"
+  bcopy "${dir_to_back}" "${BACKUP}"
   # out of excessive caution, move to tmp instead of rm -rf
-  # reboot will delete, but if we screwed up, we can recover  
+  # reboot will delete, but if we screwed up, we can recover
   datestr=$(date "+%Y%m%d%H%M")
   movedir="/tmp/$datestr"
   verbose "copying ${dir_to_back} to ${movedir} in place of rm -rf"
@@ -2441,19 +2533,19 @@ function help() {
 }
 
 # This looks like a particularly silly wrapper function that does... basically
-# nothing except let me call a function "init_mode" which 
-# looks much cooler than "init_mode"
-# function init_mode() {
+# nothing except let me call a function "eat_the_world_starting_at" which
+# looks much cooler than "handle_cache_by_type"
+# function eat_the_world_starting_at() {
 #   local start="${1:-0}"
 #   if lt ${start} 5; then
 #     local IFS=$'\n'
-#     for i in $(seq ${start} 4); do 
-#       init_mode ${i}
+#     for i in $(seq ${start} 4); do
+#       handle_cache_by_type ${i}
 #     done
 #   fi
 # }
 
-# Run bellicose in single file mode, after which if we think we succeeded, 
+# Run bellicose in single file mode, after which if we think we succeeded,
 # we thank you.  Because you're WORTHY of it.
 function process_single() {
   local file="${1:-}"
@@ -2481,7 +2573,7 @@ function process_single() {
 
 function update_usagestats() {
   source "$USAGESTATS"
-  if [ -n "$BELLICOSE_US_RUNS" ]; then 
+  if [ -n "$BELLICOSE_US_RUNS" ]; then
     ((BELLICOSE_US_RUNS++))
   fi
   env|grep BELLICOSE_US > "$USAGESTATS"
@@ -2489,7 +2581,7 @@ function update_usagestats() {
 
 function get_num_runs() {
   source "$USAGESTATS"
-  if [ -n "$BELLICOSE_US_RUNS" ]; then 
+  if [ -n "$BELLICOSE_US_RUNS" ]; then
     echo $BELLICOSE_US_RUNS
   fi
 }
@@ -2500,7 +2592,7 @@ function setup_env() {
   mkdir -p "${CACHE}"
   touch "$USAGESTATS"
 
-  if ! [ -f "${HISTORY}" ]; then 
+  if ! [ -f "${HISTORY}" ]; then
     touch "${HISTORY}"
   fi
   # in session tracking, so we can unmount
@@ -2530,10 +2622,10 @@ function single() {
   fi
   ui "Operating in single file mode on ${file}"
   SINGLE=true
-  INSTALL=true
+
   if completed "${file}"; then
     ui $(printf "${FOUND_IN_CACHE}" "${file}")
-    if ! confirm_yes "${TRY_AGAIN_POSSIBLY_OVERWRITE}"; then 
+    if ! confirm_yes "${TRY_AGAIN_POSSIBLY_OVERWRITE}"; then
       goodbye 1
     fi
   fi
@@ -2552,7 +2644,7 @@ function main() {
   # export DMG=false
   # export PKG=false
   # export AUDIOPLUGIN=false
-  export SINGLE=false 
+  export SINGLE=false
   SKIPUNARCHIVE=false
 
   optspec="svf:VR:S"
@@ -2560,7 +2652,7 @@ function main() {
   #while [[ $# -gt 0 ]]; do
     case "${optchar}" in
       s)
-        SYSTEM_PLUGIN_DIRS=true        
+        SYSTEM_PLUGIN_DIRS=true
         ;;
       # TODO add -p plugin install dir
       v)
@@ -2577,36 +2669,52 @@ function main() {
         #LIST=true
         #CONTENTS=true
         export VERBOSE=true
-        export LOGFILE="${OPTARG}"     
+        export LOGFILE="${OPTARG}"
         ;;
       S)
-        SKIPUNARCHIVE=true       
+        SKIPUNARCHIVE=true
         ;;
       ?)
-        # POSITIONAL_ARGS+=("${1-}") 
-        # shift 
+        # POSITIONAL_ARGS+=("${1-}")
+        # shift
         help
         ;;
     esac
   done
-
+  shift $(($OPTIND -1))
   if [[ "${LOGFILE}" != "/dev/stderr" ]]; then
     verbose "logging to ${LOGFILE}"
     exec 2> >(tee -a -i "${LOGFILE}")
   fi
-  chosen_mode="${@:$OPTIND:1}"
+  chosen_mode="${1:-}"
   ui "Chosen mode: ${chosen_mode}"
-  unset single_file
-  if [ -n "${@:$OPTIND+1:1}" ]; then
-    single_file="${@:$OPTIND+1}" 
-    if [ -n "${single_file}" ]; then
-      if ! $SKIPUNARCHIVE; then 
+  case "${chosen_mode}" in
+    list)
+      LIST=true
+      ;;
+    contents)
+      LIST=true
+      CONTENTS=true
+      ;;
+    unarchive)
+      UNARCHIVE=true
+      INSTALL=false
+      ;;
+    install)
+      if ! $SKIPUNARCHIVE; then
         UNARCHIVE=true
       fi
       INSTALL=true
-      
-      single "${single_file}"
-    fi
+      ;;
+    installed)
+      cat "${history}"
+      return 0
+      ;;
+  esac
+  unset single_file
+  if [ -n "${2:-}" ] && [ -f "${2:-}" ]; then
+    single_file="${2:-}"
+    single "${single_file}"
   fi
   STARTTIME=$(fsts)
   setup_env
@@ -2617,75 +2725,52 @@ function main() {
 
   # trap 'trap - ERR RETURN; kill -INT $$ ; echo "fatal error"; return' ERR RETURN
   # for arg in "${POSITIONAL_ARGS[@]}"; do
-  case ${chosen_mode} in
-    "list")
-      LIST=true
-      init_mode 0
-      ;;
-    "contents")
-      LIST=true
-      CONTENTS=true
-      init_mode 0
-      return 0
-      ;;
-    "unarchive")
-      if ! ${SKIPUNARCHIVE} > /dev/null; then
-        UNARCHIVE=true
-        init_mode 0
-        return $?
-      fi
-      ;;
-    "install")
-      if ! ${SKIPUNARCHIVE} > /dev/null;  then
-        UNARCHIVE=true
-      fi
-      INSTALL=true
-      init_mode 0
-      return $?
-      ;;
-    "installed")
-      cat "${history}"
-      return 0
-      ;;
-  esac
+  if "$INSTALL" && ! "$UNARCHIVE"; then
+    init_mode 1
+  else
+    init_mode 0
+  fi
+  ret="$?"
+
   if tru $BC_WORK_DONE; then
     ui "We were able to process the following:"
     get_installs_newer_than "$STARTTIME"
-    return 0
+
   else
     err "please give me an action, one of:"
     err "   unarchive"
     err "   install (unarchive implied unless -S U)"
   fi
+  return "$ret"
 }
 
 #  from https://stackoverflow.com/questions/2683279/how-to-detect-if-a-script-is-being-sourced
 # As $_ could be used only once, uncomment one of two following lines
 
-# printf '_="%s", 0="%s" and BASH_SOURCE="%s"\n' "$_" "$0" "$BASH_SOURCE" 
+# printf '_="%s", 0="%s" and BASH_SOURCE="%s"\n' "$_" "$0" "$BASH_SOURCE"
 [[ "$_" != "$0" ]] && DW_PURPOSE=sourced || DW_PURPOSE=subshell > /dev/null 2>&1
 
-[ "$0" = "$BASH_SOURCE" ] && BASH_KIND_ENV=own || BASH_KIND_ENV=sourced; 
+[ "$0" = "$BASH_SOURCE" ] && BASH_KIND_ENV=own || BASH_KIND_ENV=sourced;
 proc="proc: $$[ppid:$PPID] is $BASH_KIND_ENV (DW purpose: $DW_PURPOSE)" > /dev/null 2>&1
 
-if [[ $BASH_KIND_ENV == "own" ]]; then 
+if [[ $BASH_KIND_ENV == "own" ]]; then
   if lt $(get_num_runs) 6; then
     ui "bellicose can damage your system if you don't know what you're doing."
     ui "please exercise caution.  The authors accept no liability for any"
     ui "use of this software for any purpose."
     ui ""
   fi
-  if ! declare -F "confirm_yes" > /dev/null 2>&1; then 
+  if ! declare -F "confirm_yes" > /dev/null 2>&1; then
     source "$D/user_prompts.sh"
   fi
 
-  dashargs=() 
-  for arg in "$@"; do 
-    if [[ "$arg" =~ -.* ]]; then 
+  dashargs=()
+  for arg in "$@"; do
+    if [[ "$arg" =~ -.* ]]; then
       dashargs+=( "$arg" )
     fi
   done
- 
+
   if [ -f "${@: -1}" ]; then
     ui -u "proposed ${@: -2} of ${@: -1} in single file mode"
   else
