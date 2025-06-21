@@ -37,6 +37,9 @@ elif [[ $(uname) == "Darwin" ]]; then
       sudo softwareupdate --list-full-installers
     fi
   }
+  function sar() {
+    brew uninstall $@
+  }
   # depends util.sh
   #  - wget-download-size
   #  - is_int

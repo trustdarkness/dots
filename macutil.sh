@@ -27,10 +27,6 @@ if ! is_function in_array; then
   source "$D/filesystemarrayutil.sh"
 fi
 
-# definition of modern bash to at least include associative arrays
-# and pass by reference
-MODERN_BASH="4.3"
-
 # more date formats that don't seem to be mac specific in util.sh
 MACFILEINFODATEFMT="%m/%d/%Y %T"
 MACOS_LOG_DATEFMT="%Y-%m-%d" # used by the "log" command
@@ -1738,6 +1734,7 @@ EOF
   echo -ne "\\r[${BAR_SIZE:0:0}] 0 %$CLEAR_LINE"
   total=${#files[@]}
   for file in "${files[@]}"; do
+    ((ctr++))
     if $dry; then
       printf "rm -f '%s'\n" "$file"
     else
@@ -1747,17 +1744,18 @@ EOF
       else
         sudo rm -f "$file"
       fi
-      ((ctr++))
+
     fi
   done
   ctr=0
   echo -ne "\\r[${BAR_SIZE:0:0}] 0 %$CLEAR_LINE"
-  total=${#files[@]}
+  total=${#dirs[@]}
   for dir in "${dirs[@]}"; do
+    ((ctr++))
     if $dry; then
       printf "rmdir '%s'\n" "$dir"
     else
-      progress "$ctr" "$total" "rm'ing ${dir:0:10}..."
+      progress "$ctr" "$total" "rmdiring ${dir:0:10}..."
       if can_i_write "$dir"; then
         rmdir "$dir"
       else
