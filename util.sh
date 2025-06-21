@@ -22,6 +22,7 @@
 declare -i EX_DATAERR=65 #data format error
 declare -i EINVAL=22 # nvalid argument
 declare ARROW=$'\u27f6'
+declare -A s
 
 declare -F is_function > /dev/null 2>&1 || is_function() {
   ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
@@ -35,10 +36,11 @@ function undeclared() {
   fi
   return 1
 }
-if undeclared path_append; then source "$D/pathlib.sh" && sourced+=("$D/pathlib.sh"); fi
+if undeclared path_append; then
+  source "$D/pathlib.sh"
+fi
 _setup_path
 path_append "$D"
-
 
 # A slightly more convenient and less tedious way to print
 # to stderr, canonical in existence # TODO, check namerefs on resource
@@ -97,28 +99,10 @@ CMD=$(tput setaf 36) # aqua
 MSG=$(tput setaf 231) # barely yellow
 RST=$(tput sgr0) # reset
 
-# preferred format strings for date for storing on the filesystem
-FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
-printf -v FSTSFMT '%s_%%H%%M%%S' "$FSDATEFMT" # our preferred ts fmt for files/folders
+# FSTS moved to .bash_profile
 LAST_DATEFMT="%a %b %e %k:%M" # used by the "last" command
 PSTSFMT="%a %b %e %T %Y" # date given by (among others) ps -p$pid -o'lstart' ex: Thu Dec 26 21:17:01 2024
 USCLOCKTIMEFMT="%k:%M %p"
-
-function fsdate() {
-  date +"${FSDATEFMT}"
-}
-
-function fsts_to_fsdate() {
-  if is_mac; then
-    date -d -f "$FSTSFMT" "${1:-}" "$FSDATEFMT"
-  else
-    date -d "$(_fsts_gnu_readable "${1:-}")"  +"$FSDATEFMT"
-  fi
-}
-
-function fsts() {
-  date +"${FSTSFMT}"
-}
 
 _fsts_gnu_readable() {
   echo "${1:0:8} ${1:9:2}:${1:10:2}:${1:11:2}"
@@ -440,9 +424,9 @@ _log() {
   fi
   if [ $# -gt 1 ]; then
     sub="${@:2}"
-    printf -v message "${1:-/'-'/'\x2D'}" "${sub/'-'/'\x2D'}"
+    printf -v message "${message}${1:-/'-'/'\x2D'}" "${sub/'-'/'\x2D'}"
   else
-    local message="${@/'-'/'\x2D'}"
+    message="${message}${@/'-'/'\x2D'}"
   fi
   if [ -z "$LOGFILE" ]; then
     if [[ "$srcp" == "environment" ]]; then
@@ -451,13 +435,7 @@ _log() {
       LOGFILE="$LOGDIR/$src.log"
     fi
   fi
-  # if called by struct error the FUNCNAME indices are off by 1
-  # if [[ "${FUNCNAME[*]}" == *"_struct_err"* ]]; then
-  #   findex=2
-  # else
-  #   findex=1
-  # fi
-  # if [ "${#FUNCNAME[@]}" -gt $findex ]; then
+
   funcname="${FUNCNAME[1]}"
   if [ -n "$funcname" ]; then
     if [ -n "$err_in_func" ]; then
@@ -605,22 +583,20 @@ alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
 alias gc="git clone"
 export GH="$HOME/src/github"
 
-MODERN_BASH="4.3"
-
 # TODO: what requires these?
 if ! is_function exists; then
   case $- in
     *i*)
-    s['util.sh']="${s['util.sh']}+existence.sh"
+    s[util.sh]="${s[util.sh]}+existence.sh"
   ;; esac
   source "$D/existence.sh"
 fi
 
-  case $- in
-    *i*)
-    s['util.sh']="${s['util.sh']}+filesystemarrayutil.sh"
-    s['util.sh']="${s['util.sh']}+user_prompts.sh"
-  ;;esac
+case $- in
+  *i*)
+  s[util.sh]="${s[util.sh]}+filesystemarrayutil.sh"
+  s[util.sh]="${s[util.sh]}+user_prompts.sh"
+;;esac
 
 source "$D/filesystemarrayutil.sh"
 source "$D/user_prompts.sh"
@@ -630,15 +606,73 @@ function urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
 # search code in the $D directory, this repo in other words
 # depends user_prompts.sh confirm_yes
 dgrep() {
+  usage() {
+    cat <<-'EOF'
+dgrep - Perform a shallow grep of shared utilities and scripts in the
+  environment "$D" directory and/or additional important dirs for
+  trustdarkness shell code.
+
+Example:
+  $ dgrep -p -A4 -B3 -E nameless_resume202[0-4].(pdf|doc)
+
+The above example would search the $D directory in the shell's env for any
+file which contains the text "nameeless_resume2024.pdf" or
+"nameless_resume2020.doc" as examples.  This is not a filename search, but
+a text search of any documents in the specified directory.  In the above
+example, symlinks will be followed using pcre2grep as our search command.
+Any results will show 4 lines after the match and 3 lines before (-A4 -B3
+which will be forwarded to pcre2grep).  This will use extended regex syntax
+(because of the -E flag which allows the OR | in parens to match doc or
+pdf, per example).  Explanation of flags handled by dgrep without forwarding
+to the underlying grep are below.
+
+Args:
+  -p - follow symlinks, using pcre2grep, if available
+  --ignore=/path/to/ignore - ignore a subdirectory within $D or additional
+       provided directories.  The = pattern must be used, --ignore may
+       be used multiple times to specify more than one directory.  Will
+       accept and parse regex patterns.
+  --filenames-only - only return the filneames matched, not the matched
+       text.
+  --addl-dirs=/path/to/dir - provide additional dirs to grep looking for
+       provided pattern in files in those dirs.  This option must use the
+       = no spaces syntax.  Regex patterns ok.  --addl-dirs can be used
+       multiple times to add multiple additional directories.
+  -D for this search, use the provided directory in place of whatever D
+       is set to in the shell env.  Can be specified using -D /path/to/D
+       or -D=/path/to/D.  If = present, don't use spaces.  For more than one
+       dir, use --addl-dirs, if -D is specified more than once, the last
+       one specified on the command line input will replace any previously
+       provided.  Regex patterns can be specified using the = pattern.
+  --print-command - print the commands being run as they are run, this is
+       intended to assist troubleshooting difficult or non-responsive queries.
+       Setting LEVEL=INFO in the shell will enable inform level logging to
+       console and the logfile at $LOGFILE and will also result in underlying
+       commands being provided in both locations.
+  --nocolor - do not colorize results for the terminal, should be used when
+       called by other scripts.
+  --help, -h, -? - print this text
+
+  Any other options starting with - or -- will be forwarded to the underlying
+  grep (which may be grep in path or pcre2grep depending on selected options).
+
+EOF
+  }
+  # { shopt -p expand_aliases > /dev/null 2>&1 && printf "$INF%s$RST" '* '; } || printf "$ERR%s$RST" '* ';
   grepargs=()
-  grep=grep
+  grep="$(type -p grep)"
   onlyfiles=false
   print_command=false
+  nocolor=false
   addl_dirs=()
   ignore= ; unset ignore; ignore=()
   while [[ "${1:-}" == "-"* ]]; do
+    inform "${1:-}"
     if [[ "${1:-}" == \-p ]]; then
-      grep=pcre2grep
+      if ! grep="$(type -p pcre2grep)"; then
+        grep="$(type -p grep)"
+        warn "pcre2grep not installed; using $grep."
+      fi
       shift
     elif [[ "${1:-}" == \-\-filenames\-only ]]; then
       onlyfiles=true
@@ -652,19 +686,28 @@ dgrep() {
         addl_dirs+=( $potential )
       fi
       shift
-    elif [[ "${1:-}" =~ \-D ]]; then
+    elif [[ "${1:-}" =~ \-D$ ]]; then
       local D="${2:-}"
       shift
+      shift
+    elif [[ "${1:-}" =~ \-D=(.*) ]]; then
+      local D="${BASH_REMATCH[1]}"
       shift
     elif [[ "${1:-}" =~ \-\-print_command ]]; then
       print_command=true
       shift
+    elif [[ "${1:-}" =~ \-\-nocolor ]]; then
+      nocolor=true
+      shift
+    elif [[ "${1:-}" =~ \-h|\-\-help|\-? ]]; then
+      usage
+      return 0
     else
       grepargs+=( "${1:-}" )
       shift
     fi
   done
-  sterm="${1:-}"
+  sterm="$@"
   if [ -z "$D" ]; then
     if confirm_yes "D not in env, do you want to search PATH?"; then
       #TODO
@@ -675,11 +718,12 @@ dgrep() {
   file_searcher() {
     # if there are ever more exceptions, make this more visible
     { [ -f "$item" ] && [[ "$item" != *LICENSE ]] && file=$item; } || return
-    if tru "$print_command"; then
-      printf "$ARROW searching with %s -n " "$grep"
-      printf "%s " "${grepargs[@]}"
-      printf "%s %s" "$sterm" "$file"
-      printf "\n"
+    if tru "$print_command" || [[ "$LEVEL" == "INFO"* ]]; then
+      { [[ "$LEVEL" == "INFO"* ]] && pcc="eval inform"; } || pcc="printf";
+      $pcc "$ARROW searching with %s -n " "$grep"
+      $pcc "%s " "${grepargs[@]}"
+      $pcc "%s %s" "$sterm" "$file"
+      $pcc "\n"
     fi
     found=$($grep -n ${grepargs[@]} "$sterm" "$file"); ret=$?||true
     if [ $ret -eq 0 ]; then
@@ -688,7 +732,11 @@ dgrep() {
         echo "$file"
         if ! $onlyfiles; then
           while read -r line ; do
-            echo "  ${line/$sterm/${GREEN}${sterm}${RST}}"
+            if tru "$nocolor"; then
+              echo "$line"
+            else
+              echo "  ${line/$sterm/${GREEN}${sterm}${RST}}"
+            fi
           done < <(echo "$found")
           echo
           ((total_found+=$(echo "$found"|wc -l|xargs)))
@@ -952,6 +1000,13 @@ function_regex() {
   printf -v "${1:-}" "$BASH_FUNCTION_WITH_NAME_PCREREGEX" "${2:-}" "${2:-}" "${2:-}"
 }
 
+function_substring_regex() {
+  regex_name="${1:-}"
+  substring_to_search="${2:-}"
+  printf -v simple_substring_regex '.*%s.*' "$substring_to_search"
+  function_regex "$regex_name" "$simple_substring_regex"
+}
+
 function_regex BASH_FUNCTION_PCREREGEX "[A-z0-9_]+"
 _BWVR='^bash[_-]{0,1}(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|'
 _BWVR+='[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*'
@@ -1050,29 +1105,87 @@ Args:
      if -f is also present
   -F (optional) function name to search for, can be specified
      more than once to find multiple functions
+  -s <term> search for term in function names
+  -c <term> search for term in function contents
+  -O use logical OR when both -s and -c are present
+  -A use logical AND when both -s and -c are present
+  -a dirname to add to standard search parameters. can be used multiple
+       times to add multiple additional directories
   -l print line numbers of function declarations
   -L only print the line numbers
   -n include nested functions (false if not speicified)
   -w wide display mode, prints functions in columns instead
-     of one per line
+     of one per line.  If function bodies are being printed because
+     we're searching with -c, this flag will be ignored.
+  -d if trustdarkness dpHelpers installed, add relavent paths for
+     its shell functions to the search perimeter
   -h print this text
 EOF
-  }
+  } # end usage()
+
+  # declare vars, arrays, and flags, set to default vals for init
   unset ffs
   ffs=()
-  oargs=( "$@" )
-  local pcre2grepopts=('-n' '--null')
+  oargs=( "$@" ) # really a copy for troubleshooting only
+  local pcre2grepopts=('-n' '--null') # do we need this for other greps
   local flinenos=false
   local onlylinenos=false
-  declare -ga functions
+  declare -ga functions # TODO: remove -g after testing
   functions=()
   local nested=false
   local pager="cat"
-  local search=false
-  unset file
-  file=
-  xtradir=
-  optspec="lLnf:F:Swha:"
+  local dpHelpers=false
+
+  # addl info flags... do we need function bodies?
+  local F_bodies=false
+
+  # search modes -
+  #   - F means func names provided
+  #   - f means file provided
+  #   - s means func name search term provided
+  #   - c means func body search term provided
+  #   - d means we have ho filenames and are relying
+  #       on dgrep and/or declare
+  local Ff_search=false
+  local fs_search=false
+  local fc_search=false
+  local fsc_search=false
+
+  local ds_search=false
+  local dc_search=false
+  local dsc_search=false
+  local dF_search=false
+  local dFc_search=false
+
+  # for searching function content, it will be useful to flag
+  # c_search's regardless of source
+  local sc_search=false
+  local c_search=false
+
+  # we'll call dFs out of bounds because the user would be inputting
+  # function names and a search term that should be in them.  hopefully
+  # they're noticers enough that they'll catch that on their own.
+  # likewise dFsc.  hashtag not a noticer
+
+  # var declarations we want to be empty each time
+  local Fbody; unset Fbody; Fbody= # only the paranoid survive
+  local file; unset file; file=
+  declare -a xtradirs
+  local xtradirs; unset xtradirs; xtradirs=()
+  declare -ga funcs_found # TODO: either remove -g or make it an all-caos
+                          # proper global if that's useful
+  unset funcs_found
+  funcs_found=()
+
+  # containers for error messages
+  local em; unset em; em=
+  local ef; unset ef; ef=
+
+  # consider whether we should care about existing dgrep opts and if so
+  # whether it makes sense to have an option masher
+  dgrepopts=("-p" "-c" "-l" "-n" "--filenames-only")
+
+  optspec="lLnf:F:wha:c:s:AO"
   unset OPTIND
   unset optchar
   while getopts "${optspec}" optchar; do
@@ -1088,19 +1201,35 @@ EOF
         nested=true
         ;;
       f)
-        file="${OPTARG}"
+        file="${OPTARG}" # TODO: allow providing multiple files as args
         ;;
       F)
         functions+=("${OPTARG}")
-        ;;
-      S)
-        search=true
         ;;
       w)
         pager="column"
         ;;
       a)
-        xtradir="${OPTARG}"
+        if [ -d "${OPTARG}" ]; then
+          xtradirs+=( "${OPTARG}" )
+        else
+          warn "${OPTARG} is not a directory.  ignoring."
+        fi
+        ;;
+      c)
+        cterm="${OPTARG}"
+        ;;
+      s)
+        sterm="${OPTARG}"
+        ;;
+      A)
+        sc_AND=true
+        ;;
+      O)
+        sc_OR=true
+        ;;
+      d)
+        dpHelpers=true
         ;;
       h)
         usage
@@ -1113,14 +1242,39 @@ EOF
     esac
   done
   shift $(($OPTIND -1))
-  local _argc_post=$1
+  local _argc_post=$1 # for debugging purposes only ATM.  Consider doing fuzzy
+                      # search on function_name / sterm if trailing positional
+                      # args exist
+  if [ -n "$_argc_post" ]; then
+    warn "found trailing positional arg $_argc_post, did you intend -s or -F?"
+    warn "will ignore and try to proceed with remainder of options."
+  fi
+
+  # if the user gave us -F $func_names on the command line, lets dedup
   array_to_set "functions"
 
-  _pfunctions_to_array() {
+  # these are designed to be as similar as possible so that likely we can
+  # further simplify by putting the grep and opts in vars
+  _functions_from_file() {
+    # func_name; func_regex; and file are expected to be defined in the
+    # calling scope, as is funcs_found  if func_name is empty, sed will noop
+    # and funcs_found+=( "$line" ) will fall through naturally.  probably ok
+    # if file is empty too, as long as greo can handle that
     while IFS= read -r line; do
       funcdef=$(echo "$line" | sed "s/\($func_name\)\([(].*\)/\1/g")
-      [ -n "$funcdef" ] && funcs_in_file+=( "$funcdef" )
+      [ -n "$funcdef" ] && funcs_found+=( "$funcdef" )
     done < <(pcre2grep ${pcre2grepopts[@]} "$func_regex" "$file"); ret=$?;
+    return $ret
+  }
+
+  # TODO: test setting grep=(pcre2grep|dgrep), grabbing the appropriate opts
+  # and letting empty $file handle itself and eliminate the redundant private
+  # function
+  _functions_from_dgrep() {
+    while IFS= read -r line; do
+      funcdef=$(echo "$line" | sed "s/\($func_name\)\([(].*\)/\1/g")
+      [ -n "$funcdef" ] && funcs_found+=( "$funcdef" )
+    done < <(dgrep ${dgrepopts[@]} "$func_regex"); ret=$?;
     return $ret
   }
 
@@ -1134,64 +1288,263 @@ EOF
       sed 's/\(.*\) || //g'|
       sed 's/\#.*//g'|
       sed 's/()//g') # remove parens and brackets
-                              # TODO: will need to be updated
-                              # if we still want to lazily
-                              # support c
+                      # TODO: will need to be updated
+                      # if we still want to lazily
+                      # support c
     if [ -n "$processed" ]; then echo "$processed"; return 0; fi
+    # either there will be processed data or criteria haven't been met
     return 1
   }
-  array_to_set "functions"
-  i=0
-  unset funcs_in_file
-  funcs_in_file=()
+
+  # process any provided file first for function names; lets make sure we
+  # sanity check opts and args, we can either search in files or directories
+  # but currently not both in the same command
   if [ -f "${file}" ]; then
+
+    #### Error conditions with invalid argument combinations
+    if tru "$dpHelpers"; then # error condition bad use of args EINVAL
+      em="-f file searches cannot be combined with directory / env searches "
+      em+="that utilize \$D and dgrep.  -f and -d not valid together."
+    fi
+
+    if [ "${#xtradirs}" -gt 0 ]; then # currently don't support searching
+                                      # specific files and dirs in ths same cmd
+      em="-a directory searches cannot be added on to -f file searches "
+      em+="these should be split into separate commands or a directory should "
+      em+="be provided that contains the file and -f should be removed."
+    fi
+
+    if [ -n "$em" ]; then
+      err "$em"; return $EINVAL;
+    fi
+
     if [ "${#functions[@]}" -gt 0 ]; then
+      Ff_search=true # probably unittest these search types
       for func_name in "${functions[@]}"; do
         function_regex func_regex "$func_name"
-        _pfunctions_to_array
+        _functions_from_file # adds to funcs_found
       done
     else
+      # here we get all functions in the file when we're provided a file
+      # but no specific function names, we'll filter for sterm and cterm later
       func_regex="$BASH_FUNCTION_PCREREGEX"
-      _pfunctions_to_array
+      _functions_from_file # adds to funcs_found
     fi
-    for linefunction in "${funcs_in_file[@]}"; do
-      lineno=$(echo "$linefunction" | cut -d":" -f1)
-      fline=$(echo "$linefunction" | cut -d":" -f2)
-      { fname=$(_process_line "$fline") &&
-        { if $flinenos; then
-            printf "%d " "$lineno"
-          fi
-          if ! $onlylinenos; then
-            printf "%s\n" "$fname"
-          fi
-          ((i++)) }
-      } || continue
-    done | $pager
-  elif $search; then
-    if [ "${#functions[@]}" -eq 0 ]; then
-      err "search only makes sense with function names"
-      return 5;
+
+  else # no file can be found to search in, handle error conditions if
+       # the user provided a file
+
+    if [ -e "$file" ]; then # we -f above, if that's false, -e means dir or
+                            # some non-regular file exists
+      ef="received -f $file but $file is not a regular file. "
+      ef+="for directory searches, please use -a.  Other special file types "
+      ef+="are not supported."
+
+    elif [ -n "$file" ]; then # the user provided -f $file, but its not on
+                              # the file system in any way
+
+      ef="received -f $file but could not find $file."
+
+    fi # we have an ef error, or no $file if no match, advance below next err
+
+    if [ -n "$ef" ]; then
+      err "$ef"; return 2; # check for file handling error codes and add
+                           # here and to globals TODO: mt
+    fi # errored and returned ef 2
+
+    ####
+    # no files provided, search for funcs using dgrep
+
+    #### Custom, user specified dgrep search perimter expansion (-d)
+    if tru "$dpHelpers"; then  # this should turn into a flag specific
+                              # to dpHelpers, which is sloppy, but can
+                              # perhaps provide a template for a more
+                              # generic set of custom user-important dirs
+      if ! [ -d "$DPHELPERS" ]; then
+        { type -p cddph > /dev/null 2>&1 && cddph; } ||
+        { [ -d "$HOME/src/dpHelpers" ] && DPHELPERS="$HOME/src/dpHelpers"; };
+      fi
+      # we should now have DPHELPERS and lib/bash if its sane; if not
+      # throw a warning and move on.
+      if [ -d "$DPHELPERS" ] && [ -d "$DPHELPERS/lib/bash" ]; then
+        dgrepopts+=( "--addl-dirs=$DPHELPERS/lib/bash" )
+      else
+        warn "Could not add DPHELPERS to function_finder"
+      fi # either we found dphelpers or we warned
+    fi # matched means -d
+
+    #### Get any manually added dirs to expand perimeter (-a)
+    if [ "${#xtradirs}" -gt 0 ]; then # we already error checked these are real dirs
+      for xtradir in "${xtradirs[@]}"; do
+        dgrepopts+=("--addl-dirs=\"$xtradir\"");
+      done
+    fi # matched means -a
+
+    #### Start with user provided function names (-F)
+    if [ "${#functions[@]}" -gt 0 ]; then
+      dF_search=true # just bookkeeping at this point
+      for func_name in "${functions[@]}"; do
+        function_regex func_regex "$func_name"
+        _functions_from_dgrep # adds to funcs_found
+      done
+    fi # matched means -F
+
+    #### Whether or not -F, we may have search terms for the func name (-s) or
+    #### search terms for the function body (-c) using OR (-O) or AND (-A)
+    #### note the sc_AND flag is not checked in the code, but its condition
+    #### should be implied by what's left after the continues are filtered out
+    if [ -n "$sterm" ]; then # TODO: support multiple sterms?
+      ds_search=true; s_search=true;
+      function_substring_regex func_regex "$sterm"
+      _functions_from_dgrep
+    fi # matched means -s
+
+
+    if [ -n "$cterm" ]; then
+      dc_search=true; c_search=true;
+       # use function body regex for substring search
+    fi # matched means -c
+
+  fi # if user provided a file, we did _functions_from_file, if file was bad
+     # or no file provided, we handled the errors or did _functions_from_dgrep
+
+  # now in either case, if we found anything, our results array should be
+  # populated and we can filter and print.  Below is probably redundant with what's
+  # below that, but we did bookkeeping first.  TODO: simplify and cleanup
+
+  # for the moment, this just tells us explicitly what searches are in scope
+
+  if [ -n "$sterm" ] && [ -n "$cterm" ]; then # both s and c, we should have
+                                              # sc_OR or sc_AND for this to
+                                              # be sane and deliberate
+    if [ -z "$sc_AND" ] && [ -z "$sc_OR" ]; then # move this error checking to
+                                                 # opt handling
+      em="When both -c and -s are provided, either -O (OR) or -A (AND)"
+      em+="should be specified so that searches are unambiguous."
+      err "$em"; return $EINVAL
     fi
-    dgrepopts=("-p" "-c" "-l" "-n" "--filenames-only")
-    if is_mac && [ -n xtradir ]; then
-      { type -p cddph &&
-        cddph &&
-        [ -d "$DPHELPERS/lib/bash" ] &&
-        dgrepopts+=("--addl-dirs=$DPHELPERS/lib/bash");
-      } || {
-        DPHELPERS="$HOME/src/dpHelpers" &&
-        [ -d "$DPHELPERS/lib/bash" ] &&
-        dgrepopts+=("--addl-dirs=$DPHELPERS/lib/bash");
-      } || { warn "Could not add DPHELPERS to function_finder"; }
+    F_bodies=true
+    # record keeping is overzealous and can probably be simplified
+    sc_search=true
+    # sc_search means either fsc or dsc, depending on whether we have a file
+    { [ -f "$file" ] && fsc_search=true; } || dsc_search=true;
+  else
+    if [ -n "$sterm" ]; then
+      s_search=true
+      { [ -f "$file" ] && fs_search=true; } || ds_search=true;
     fi
-    for fname in "${functions[@]}"; do
-      function_regex dgrepfuncsearcher "$fname"
-      # echo "$fname:"
-      dgrep ${dgrepopts[@]} "$dgrepfuncsearcher"
-    done
+    if [ -n "$cterm" ]; then
+      F_bodies=true
+      c_search=true
+      { [ -f "$file" ] && fc_search=true; } || dc_search=true;
+    fi
   fi
-  #echo
+
+  # we'll use the above search type flags to do soe filtering and grab
+  # function bodies as we come across functions if needed
+  for linefunction in "${funcs_found[@]}"; do
+    # line function is a return line from one of our greps, we parse for
+    # line number and then process the line to clean it up
+    lineno=$(echo "$linefunction" | cut -d":" -f1)
+    fline=$(echo "$linefunction" | cut -d":" -f2)
+
+    # if _process_line failed, there may be some criteria not met and
+    # we drop the line.  Its not necessarily an error condition.
+    # but is necessary to move forward with this iteration of the loop
+    if fname=$(_process_line "$fline"); then
+
+      # reset Fbody, just in case
+      Fbody=
+
+      # now we are at the level of individual functions and need to check
+      # if we have search criteria and whether we need function body
+      # text or other info
+      if tru "$F_bodies"; then
+        Fbody="$(show-function "$fname")"
+      fi
+
+      # these will be redundant for ds_searches, but allows us to weave in
+      # *c_searches with only the overhead of a redundant grep per func
+      if tru "$s_search" || tru "$sc_search"; then
+
+        if ! grep -q "$sterm" <<< "$fname"; then
+
+          # these may be already handled, but for completeness
+          if tru "$sc_search" && "$sc_AND"; then continue; fi
+          if tru "$s_search" && untru "$c_search"; then continue; fi
+
+          # sterm is specified and not present in the function name
+          # so we skip to the next function in the loop.
+          if tru "$sc_search" && tru "$sc_OR"; then
+            # this is when the sterm did not match, sc_OR is true, meaning
+            # user wants the function if the cterm is in the body regardless
+            # of whether the sterm is in the name
+            if ! grep -q "$cterm" <<< "$Fbody"; then
+              # cterm not in body, throw this function out
+              continue
+            fi
+          else
+            # sterm does not match and $sc_OR is false, so don't care
+            # whether cterm matches, we toss this function
+            continue
+          fi # end sc OR conditions
+        fi # inside this if is if sterm match failed, if it matched, the
+           # function will move to lines below
+
+      fi # inside this if, we handled conditions for an s or sc_search that might
+         # result in throwing out this function because a condition doesn't match
+
+      # if any type of c_search is present, we need the function body
+      if tru "$F_bodies"; then
+        # if the cterm isn't in the function body
+        if ! grep -q "$cterm" <<< "$Fbody"; then
+          # the c_search has failed, if its an AND or only c_search, throw it out
+          if { tru "$sc_search" && tru "$sc_AND"; } || tru "$c_search"; then
+            continue
+          fi
+        fi # if we survived here, the cterm is in the function body
+      fi # or there is no cterm and no function body
+
+      # so now we should only arrive here for functions that match any
+      # of our search conditions, so we print line numbers if requested and
+      # function names of any still standing and increment the counter
+      if $flinenos; then
+        printf "%d " "$lineno"
+      fi
+      if ! $onlylinenos; then
+        printf "%s\n" "$fname"
+      fi
+
+      # and if we were asked to search function bodies, we print those as
+      # well, though we may want to consider printing a summary of matches
+      # like dgrep or allowing the user to specify what they want to see
+      # in hopes of avoiding printing big long nasty functions and losing
+      # more important stuff as a result.  We still only print linenumbers
+      # of function declarations if -L
+      if [ -n "$Fbody" ] && untru "$onlylinenos"; then
+
+        # we saud if we're printing function bodies, we'd ignore any pager
+        # flags...
+        pager=cat
+        local IFS=$'\n'
+        for line in $Fbody; do # TODO, when -l specified, function body
+                               # should also have line numbers.
+          # we'll indent just a bit back from the function names and hope
+          # the source code is sanely formatted, their indentations should
+          # be maintained below ours
+          printf "    %s\n" "$line"
+        done
+      fi # if we had a function body and were not told to only print linenos
+         # we printed that function
+
+    fi # if we could process the line, met all criteria, we matched
+       # an fname here and processed the inside of the if block
+
+    # the pipe is a noop if pager is cat, if we're only function names and -w
+    # the pager is column and we should display wide
+  done | $pager # done is for the loop over the funcs_found results array
 }
+
 
 print_function() {
   usage() {
@@ -1315,8 +1668,12 @@ EOF
     if functiontext="$(print_function -f "${functionsource?}" "${functionname?}")"; then
       # doublecheck
       if pcre2grep -n -M '(?s)^[A-z0-9_]+\(.*(?=^\}$)' <<< "${functiontext?}"; then
-        if ! eval "${functiontext?}"; then err ${e[5]} "$functiontext"; return 5; fi
-        if ! export -f "${functionname?}"; then err ${e[6]}; return 6; fi
+        if tru "$only_print"; then
+          echo "${functiontext?}"
+        else
+          if ! eval "${functiontext?}"; then err ${e[5]} "$functiontext"; return 5; fi
+          if ! export -f "${functionname?}"; then err ${e[6]}; return 6; fi
+        fi
       else
         err "${e[1]}"
         return 1
@@ -1330,9 +1687,10 @@ EOF
   }
   local force=false
   local quiet=false
+  local only_print=false
   unset OPTIND
   unset optchar
-  optspec="fqha:"
+  optspec="Pfqha:"
   while getopts "${optspec}" optchar; do
     case "${optchar}" in
       f)
@@ -1343,6 +1701,9 @@ EOF
       ;;
       a)
       also_search="$OPTARG"
+      ;;
+      P)
+      onlu_print=true
       ;;
       h)
       usage
@@ -1357,7 +1718,7 @@ EOF
     if tru $force; then
       unset -f "$fname"
     else
-      if untru "$quiet"; then
+      if untru "$quiet" && untru "$only_print"; then
         echo "$fname already loaded in env as:"
         declare -pf "$fname"
         echo "to explicit force reload, run load-function -f $fname"
@@ -1376,6 +1737,10 @@ EOF
   # confirm
   is_function "$fname"
   return $?
+}
+
+show-function() {
+  load-function -P $@
 }
 
 # does a best effort search of a bash source file $2
@@ -1568,10 +1933,10 @@ function get_cache_for_OS () {
 }
 get_cache_for_OS
 shopt -s expand_aliases
-  case $- in
-    *i*)
-    s['util.sh']="${s['util.sh']}+$OSUTIL"
-  ;; esac
+case $- in
+  *i*)
+  s[util.sh]="${s[util.sh]}+$OSUTIL"
+;; esac
 sosutil
 
 function user_feedback() {
