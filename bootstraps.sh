@@ -1,31 +1,7 @@
 #!/usr/bin/env bash
-if ! declare -F is_function > /dev/null 2>&1; then
-  is_function() {
-    ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
-  }
-fi
 
-# for now, we consider dependency on my bashrc, osutil, and util hard
-# requirements with a TODO to untangle the mess.
-# if [ -z "$D" ]; then
-#   if is_function "detect_d"; then detect_d; else
-#     if [[ "${BASH_SOURCE[0]}" == */* ]]; then
-#       dbs=$(dirname "${BASH_SOURCE[0]}")
-#       if [ -n "$dbs" ] && [ -f "$dbs/util.sh" ]; then
-#         D="$dbs"
-#       fi
-#     fi
-#     if [ -z "$D" ]; then if [ -n "$(pwd)/util.sh" ]; then D="$(pwd)"; fi; fi
-#   fi
-#   if [ -z "$D" ]; then
-#     echo "couldnt find the dots repo, please set D=path";
-#     return 1
-#   fi
-# fi
-
-if ! is_function "fsts"; then source "$D/util.sh" && sourced+=("$D/util.sh"); fi
 if ! is_function "confirm_yes" || ! is_function "exists"; then
-  source "$D/user_prompts.sh" && sourced+=("$D/user_prompts.sh")
+  ssource "$D/user_prompts.sh"
 fi
 
 # since by definition, we wont have arrays yet, this is a hacky prototype
@@ -61,8 +37,15 @@ BREW_BATCH_INSTALLS=(
   scrcpy
   lsusb
   cyme
+  transmit
+  sublime-text
+  sublime-merge
+  lynx
+  sloth
+  protonmail-bridge
+  transmission
+  android-platform-tools
 )
-BREW_BATCH_CASKS="transmit sublime-text sublime-merge lynx pacifist sloth protonmail-bridge transmission android-platform-tools"
 
 PATH_SOURCES='.bashrc .bash_profile .profile'
 
@@ -498,13 +481,7 @@ function new_mac_bootstrap() {
       return 1
     fi
   fi
-  if ! is_completed "BREW_BATCH_CASKS"; then
-    echo "Installing casks $BREW_BATCH_CASKS"
-    if ! brew install --cask $BREW_BATCH_CASKS; then
-      se "exit $?: !! please  fix and try again"
-      return 1
-    fi
-  fi
+
   if ! type -p pipx; then
     se "no pipx, install and try again"
     return 1
