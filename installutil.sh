@@ -37,6 +37,79 @@ elif [[ $(uname) == "Darwin" ]]; then
       sudo softwareupdate --list-full-installers
     fi
   }
+  # depends util.sh
+  #  - wget-download-size
+  #  - is_int
+  #  - spinner-{start,stop}
+  function brew_pkg_size() {
+    verbose=false
+    if [ -z "${INF}" ]; then
+      # assume deps for colors not in env and attempt to proceed without
+      INF= ; STAT= ; RST= ;
+    fi
+    if [[ "${1:-}" =~ \-v ]]; then verbose=true; shift; fi
+    pkg="${1:-}"
+    if [ -t 1 ] && ! $verbose; then spinner-start; fi
+    cat="$(brew cat "$pkg")"
+    if tru $verbose; then >&2 echo "${INF}brew cat: ${STAT}$cat${RST}"; fi
+    urlline="$(grep -m1 url <<< "$cat")"
+    if tru $verbose; then >&2 echo "${INF}extracted stable: ${STAT}$urlline${RST}"; fi
+    url="$(echo "$urlline" |awk '{print$2}')"
+    if tru $verbose; then >&2 echo "${INF}extracted url: ${STAT}$url${RST}"; fi
+    noquotes=$(stripquotes "$url")
+    if tru $verbose; then >&2 echo "${INF}noquotes url: ${STAT}$url${RST}"; fi
+    length="$(wget-download-size $noquotes)"
+    if tru $verbose; then >&2 echo "${INF}wget output: ${STAT}$length${RST}"; fi
+    if [ -t 1 ] && ! $verbose; then spinner-stop; fi
+    if [ -n "$length" ] && is_int "$length"; then
+      echo "$length"
+      return 0
+    fi
+    return 1
+  }
+
+  function pkg_footprint() {
+    if [[ "${1:-}" =~ \-(b|\-breakdown) ]]; then
+      shift
+      pkg="${1:-}"
+      printf "%s " "$pkg"
+      size="$(brew_pkg_size "${1:-}")"
+      bytes_converter "$size" MB
+      deps=()
+      sizes=()
+      while IFS=$'\n' read -r line; do
+        deps+=("$line")
+      done < <(brew deps "${1:-}")
+      total="${#deps[@]}"
+      if [ -t 1 ]; then progress-init; fi
+      ctr=0
+      for P in "${deps[@]}"; do
+        if [ -t 1 ]; then progress "$ctr" "$total" "Adding dependency $P"; fi
+        sizes+=("$(brew_pkg_size "$P")")
+        ((ctr++))
+      done
+      echo "dependencies: "
+      ctr=0
+      for P in "${deps[@]}"; do
+        printf "   %s: " "$P"
+        bytes_converter "${sizes[$ctr]}" MB
+      done
+    else
+      pkg="${1:-}"
+      # https://github.com/Homebrew/brew/issues/18373
+      accumulator=$(brew_pkg_size "${1:-}")
+      dep_count=0
+      if [ -t 1 ]; then progress-init; fi
+      for P in $(brew deps "${1:-}"); do
+        if [ -t 1 ]; then progress "$dep_count" "$total" "calculating dependency $P"; fi
+        ((accumulator+=$(brew_pkg_size "$P")))
+        ((dep_count++))
+      done
+      spinner-stop
+      printf "${1:-} with $dep_count dependencies: "
+      bytes_converter "$accumulator" MB
+    fi
+  }
 
 fi
 
