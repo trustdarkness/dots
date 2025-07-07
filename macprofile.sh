@@ -12,7 +12,7 @@ function brew_detect_arch() {
       homebrew_prefix=${arm_homebrew_prefix}
       # echo "Start Home Brew as ARM64 M1 Sillicon ✅"
     ;;
-    "i386"|"x86-64")
+    "x86_64")
       homebrew_prefix=${intel_homebrew_prefix}
       # echo "Start Home Brew under Rosetta 2 Intel Emulation x86_64 🤔"
     ;;
