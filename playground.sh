@@ -222,12 +222,7 @@ EOF
 #   fi
 # }
 
-function compgenv() {
-  for name in $(compgen -v); do
-     printf "%s=%s\n" "$name" "${!name}"
-  done
-  return 0
-}
+
 
 alias alias_print='alias | sed "s/alias //g'
 
@@ -293,3 +288,119 @@ EOF
 #   --arg 'declare -F' "$(jq -n $(declare_to_jqconst 'declare -F') '\$ARGS.named')" \
 #   --arg 'set -o posix; set' "$(jq -n $(setoposix_to_jqconst) '\$ARGS.named')"
 # EOF
+
+# depends
+# - existence.sh
+#  * undefined
+# - filesystemarrayutil.sh
+#  * in_array
+function namerefs_bashscript_add() {
+  script="${1:-}"
+  if ! is_bash_script; then
+    se "please provide a path to a bash script"
+  fi
+  # our main container for names
+  declare -ga _names
+
+  # case: global function names
+  _names=$(function_finder "$script")
+
+  # get variables declared as local for exclusion (this may result in false positives)
+  declare -ga localvars
+  declare -a localvarlines
+  printf -v sedstr 's/%s/One: \\1/g' "$BASH_LOCAL_VAR_SED_EXTRACT_NAME2_REGEX"
+  while IFS= read -r matchedline; do
+    # printf "($matchedline) "
+    lname=$(echo "$matchedline"| sed 's/.*local//g'| # remove local
+                                        sed 's/-[A-z]//g') # remove any flags
+    if [[ "$lname" == *'='* ]]; then
+      lname=$(echo "$lname" | cut -d'=' -f1)
+    fi
+    localvars+=( "$lname" )
+  done < <(pcre2grep --null "$BASH_LOCAL_VAR_PCREREGEX" "$script")
+  # localvarlines=( $(grep '^[[:space:]]*local[[:space:]]*[[-][[:alpha:]]]*[[:space:]]*[[[:alnum:]][_]]*' "$script") )
+  # for line in "${localvarlines[@]}"; do
+  #   wequal=$(echo "$line"|grep "=")
+  #   if [ $? -eq 0 ]; then
+  #     # we're expecting something like "local foo=bar" and we want foo
+  #     localvars+=( $(echo "$wequal" | awk '{print$1}' |awk -F'=' '{print$1}') )
+  #   else
+  #     localvars+=( $(echo "$line" | awk '{print$2}') )
+  #   fi
+  # done
+
+  # case variables declared by assignment
+  declare -a vars
+  vars=$(grep '^[[:space:]]*[[:alnum:]]*_*[[:alnum:]]*=' "$script" |awk -F'=' '{print$1}'|xargs)
+
+  # case: names declared in the global scope
+  vars+=( $(grep ^declare "$script" |awk '{print"\x22"$3"\x22"}') )
+
+  # case: variables assigned by printf
+  vars+=( $(grep "printf -v" "$script" |awk '{print"\x22"$3"\x22"}') )
+
+  # only populate from the above 2 cases when not declared with the local keyword
+  for var in "${vars[@]}"; do
+    if ! in_array "$var" "localvars"; then
+      var=$(singlequote "$var")
+      _names+=( "$var" )
+    fi
+  done
+
+  # names declared not in the global namespace but with -g
+  printf -v declaregregex '^[[:space:]]*declare -[%s]*g[%s]*' "$VALID_DECLARE_FLAGS" "$VALID_DECLARE_FLAGS"
+  _names+=( $(grep "$declaregregex" "$script" |awk '{print"\x22"$3"\x22"}') )
+
+  noextbasename=$(basename "$script"|sed 's/.sh//g')
+  expected_name="NAMEREFS_${noextbasename^^}"
+  existing_namerefs="$(grep -E '^NAMEREFS_[A-z]+\=\(.*\)$' "${script}")"
+  if [ $? -eq 0 ]; then
+    name=$(echo "$existing_namerefs"|awk -F'=' '{print$1}')
+    if [[ "$name" == "$expected_name" ]]; then
+      eval "$existing_namerefs"
+    else
+      se "found $name in $script which didn't match expected $expected_name"
+      return 1
+    fi
+  fi
+  if undefined "$expected_name"; then
+    declare -a "$expected_name"
+  fi
+  local -n script_namerefs="$expected_name"
+
+  script_namerefs+=( $_names )
+  # make sure we're quoted for printing
+  declare -a out_namerefs
+  for nameref in "${script_namerefs[@]}"; do
+    if ! is_quoted "$nameref"; then
+      out_namerefs+=( $(singlequote "$nameref") )
+    else
+      out_namerefs+=( "$nameref" )
+    fi
+  done
+  # remove the original reference
+  sed -ri.bak 's/^NAMEREFS_[A-z]+\=\(.*\)$//g' "$script"
+  # add it in a nice-to-look-at format:
+  printf "\n\n${expected_name}=(" >> "$script"
+  for quoted_nameref in "${out_namerefs[@]}"; do
+    printf "$quoted_nameref" >> "$script"
+  done
+  printf ")\n" >> "$script"
+}
+
+
+# If for any sourced file, you'd like to be able to undo the
+# changes to  your environment after it's sourced, track the
+# namerefs (variable, function, etc names) in an array named
+# sourcename_namerefs where the sourced filename is
+# sourcename.sh, when you want to clean the namespace of that
+# file, call cleaup_namespace sourcename, and it will be done
+# see macboot.sh for example
+function cleanup_namespace() {
+  local namespace="${1}"
+  local -n to_clean="${namespace}_namerefs"
+  to_clean=${!to_clean}
+  for nameref in "${to_clean[@]}"; do
+    unset ${nameref}
+  done
+}
