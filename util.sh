@@ -662,7 +662,16 @@ EOF
   }
   # { shopt -p expand_aliases > /dev/null 2>&1 && printf "$INF%s$RST" '* '; } || printf "$ERR%s$RST" '* ';
   grepargs=()
-  grep="$(type -p grep)"
+
+  # consider making this global
+  binfinder() {
+    if [[ "$(type -t "${1:-}")" != "file" ]]; then
+      which "${1:-}"; return $?
+    else
+      type -p "${1:-}"; return $?
+    fi
+  }
+  grep="$(binfinder grep)"; debug "before opt parsing grep is $grep";
   onlyfiles=false
   print_command=false
   nocolor=false
@@ -671,8 +680,8 @@ EOF
   while [[ "${1:-}" == "-"* ]]; do
     inform "${1:-}"
     if [[ "${1:-}" =~ \-p ]]; then
-      if ! grep="$(type -p pcre2grep)"; then
-        grep="$(type -p grep)"
+      if ! grep="$(binfinder pcre2grep)"; then
+        grep="$(binfinder grep)"
         warn "pcre2grep not installed; using $grep."
       fi
       shift
@@ -709,6 +718,7 @@ EOF
       shift
     fi
   done
+  debug "after opt parsing grep is $grep"
   sterm="$@"
   if [ -z "$D" ]; then
     if confirm_yes "D not in env, do you want to search PATH?"; then
