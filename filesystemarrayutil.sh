@@ -344,6 +344,27 @@ function array_intersection() {
   echo "${INTERSECTION[@]}"
 }
 
+# populates global array SET_DIFFERENCE with array1 - array2 for the arrays
+# that the namerefs for arg1 and arg2 point to.
+function set_difference() {
+  declare -ga SET_DIFFERENCE
+  SET_DIFFERENCE=()
+  name1=$1[@]
+  array1=("${!name1}")
+  name2=$2[@]
+  array2=("${!name2}")
+  se "a1 : ${array1[@]} a2 : ${array2[@]}"
+  for i in "${array1[@]}"; do
+      skip=
+      for j in "${array2[@]}"; do
+          [[ $i == $j ]] && { skip=1; break; }
+      done
+      [[ -n $skip ]] || SET_DIFFERENCE+=("$i")
+  done
+  declare -p SET_DIFFERENCE
+  return 0
+}
+
 # given a sorted array of files with absolute paths, return an array of just basenames.
 # note: function will behave with unsorted arrays, but the goal would be to match back up
 # with the paths later, in which case, sorting is ideal and not performed by this function
@@ -594,58 +615,33 @@ function symlink_child_dirs () {
   fi
 }
 
-samepath() {
+is_luks() {
+  if [[ "${1:-}" =~ \-v ]]; then local verbose=true; shift; fi
+  local disk="${1:-}"
+  if sudo cryptsetup isLuks "$disk"; then
+    if $verbose; then echo "$disk is luks"; fi
+    return 0
+  fi
+  return 1
+}
 
-  # set -x
-
-  return_e() (
-  trap 'e=( \
-    [0]="N/A" \
-    [1]="Argument one ($one) does not seem to be a valid path" \
-    [2]="Argument two ($two) does not seem to be a valid path" \
-    [3]="Both paths are mounted from the same device ($onemount), but dont seem to have the same path from their respective mountpoints." \
-    [4]="These two paths are mounted from different devices ($one from $onemount; $two from $twomount)" \
-    [5]="This code should be unreachable." \
-  ) \
-  le=$?; [ $le -gt 0 ] && err ${e[$le]}; trap RETURN' RETURN
-    # set -x
-    one="${1:-}"
-    two="${2:-}"
-    if ! is_absolute "$one"; then
-      one="$(realpath "$one")"
-    fi
-    if ! is_absolute "$two"; then
-      two="$(realpath "$two")"
-    fi
-    ! [ -e "$one" ] && return 1
-    ! [ -e "$two" ] && return 2
-    [[ "$one" == "$two" ]] && return 0 # trivial case
-    onemount="$(findmnt -n -o SOURCE --target "$one")"
-    twomount="$(findmnt -n -o SOURCE --target "$two")"
-    if [[ "$onemount" == "$twomount" ]]; then
-      readarray -t mounts < <(findmnt -n "$onemount" -o TARGET)
-      { [[ "${one/${mounts[0]}/}" == "${two/${mounts[1]}/}" ]] && return 0; } || true
-      { [[ "${one/${mounts[1]}/}" == "${two/${mounts[0]}/}" ]] && return 0; } || true
-      return 3
-    else
-      return 4
-    fi
-    return 5
-  )
-  return_e $@
+isLuks() {
+  if [[ "${1:-}" =~ \-v ]]; then local verbose=true; shift; fi
+  local disk="${1:-}"
+  verbose=$verbose is_luks "$disk"
+  return $?
 }
 
 safe_mount_x() {
   mnt=$1
   uuid=$2
-  isLuks=false
   disk="/dev/disk/by-uuid/$uuid"
-  if sudo cryptsetup isLuks "$disk"; then isLuks=true; fi
-  if isLuks; then mapped="/dev/mapper/luks-$uuid"; fi
-  mounted=$(mountpoint $mnt);
-  if [ $? -ne 0 ]; then
-    if $isLuks; then
-      udisksctl unlock -b $disk
+  luks=false
+  if is_luks "$disk"; then luks=true; fi
+  if luks; then mapped="/dev/mapper/luks-$uuid"; fi
+  if ! mountpoint $mnt > /dev/null 2>&1; then
+    if $luks; then
+      udisksctl unlock -b "$disk"
       sleep 2
       sudo mount "$mapped" "$mnt"
     else
