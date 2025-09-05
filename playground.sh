@@ -410,15 +410,18 @@ function cleanup_namespace() {
   done
 }
 
-function exit_handler() {
-  retval="${1:-}"
-  lineno="${2:-}"
-  shift; shift # the remainder of args are source files or function names
-  se "exit caught."
-  return
-}
+
 
 function strict_mode_set() {
+
+  exit_handler() {
+    retval="${1:-}"
+    lineno="${2:-}"
+    shift; shift # the remainder of args are source files or function names
+    se "exit caught."
+    return
+  }
+
   # using this within the context of running functions in an
   # interactive shell will cause you to lose your shell in a way
   # that is unconducive to a productive working environment
