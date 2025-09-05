@@ -365,6 +365,7 @@ alias vutil="vim $D/util.sh && sutil"
 alias sex="source $D/existence.sh" # heh
 alias vex="vim $D/existence && sex"
 alias mrsync="rsync $RSYNCOPTS"
+alias yt-mp3="yt-dlp -t mp3 -f 'ba[acodec^=mp3]/ba/b' -x --audio-format mp3 --embed-thumbnail --parse-metadata \"title:%(artist)s - %(title)s\" --embed-metadata"
 
 # And a few globals
 ## convenient regex to use with -v when grepping across many files
