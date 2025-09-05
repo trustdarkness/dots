@@ -27,10 +27,6 @@ if ! is_function in_array; then
   source "$D/filesystemarrayutil.sh"
 fi
 
-# definition of modern bash to at least include associative arrays
-# and pass by reference
-MODERN_BASH="4.3"
-
 # more date formats that don't seem to be mac specific in util.sh
 MACFILEINFODATEFMT="%m/%d/%Y %T"
 MACOS_LOG_DATEFMT="%Y-%m-%d" # used by the "log" command
@@ -133,10 +129,12 @@ INSTALLERS="$HOME/Downloads/_installed_${UNQUALED_HOSTNAME}"
 printf -v PLUGIN_EREGEX '(%s|%s|%s)' "${PLUGINREGEXES[@]}"
 
 # setup the environment and make functions available from dpHelpers
+# depends pathlib.sh
 function cddph() {
   export DPHELPERS="$HOME/src/dpHelpers"
   cd "$DPHELPERS"
   source "$DPHELPERS/lib/bash/lib_dphelpers.sh"
+  alias dph="python dphelpers.py"
   return 0
 }
 
@@ -584,7 +582,7 @@ function isapp() {
 function is_codesigned() {
   candidate="${1:-}"
   bn=$(basename "$candidate")
-  codesign=$(coesign_read "${candidate}")
+  codesign=$(codesign_read "${candidate}")
   if string_contains "not signed" "$codesign"; then
     se "$bn does not appear to be codesigned"
     return 1
@@ -600,10 +598,10 @@ function is_machO_bundle() {
       if ! is_codesigned "${bundledir}"; then
         return 2
       fi
-      confirmed_machO_bundle=$(coesign_read "${bundledir}" \
+      confirmed_machO_bundle=$(codesign_read "${bundledir}" \
         |grep "Mach-O"|grep "bundle"|awk -F'=' '{print$2}')
       # redundant, but handles return readably
-      grep "bundle" <<< "${confirmed_machO_bundle}"
+      grep -q "bundle" <<< "${confirmed_machO_bundle}"
       if [ $? -eq 0 ]; then
         return 0
       fi
@@ -647,7 +645,7 @@ is_machO_exe() {
   exe="${1:?Please provide full path to executable binary}"
   bn=$(basename "$exe")
   if [ -f "${exe}" ]; then
-    codesign=$(coesign_read "${exe}" 2>&1)
+    codesign=$(codesign_read "${exe}" 2>&1)
     echo "$codesign"|grep "not signed" > /dev/null 2>&1
     if [ $? -eq 0 ]; then
       se "$bn does not appear to be codesigned"
@@ -807,7 +805,7 @@ function isapplication() {
     exe="${maybeapp}"
   fi
   if machO=$(stat "${bundledir}/Contents/MacOS"); then
-    confirmed_machO=$(coesign_read "${bundledir}"|grep "Mach-O"|awk -F'=' '{print$2}')
+    confirmed_machO=$(codesign_read "${bundledir}"|grep "Mach-O"|awk -F'=' '{print$2}')
     if [ $? -eq 0 ]; then
       se "is ${confirmed_machO}"
       return 0
@@ -1736,6 +1734,7 @@ EOF
   echo -ne "\\r[${BAR_SIZE:0:0}] 0 %$CLEAR_LINE"
   total=${#files[@]}
   for file in "${files[@]}"; do
+    ((ctr++))
     if $dry; then
       printf "rm -f '%s'\n" "$file"
     else
@@ -1745,17 +1744,18 @@ EOF
       else
         sudo rm -f "$file"
       fi
-      ((ctr++))
+
     fi
   done
   ctr=0
   echo -ne "\\r[${BAR_SIZE:0:0}] 0 %$CLEAR_LINE"
-  total=${#files[@]}
+  total=${#dirs[@]}
   for dir in "${dirs[@]}"; do
+    ((ctr++))
     if $dry; then
       printf "rmdir '%s'\n" "$dir"
     else
-      progress "$ctr" "$total" "rm'ing ${dir:0:10}..."
+      progress "$ctr" "$total" "rmdiring ${dir:0:10}..."
       if can_i_write "$dir"; then
         rmdir "$dir"
       else
