@@ -825,9 +825,11 @@ compgenv() {
   return 0
 }
 
+# depends filesystemarrayutil.sh is_absolute
 samepath() {
   one="${1:-}"
   two="${2:-}"
+  load-function is_absolute
   if ! is_absolute "$one"; then
     one="$(realpath "$one")"
   fi
@@ -998,6 +1000,9 @@ function usb_drivers_reset:() {
   #modprobe ohci_pci
 }
 
+function sata_bus_scan() {
+  sudo sh -c 'for i in $(seq 0 4); do echo "0 0 0" > /sys/class/scsi_host/host$i/scan; done'
+}
 
 function diskinfo() {
   # TODO: consider adding modes for different utilities info, i.e.

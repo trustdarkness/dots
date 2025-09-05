@@ -366,6 +366,15 @@ alias sex="source $D/existence.sh" # heh
 alias vex="vim $D/existence && sex"
 alias mrsync="rsync $RSYNCOPTS"
 alias yt-mp3="yt-dlp -t mp3 -f 'ba[acodec^=mp3]/ba/b' -x --audio-format mp3 --embed-thumbnail --parse-metadata \"title:%(artist)s - %(title)s\" --embed-metadata"
+alias vsc="vim $HOME/.ssh/config"
+alias pau="ps auwx"
+alias paug="ps auwx|grep "
+alias paugi="ps awux|grep -i "
+alias rst="sudo shutdown -r now"
+alias gh="mkdir -p $HOME/src/github && cd $HOME/src/github"
+alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
+alias gc="git clone"
+export GH="$HOME/src/github"
 
 # And a few globals
 ## convenient regex to use with -v when grepping across many files

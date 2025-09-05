@@ -14,13 +14,18 @@
 # GPLv2 if it should matter
 # Most things should work on old versions of bash, but really bash 4.2+ reqd
 #
-# OS detection and loading of os-specific utils is toward the botton,
-# line 170+ish at the time of writing.
-#####################  internal logging and bookkeeping funcs
-#############################################################
 
-declare -i EX_DATAERR=65 #data format error
+
+###############################################################################
+#### 1. Global errors, UI els, external function loads, and helper functions
+###############################################################################
+
+# for consistency and readability, use globals for error codes
+# loosely modeled on linux's /usr/include/asm-generic/errno.h
+declare -i EX_DATAERR=65 # data format error
 declare -i EINVAL=22 # nvalid argument
+
+# for cli UI consistency, readability and ease of change
 declare ARROW=$'\u27f6'
 
 declare -F is_function > /dev/null 2>&1 || is_function() {
@@ -40,6 +45,25 @@ if undeclared path_append; then
 fi
 _setup_path
 path_append "$D"
+
+# TODO: what requires this?
+if ! is_function exists; then
+  source "$D/existence.sh" # ssource if debug
+fi
+
+# these are small requirements TODO: eliminate
+source "$D/filesystemarrayutil.sh" # required by function_finder
+source "$D/user_prompts.sh" # required by dgrep
+
+# initialized the helper library for the package installer
+# for whatever the detected os environment is; good for interactive
+# use below for scripts
+alias i='source "$D/installutil.sh"'
+
+# TODO: deprecate
+alias install_util_load=i
+
+alias viu="vim $D/installutil.sh && siu"
 
 # A slightly more convenient and less tedious way to print
 # to stderr, canonical in existence # TODO, check namerefs on resource
@@ -97,6 +121,91 @@ if undeclared "se"; then
   }
 fi
 
+function colnum() {
+  load-function -q empty
+  help() {
+    echo "echos the column number of substring in string if found"
+    echo "returns 0 if successful, 255 if substring not found, 1 otherwise"
+    return 0
+  }
+  substring="${1:-}"
+  string="${2:-}"
+  if empty "$substring" || empty "$string"; then
+    help 1
+  fi
+  rest=${string#*"$substring"}
+  se "$rest"
+  c=$(( ${#string} - ${#rest} - ${#substring} ))
+  if gt $c 0; then
+    echo $C
+    return 0
+  else
+    return 255
+  fi
+  return 1
+}
+
+function printcolrange() {
+  input="${1:-}"
+  start="${2:-}"
+  fin="${3:-}"
+  delim="${4:-}"
+  top="$t"
+  if lt "$fin" 0; then
+    prog='{for(i=f;i<=t'+$fin+';i++) printf("%s%s",$i,(i==t)?"\n":OFS)}'
+  else
+    prog='{for(i=f;i<=t;i++) printf("%s%s",$i,(i==t)?"\n":OFS)}'
+  fi
+  echo "$input"|awk "$start,NF$fin { print NR, $0 }"
+}
+
+function tac() {
+  tail -r $@
+}
+
+# depends: filesystemarrayutil.sh in_array
+function bytes_converter() {
+  # adapted from https://gist.github.com/sanjeevtripurari/6a7dbcda15ae5dec7b56
+  valid_tos=( "KB" "MB" "GB" "TB" "PB" )
+  converterusage() {
+    cat <<-EOF
+bytes_converter - takes a numeric bytes value and converts to human friendly formats
+
+Example:
+  $ bytes_converter 2094196 MB
+
+Second argument must be one of ${valid_tos[@]}
+EOF
+  }
+  if [ $# -lt 2 ] || [[ "${1:-}" =~ \-(h|?) ]]; then
+    converterusage
+    return 1
+  fi
+  bytes="${1:-}"
+  to="${2:-}"
+
+  load-function -q in_array
+  if ! in_array "$to" "valid_tos"; then
+    converterusage
+    return 1
+  fi
+  # echo "scale=4; $n1/($n2)" |bc
+  k_ilo=1024;
+  m_ega=$k_ilo*$k_ilo;
+  g_iga=$m_ega*$k_ilo;
+  t_era=$g_iga*$k_ilo;
+  p_eta=$t_era*$k_ilo;
+  case $to in
+    KB) let pn=$k_ilo;;
+    MB) let pn=$m_ega;;
+    GB) let pn=$g_iga;;
+    TB) let pn=$t_era;;
+    PB) let pn=$p_eta;;
+  esac
+  converted=$(echo "scale=4; $bytes/($pn)" |bc)
+  echo "$converted $to"
+}
+
 # colors for logleveled output to stderr
 TS=$(tput setaf 3) # yellow
 DBG=$(tput setaf 6) # cyan
@@ -109,7 +218,48 @@ CMD=$(tput setaf 36) # aqua
 MSG=$(tput setaf 231) # barely yellow
 RST=$(tput sgr0) # reset
 
-errcolor()(set -o pipefail;"$@" 2>&1>&3|sed $'s,.*,\e[31m&\e[m,'>&2)3>&1
+function urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
+
+function errcolor()(set -o pipefail;"$@" 2>&1>&3|sed $'s,.*,\e[31m&\e[m,'>&2)3>&1
+
+# Arg1 is needle, Arg2 is haystack
+# returns 0 if haystack contains needle, retval from grep otherwise
+# TODO: deprecate in favor of form grep -q "$needle" <<< "$haystack"
+function string_contains() {
+  echo "${@:2}"| grep -Eqi "${1:-}"
+  return $?
+}
+alias stringContains="string_contains"
+
+function startswith() {
+  local query="${2:-}"
+  local starts_with="${1:-}"
+  if [[ "$query" =~ ^$starts_with.* ]]; then
+    return 0
+  fi
+  return 1
+}
+
+ # super sudo, enables sudo like behavior with bash functions
+function ssudo () {
+  [[ "$(type -t "$1")" == "function" ]] &&
+    ARGS="$@" && sudo -E bash -l -c "$(declare -f $1); \"$ARGS\""
+}
+alias ssudo="ssudo "
+
+function is_alpha_char() {
+  local string="${1:-}"
+  if [ -n "$string" ] && [[ "$string" =~  [A-z] ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# end 1. Globals
+
+###############################################################################
+#### 2. Date and Time global and helper funcs
+###############################################################################
 
 # FSTS moved to .bash_profile
 LAST_DATEFMT="%a %b %e %k:%M" # used by the "last" command
@@ -163,6 +313,12 @@ function is_older_than_1_wk() {
   fi
   return 1
 }
+
+# end 2. date and time
+
+###############################################################################
+#### 3. int testing and comparison with lazy defaults for empty vars
+###############################################################################
 
 # To help common bash gotchas with [ -eq ], etc, this function simply
 # takes something we hope to be an int (arg1) and returns 0 if it is
@@ -322,6 +478,12 @@ function boolean_or {
   return 1
 }
 
+# end 3. int handling
+
+###############################################################################
+#### 4. OS detection and working environment setup
+###############################################################################
+
 # Normalize os detection for consistency, hopefully reducing the chance
 # of simple typo, etc mistakes and increasing readability
 function is_mac() {
@@ -336,6 +498,11 @@ function is_linux() {
     return 0
   fi
   return 1
+}
+
+# Returns the architecture of the running system
+function system_arch() {
+  uname -m
 }
 
 function what_os() {
@@ -433,7 +600,15 @@ function setup_working_env() {
   fi
 }
 setup_working_env
-shopt -s expand_aliases
+
+sosutil
+
+# end 4. os detect and env setup
+
+###############################################################################
+#### 5. Logging
+###############################################################################
+
 mkdir -p "$LOGDIR"
 
 # Templates for colored stderr messages
@@ -640,9 +815,12 @@ _prcao() {
   e=$(echo "${4:-}"|xargs)
   printf "${CMD}cmd:$RST %s ${CMD}args:$RST %s ${CMD}stdout:$RST %s ${CMD}stderr:$RST %s " "$c" "$a" "$o" "$e"
 }
-##################### end logging code #########################################
 
-##################### progresss bars and spinners ##############################
+# end 5. logging
+
+###############################################################################
+#### 6. Progress bar, spinners, and associated setup, teardown, helpers
+###############################################################################
 
 # simple / generic progress bar
 # Args: finished, total, message
@@ -690,26 +868,11 @@ spin() {
   while : ; do for X in '┤' '┘' '┴' '└' '├' '┌' '┬' '┐' ; do echo -en "\b$X" ; sleep 0.1 ; done ; done
 }
 
-# TODO do these belong in .bashrc or .bash_aliases?
-alias vsc="vim $HOME/.ssh/config"
-alias pau="ps auwx"
-alias paug="ps auwx|grep "
-alias paugi="ps awux|grep -i "
-alias rst="sudo shutdown -r now"
-alias gh="mkdir -p $HOME/src/github && cd $HOME/src/github"
-alias gl="mkdir -p $HOME/src/gitlab && cd $HOME/src/gitlab"
-alias gc="git clone"
-export GH="$HOME/src/github"
+# end 6. progress and spin
 
-# TODO: what requires these?
-if ! is_function exists; then
-  source "$D/existence.sh" # ssource if debug
-fi
-
-source "$D/filesystemarrayutil.sh" # ssource if debug
-source "$D/user_prompts.sh" # ssource if debug
-
-function urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
+###############################################################################
+#### 7. Introspect and search code and functions
+###############################################################################
 
 # search code in the $D directory, this repo in other words
 # depends user_prompts.sh confirm_yes
@@ -878,240 +1041,6 @@ EOF
   return 1
 }
 
-function symlink_verbose() {
-  se "linking target $target from link name $linkname"
-  ln -sf "$target" "$linkname"
-  return $?
-}
-
-# TODO: make this less brittle
-function move_verbose() {
-  load-function -q tru
-  mvv_force=false
-  if [[ "${1:-}" == "-f" ]]; then
-    mvv_force=true
-    shift
-  fi
-  printf "moving %s to %s" "${1:-}" "${2:-}"
-  if tru $mvv_force; then
-    echo " with -f"
-    mv -f "${1:-}" "${2:-}"
-    return $?
-  else
-    echo
-    mv "${1:-}" "${2:-}"
-    return $?
-  fi
-}
-
-function lns() {
-  local target="${1:-}"
-  local linkname="${2:-}"
-  if [ -h "$linkname" ]; then
-    ln -si "$target" "$linkname"
-  elif [ -f "$linkname" ]; then
-    move_verbose "$linkname" "$linkname.bak"
-    symlink_verbose "$target" "$linkname"
-    return $?
-  else
-    symlink_verbose "$target" "$linkname"
-    return $?
-  fi
-}
-
-function lnsdh() {
-  lns "$D/${1:-}" "$HOME/${1:-}"
-  return $?
-}
-
-function gpgvc() {
-  gpg --verify < <(xclip -o)
-  return $?
-}
-
-function gpgic() {
-  gpg --import < <(xclip -o)
-  return $?
-}
-
-function colnum() {
-  load-function -q empty
-  help() {
-    echo "echos the column number of substring in string if found"
-    echo "returns 0 if successful, 255 if substring not found, 1 otherwise"
-    return 0
-  }
-  substring="${1:-}"
-  string="${2:-}"
-  if empty "$substring" || empty "$string"; then
-    help 1
-  fi
-  rest=${string#*"$substring"}
-  se "$rest"
-  c=$(( ${#string} - ${#rest} - ${#substring} ))
-  if gt $c 0; then
-    echo $C
-    return 0
-  else
-    return 255
-  fi
-  return 1
-}
-
-# https://www.reddit.com/r/sysadmin/comments/t5xnco/curl_wtfismyipcomtext_fast_way_to_find_a/
-ip-get-external() {
-  curl wtfismyip.com/text
-  return $?
-}
-
-function wget-download-size() {
-  verbose=false
-  if [[ "${1:-}" =~ \-v ]]; then verbose=true; shift; fi
-  url="${1:-}"
-  # not all servers will return headers with content length before sending the
-  # file, but the alternative is to download the file to get the size, which
-  # we would just as soon prefer to avoid
-  response="$(wget --spider --server-response "$url" 2>&1)"
-  if $verbose; then >&2 echo "${INF}url: $url response: ${WRN}$response${RST}"; fi
-  if [ -n "$response" ]; then
-    length="$(echo "$response"|grep -m1 "Length"|awk '{print$2}')"
-    if [ -n "$length" ] && is_int "$length"; then
-      echo "$length"
-      return 0
-    fi
-  fi
-  # if we're here, that didn't work, and we download
-  if [ -t 1 ]; then
-    se "unable to get length from server headers, downloading file, ctrl-c to cancel"
-    spinner-start
-  fi
-  length="$(xargs wget -qO- | wc -c)"
-  if [ -t 1 ]; then
-    spinner-stop
-    echo "$CLEAR_LINE"
-  fi
-  if is_int "$length"; then
-    echo "$length"
-    return 0
-  else
-    se "an error occurred attempting to download the file and length could not be determined."
-    return 1
-  fi
-}
-
-_localize_ps_time() {
-  local e=(
-    [0]="N\A"
-    [1]="mismatched date formats, expecting $PSTSFMT"
-    [2]="unreachable code $FUNCNAME $LINENO"
-    [3]="getting clocktime failed"
-    [4]="converting time to array failed"
-    [5]="converting time to FSTSFMT failed"
-  )
-  local then="${1:-}"
-
-  # split on spaces into arrays
-  read -ra now <<< $(date +"$PSTSFMT") #|| err "${e[4]}"; return 4
-  read -ra then <<< $(echo "$then") #|| err "${e[4]}"; return 4
-  # sanity check, make sure we have the same number of fields
-
-  [ ${#now[@]} -eq ${#then[@]} ] || { err "${e[1]}"; return 1; }
-  # which fields should look like Thu Dec 26 21:17:01 2024
-
-  # correct args for mac vs linux
-  case $(what_os) in
-    MacOS)
-      date_args=(-j -f "$PSTSFMT")
-      ;;
-    "GNU/Linux")
-      date_args=(-d)
-      ;;
-  esac
-
-  # we only need these for one condition, but error handling
-  # outside the conditional is cleaner
-  mnow=$(date "${date_args[@]}" "${now[*]}" +"%s") || \
-    { err "${e[5]}"; return 5; }
-  mthen=$(date "${date_args[@]}" "${then[*]}" +"%s") || \
-    { err "${e[5]}"; return 5; }
-
-  # we'll use US clock time a couple of places
-  clocktime=$(date "${date_args[@]}" "${then[*]}" +"$USCLOCKTIMEFMT") || \
-    { err "${e[3]}"; return 3; }
-
-  # case 1: today, in which case, we only want the clock time
-  if [[ "${now[@]:0:3}" == "${then[@]:0:3}" ]]; then
-    echo "$clocktime"; return 0
-
-  # case 2: within the last week, we want the day and the time
-  elif [ $(( $(( mnow - mthen )) / $(( 60 * 60 * 24 )) )) -lt 7 ]; then
-    # using the name of the array as a variable is a shortcut to
-    # its first item
-    echo "$then at $clocktime"; return 0
-
-  # case 3: the process was started in a different year,
-  #         display Thu Dec 26 2024 at ct
-  elif [ "${now[@]:5:5}" -ne "${then[@]:5:5}" ]; then
-    echo "${then[@]:0:3} ${then[@]:-1} at $clocktime"
-    return 0
-
-  else
-    # case 4: "normal" display Thu Dec 26 at ct
-    echo "${then[@]:0:3} at $clocktime"
-    return 0
-  fi
-  # should be unreachable
-  err "${e[2]}"; return 2
-}
-
-function pidinfo() {
-  e=(
-    [0]="N/A"
-    [1]='ps -p$pid... failed, maybe exited?'
-    [2]='could not localize $started'
-  )
-  local pid="${1:-}"
-  # favoring readability over performance
-  local name="$(ps -p$pid -ocommand=)"|| { err "${e[1]}"; return 2; }
-  if grep -q "/" <<< "$name"; then name=$(basename "$name"); fi
-  local cpu="$(ps -p$pid -o'%cpu=')"|| { err "${e[1]}"; return 2; }
-  local mem="$(ps -p$pid -o'%mem=')"|| { err "${e[1]}"; return 2; }
-  local started="$(ps -p$pid -olstart=)"|| { err "${e[1]}"; return 2; }
-  localized=$(_localize_ps_time "$started")|| { warn "${e[2]}"; localize="$started"; }
-  IFS='' read -r -d '' pidinfo <<"EOF"
- Process: %s
-   PID: %s
-   Current CPU: %s %%
-   Current RAM: %s %%
-   Started at: %s
-EOF
-  # for field in "$localized"; do pidinfo+=" %s"; done
-  printf "$pidinfo" "$pid" "$name" "$cpu" "$mem" "$localized"
-  return $?
-}
-
-function tac() {
-  tail -r $@
-}
-
-function add_permanent_bash_alias_to_bashrc() {
-  name="${1:-}"
-  to="${2:-}"
-  rationale="${3:-}"
-  ts=$(fsts)
-  if [ -n "$to" ] && ! is_quoted "$to"; then
-    to=$(shellquote "$to")
-  fi
-  mkdir -p "$HOME/.local/bak"
-  fs_rationale="$(echo "$rationale"|sed  's/ /_/g')"
-  se "existing .bashrc backed up to $HOME/.local/bak/.bashrc.bak.$ts.$fs_rationale"
-  # https://stackoverflow.com/questions/5573683/adding-alias-to-end-of-alias-list-in-bashrc-file-using-sed
-  tac .bashrc |
-  awk "FNR==NR&&/alias/{s=FNR;next}FNR==s{ \$0=\$0\"\nalias $name=\x22$to\x22\n\"}NR>FNR" .bashrc .bashrc > .bashrc.new
-  mv "$D/.bashrc" "$HOME/.local/bak/.bashrc.bak.$ts.add_synergy_alias" && mv .bashrc.new .bashrc
-  return $?
-}
-
 function is_bash_script() {
   script="${1:-}"
   [ -n "$script" ] || { err "provide a filename"; return 1; }
@@ -1122,48 +1051,6 @@ function is_bash_script() {
     err "$script does not seem to be a file, try full path?"
     return 2
   fi
-}
-
-bytes_converter() {
-  # adapted from https://gist.github.com/sanjeevtripurari/6a7dbcda15ae5dec7b56
-  valid_tos=( "KB" "MB" "GB" "TB" "PB" )
-  converterusage() {
-    cat <<-EOF
-bytes_converter - takes a numeric bytes value and converts to human friendly formats
-
-Example:
-  $ bytes_converter 2094196 MB
-
-Second argument must be one of ${valid_tos[@]}
-EOF
-  }
-  if [ $# -lt 2 ] || [[ "${1:-}" =~ \-(h|?) ]]; then
-    converterusage
-    return 1
-  fi
-  bytes="${1:-}"
-  to="${2:-}"
-
-  load-function -q in_array
-  if ! in_array "$to" "valid_tos"; then
-    converterusage
-    return 1
-  fi
-  # echo "scale=4; $n1/($n2)" |bc
-  k_ilo=1024;
-  m_ega=$k_ilo*$k_ilo;
-  g_iga=$m_ega*$k_ilo;
-  t_era=$g_iga*$k_ilo;
-  p_eta=$t_era*$k_ilo;
-  case $to in
-    KB) let pn=$k_ilo;;
-    MB) let pn=$m_ega;;
-    GB) let pn=$g_iga;;
-    TB) let pn=$t_era;;
-    PB) let pn=$p_eta;;
-  esac
-  converted=$(echo "scale=4; $bytes/($pn)" |bc)
-  echo "$converted $to"
 }
 
 VALID_POSIXPATH_EL_CHARS='\w\-. '
@@ -1933,13 +1820,264 @@ BASH_LOCAL_PREFIX='^\h*local\h+([[-][A-z]]*|\h*)\h*'
 printf -v BASH_LOCAL_VAR_PCREREGEX '%s%s.*' "$BASH_LOCAL_PREFIX" "$BASH_VARNAME_REGEX"
 printf -v BASH_LOCAL_VAR_SED_EXTRACT_NAME2_REGEX '[ \t]*local[ \t]+([[-][A-z] ]*|[ \t]*)\(%s\).*' "$BASH_VARNAME_REGEX"
 
-# Arg1 is needle, Arg2 is haystack
-# returns 0 if haystack contains needle, retval from grep otherwise
-function string_contains() {
-  echo "${@:2}"| grep -Eqi "${1:-}"
+lineno_in_func_in_file() {
+  _usage() {
+    echo "lineno_func_in_file \$LINENO \${FUNCNAME} filename_with_decl"
+  }
+  oargs=( "$@" )
+  optspec="l:f:F:?h"
+  local lineno
+  local function
+  local file
+  unset OPTIND
+  unset optchar
+  while getopts "${optspec}" optchar; do
+    case "${optchar}" in
+      l)
+        lineno="${OPTARG}"
+        ;;
+      f)
+        file="${OPTARG}"
+        ;;
+      F)
+        function="${OPTARG}"
+        ;;
+      h|?)
+        # TODO: implement
+        echo "help! TODO"
+        ;;
+    esac
+  done
+  shift $(($OPTIND - 1))
+  if [ -z "$lineno" ] || [ -z "$function" ] || [ -z "$file" ]; then
+    while [ $# -gt 0 ]; do
+      if is_int "${1:-}"; then
+        lineno="${1:-}"; shift
+      elif [ -f "${1:-}" ]; then
+        file="${1:-}"; shift
+      else
+        function="${1:-}"
+      fi
+    done
+  fi
+  if ! is_int "$lineno" || ! [ -f "$file" ]; then
+    err "malformed input: $FUNCNAME ${oargs[@]}"; _usage; return 1
+  fi
+  local start_of_function=$(function_finder -L -f "$file" -F "$function")
+  echo "$((lineno+start_of_function))"
   return $?
 }
-alias stringContains="string_contains"
+
+# end 7. instrospect and search
+
+###############################################################################
+#### 8. Internet info helper funcs and git assist
+###############################################################################
+
+# https://www.reddit.com/r/sysadmin/comments/t5xnco/curl_wtfismyipcomtext_fast_way_to_find_a/
+ip-get-external() {
+  curl wtfismyip.com/text
+  return $?
+}
+
+function wget-download-size() {
+  verbose=false
+  if [[ "${1:-}" =~ \-v ]]; then verbose=true; shift; fi
+  url="${1:-}"
+  # not all servers will return headers with content length before sending the
+  # file, but the alternative is to download the file to get the size, which
+  # we would just as soon prefer to avoid
+  response="$(wget --spider --server-response "$url" 2>&1)"
+  if $verbose; then >&2 echo "${INF}url: $url response: ${WRN}$response${RST}"; fi
+  if [ -n "$response" ]; then
+    length="$(echo "$response"|grep -m1 "Length"|awk '{print$2}')"
+    if [ -n "$length" ] && is_int "$length"; then
+      echo "$length"
+      return 0
+    fi
+  fi
+  # if we're here, that didn't work, and we download
+  if [ -t 1 ]; then
+    se "unable to get length from server headers, downloading file, ctrl-c to cancel"
+    spinner-start
+  fi
+  length="$(xargs wget -qO- | wc -c)"
+  if [ -t 1 ]; then
+    spinner-stop
+    echo "$CLEAR_LINE"
+  fi
+  if is_int "$length"; then
+    echo "$length"
+    return 0
+  else
+    se "an error occurred attempting to download the file and length could not be determined."
+    return 1
+  fi
+}
+
+# Convenience function for github clone, moves into ~/src/github,
+# clones the given repo, and then cds into its directory
+function ghc () {
+  if [ $# -eq 0 ]; then
+    url="$(xclip -out)"
+    if [ $? -eq 0 ]; then
+      se "No url given in cmd or on clipboard."
+      return 1
+    fi
+  else
+    url=$1
+  fi
+  gh
+  gc $url
+
+  f=$(echo "$url"|awk -F"/" '{print$NF}')
+  if [[ $f == *".git" ]]; then
+    f="${f%.*}"
+  fi
+  cd $f
+}
+
+# because apparently sometimes i can't remember
+function is_my_git_repo() {
+  local dir="${1:-}"
+  if [ -d "$(pwd)/${dir}" ]; then
+    user=$(grep -A1 'remote "origin"' "$(pwd)/${dir}/.git/config" |\
+      tail -n1| \
+      awk -F':' '{print$2}'| \
+      awk -F'/' '{print$1}')
+    if [[ "$user" == "trustdarkness" ]]; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+# end 8. internet info
+
+###############################################################################
+#### 9. Process info and ps wrappers
+###############################################################################
+
+_localize_ps_time() {
+  local e=(
+    [0]="N\A"
+    [1]="mismatched date formats, expecting $PSTSFMT"
+    [2]="unreachable code $FUNCNAME $LINENO"
+    [3]="getting clocktime failed"
+    [4]="converting time to array failed"
+    [5]="converting time to FSTSFMT failed"
+  )
+  local then="${1:-}"
+
+  # split on spaces into arrays
+  read -ra now <<< $(date +"$PSTSFMT") #|| err "${e[4]}"; return 4
+  read -ra then <<< $(echo "$then") #|| err "${e[4]}"; return 4
+  # sanity check, make sure we have the same number of fields
+
+  [ ${#now[@]} -eq ${#then[@]} ] || { err "${e[1]}"; return 1; }
+  # which fields should look like Thu Dec 26 21:17:01 2024
+
+  # correct args for mac vs linux
+  case $(what_os) in
+    MacOS)
+      date_args=(-j -f "$PSTSFMT")
+      ;;
+    "GNU/Linux")
+      date_args=(-d)
+      ;;
+  esac
+
+  # we only need these for one condition, but error handling
+  # outside the conditional is cleaner
+  mnow=$(date "${date_args[@]}" "${now[*]}" +"%s") || \
+    { err "${e[5]}"; return 5; }
+  mthen=$(date "${date_args[@]}" "${then[*]}" +"%s") || \
+    { err "${e[5]}"; return 5; }
+
+  # we'll use US clock time a couple of places
+  clocktime=$(date "${date_args[@]}" "${then[*]}" +"$USCLOCKTIMEFMT") || \
+    { err "${e[3]}"; return 3; }
+
+  # case 1: today, in which case, we only want the clock time
+  if [[ "${now[@]:0:3}" == "${then[@]:0:3}" ]]; then
+    echo "$clocktime"; return 0
+
+  # case 2: within the last week, we want the day and the time
+  elif [ $(( $(( mnow - mthen )) / $(( 60 * 60 * 24 )) )) -lt 7 ]; then
+    # using the name of the array as a variable is a shortcut to
+    # its first item
+    echo "$then at $clocktime"; return 0
+
+  # case 3: the process was started in a different year,
+  #         display Thu Dec 26 2024 at ct
+  elif [ "${now[@]:5:5}" -ne "${then[@]:5:5}" ]; then
+    echo "${then[@]:0:3} ${then[@]:-1} at $clocktime"
+    return 0
+
+  else
+    # case 4: "normal" display Thu Dec 26 at ct
+    echo "${then[@]:0:3} at $clocktime"
+    return 0
+  fi
+  # should be unreachable
+  err "${e[2]}"; return 2
+}
+
+function pidinfo() {
+  e=(
+    [0]="N/A"
+    [1]='ps -p$pid... failed, maybe exited?'
+    [2]='could not localize $started'
+  )
+  local pid="${1:-}"
+  # favoring readability over performance
+  local name="$(ps -p$pid -ocommand=)"|| { err "${e[1]}"; return 2; }
+  if grep -q "/" <<< "$name"; then name=$(basename "$name"); fi
+  local cpu="$(ps -p$pid -o'%cpu=')"|| { err "${e[1]}"; return 2; }
+  local mem="$(ps -p$pid -o'%mem=')"|| { err "${e[1]}"; return 2; }
+  local started="$(ps -p$pid -olstart=)"|| { err "${e[1]}"; return 2; }
+  localized=$(_localize_ps_time "$started")|| { warn "${e[2]}"; localize="$started"; }
+  IFS='' read -r -d '' pidinfo <<"EOF"
+ Process: %s
+   PID: %s
+   Current CPU: %s %%
+   Current RAM: %s %%
+   Started at: %s
+EOF
+  # for field in "$localized"; do pidinfo+=" %s"; done
+  printf "$pidinfo" "$pid" "$name" "$cpu" "$mem" "$localized"
+  return $?
+}
+
+# end 9. process info
+
+###############################################################################
+#### 10. env modifications
+###############################################################################
+
+function add_permanent_bash_alias_to_bashrc() {
+  name="${1:-}"
+  to="${2:-}"
+  rationale="${3:-}"
+  ts=$(fsts)
+  if [ -n "$to" ] && ! is_quoted "$to"; then
+    to=$(shellquote "$to")
+  fi
+  mkdir -p "$HOME/.local/bak"
+  fs_rationale="$(echo "$rationale"|sed  's/ /_/g')"
+  se "existing .bashrc backed up to $HOME/.local/bak/.bashrc.bak.$ts.$fs_rationale"
+  # https://stackoverflow.com/questions/5573683/adding-alias-to-end-of-alias-list-in-bashrc-file-using-sed
+  tac .bashrc |
+  awk "FNR==NR&&/alias/{s=FNR;next}FNR==s{ \$0=\$0\"\nalias $name=\x22$to\x22\n\"}NR>FNR" .bashrc .bashrc > .bashrc.new
+  mv "$D/.bashrc" "$HOME/.local/bak/.bashrc.bak.$ts.add_synergy_alias" && mv .bashrc.new .bashrc
+  return $?
+}
+
+# end 10. env modifications
+
+###############################################################################
+#### 11. quoting and escaping
+###############################################################################
 
 function shellquote() {
   if [[ "$1" =~ ".*" ]]; then
@@ -2003,102 +2141,11 @@ function shellescapes() {
   done
 }
 
-# Returns the architecture of the running system
-function system_arch() {
-  uname -m
-}
+# end 11. quoting and escaping
 
-function printcolrange() {
-  input="${1:-}"
-  start="${2:-}"
-  fin="${3:-}"
-  delim="${4:-}"
-  top="$t"
-  if lt "$fin" 0; then
-    prog='{for(i=f;i<=t'+$fin+';i++) printf("%s%s",$i,(i==t)?"\n":OFS)}'
-  else
-    prog='{for(i=f;i<=t;i++) printf("%s%s",$i,(i==t)?"\n":OFS)}'
-  fi
-  echo "$input"|awk "$start,NF$fin { print NR, $0 }"
-}
-
-function is_absolute() {
-  local dirorfile="${1:-}"
-  if [ -d "${dirorfile}" ] || [ -f "${dirorfile}" ]; then
-    if startswith "/" "${dirorfile}"; then
-      return 0
-    fi
-  fi
-  return 1
-}
-
-function startswith() {
-  local query="${2:-}"
-  local starts_with="${1:-}"
-  if [[ "$query" =~ ^$starts_with.* ]]; then
-    return 0
-  fi
-  return 1
-}
-
-# Convenience function for github clone, moves into ~/src/github,
-# clones the given repo, and then cds into its directory
-function ghc () {
-  if [ $# -eq 0 ]; then
-    url="$(xclip -out)"
-    if [ $? -eq 0 ]; then
-      se "No url given in cmd or on clipboard."
-      return 1
-    fi
-  else
-    url=$1
-  fi
-  gh
-  gc $url
-
-  f=$(echo "$url"|awk -F"/" '{print$NF}')
-  if [[ $f == *".git" ]]; then
-    f="${f%.*}"
-  fi
-  cd $f
-}
-
-# because apparently sometimes i can't remember
-function is_my_git_repo() {
-  local dir="${1:-}"
-  if [ -d "$(pwd)/${dir}" ]; then
-    user=$(grep -A1 'remote "origin"' "$(pwd)/${dir}/.git/config" |\
-      tail -n1| \
-      awk -F':' '{print$2}'| \
-      awk -F'/' '{print$1}')
-    if [[ "$user" == "trustdarkness" ]]; then
-      return 0
-    fi
-  fi
-  return 1
-}
-
- # super sudo, enables sudo like behavior with bash functions
-function ssudo () {
-  [[ "$(type -t "$1")" == "function" ]] &&
-    ARGS="$@" && sudo -E bash -l -c "$(declare -f $1); \"$ARGS\""
-}
-alias ssudo="ssudo "
-
-function is_alpha_char() {
-  local string="${1:-}"
-  if [ -n "$string" ] && [[ "$string" =~  [A-z] ]]; then
-    return 0
-  fi
-  return 1
-}
-
-function sata_bus_scan() {
-  sudo sh -c 'for i in $(seq 0 4); do echo "0 0 0" > /sys/class/scsi_host/host$i/scan; done'
-}
-
-# depends: setup_working_env
-sosutil
+###############################################################################
+#### 12. UI
+###############################################################################
 
 function user_feedback() {
   local subject
@@ -2175,63 +2222,12 @@ function user_feedback() {
   $logger "${meta_message[@]}"
 }
 
-# initialized the helper library for the package installer
-# for whatever the detected os environment is; good for interactive
-# use below for scripts
-alias i='source "$D/installutil.sh"'
 
-# TODO: deprecate
-alias install_util_load=i
+# end 12. UI
 
-alias viu="vim $D/installutil.sh && siu"
-
-lineno_in_func_in_file() {
-  _usage() {
-    echo "lineno_func_in_file \$LINENO \${FUNCNAME} filename_with_decl"
-  }
-  oargs=( "$@" )
-  optspec="l:f:F:?h"
-  local lineno
-  local function
-  local file
-  unset OPTIND
-  unset optchar
-  while getopts "${optspec}" optchar; do
-    case "${optchar}" in
-      l)
-        lineno="${OPTARG}"
-        ;;
-      f)
-        file="${OPTARG}"
-        ;;
-      F)
-        function="${OPTARG}"
-        ;;
-      h|?)
-        # TODO: implement
-        echo "help! TODO"
-        ;;
-    esac
-  done
-  shift $(($OPTIND - 1))
-  if [ -z "$lineno" ] || [ -z "$function" ] || [ -z "$file" ]; then
-    while [ $# -gt 0 ]; do
-      if is_int "${1:-}"; then
-        lineno="${1:-}"; shift
-      elif [ -f "${1:-}" ]; then
-        file="${1:-}"; shift
-      else
-        function="${1:-}"
-      fi
-    done
-  fi
-  if ! is_int "$lineno" || ! [ -f "$file" ]; then
-    err "malformed input: $FUNCNAME ${oargs[@]}"; _usage; return 1
-  fi
-  local start_of_function=$(function_finder -L -f "$file" -F "$function")
-  echo "$((lineno+start_of_function))"
-  return $?
-}
+###############################################################################
+#### 13. Traps and exports
+###############################################################################
 
 set_log_ERROR() {
   if [[ "$(trap)" == *'RETURN'* ]]; then

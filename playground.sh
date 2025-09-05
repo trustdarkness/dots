@@ -448,3 +448,13 @@ function unset_strict() {
     fi
   done
 }
+
+function gpgvc() {
+  gpg --verify < <(xclip -o)
+  return $?
+}
+
+function gpgic() {
+  gpg --import < <(xclip -o)
+  return $?
+}

@@ -512,6 +512,15 @@ function can_i_do() {
   fi
 }
 
+function is_absolute() {
+  local dirorfile="${1:-}"
+  if [ -d "${dirorfile}" ] || [ -f "${dirorfile}" ]; then
+    if startswith "/" "${dirorfile}"; then
+      return 0
+    fi
+  fi
+  return 1
+}
 
 function symlink_child_dirs () {
   if [ -n "$CACHE" ]; then
@@ -648,4 +657,50 @@ safe_mount_x() {
       sudo mount "$disk" "$mnt"
     fi
   fi
+}
+
+function symlink_verbose() {
+  se "linking target $target from link name $linkname"
+  ln -sf "$target" "$linkname"
+  return $?
+}
+
+# TODO: make this less brittle
+function move_verbose() {
+  load-function -q tru
+  mvv_force=false
+  if [[ "${1:-}" == "-f" ]]; then
+    mvv_force=true
+    shift
+  fi
+  printf "moving %s to %s" "${1:-}" "${2:-}"
+  if tru $mvv_force; then
+    echo " with -f"
+    mv -f "${1:-}" "${2:-}"
+    return $?
+  else
+    echo
+    mv "${1:-}" "${2:-}"
+    return $?
+  fi
+}
+
+function lns() {
+  local target="${1:-}"
+  local linkname="${2:-}"
+  if [ -h "$linkname" ]; then
+    ln -si "$target" "$linkname"
+  elif [ -f "$linkname" ]; then
+    move_verbose "$linkname" "$linkname.bak"
+    symlink_verbose "$target" "$linkname"
+    return $?
+  else
+    symlink_verbose "$target" "$linkname"
+    return $?
+  fi
+}
+
+function lnsdh() {
+  lns "$D/${1:-}" "$HOME/${1:-}"
+  return $?
 }
