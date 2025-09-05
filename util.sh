@@ -46,13 +46,13 @@ fi
 _setup_path
 path_append "$D"
 
-# TODO: what requires this?
+# required by colnum
 if ! is_function exists; then
   source "$D/existence.sh" # ssource if debug
 fi
 
-# these are small requirements TODO: eliminate
-source "$D/filesystemarrayutil.sh" # required by function_finder
+# required by function_finder; bytes_converter
+source "$D/filesystemarrayutil.sh"
 source "$D/user_prompts.sh" # required by dgrep
 
 # initialized the helper library for the package installer
@@ -122,7 +122,6 @@ if undeclared "se"; then
 fi
 
 function colnum() {
-  load-function -q empty
   help() {
     echo "echos the column number of substring in string if found"
     echo "returns 0 if successful, 255 if substring not found, 1 otherwise"
@@ -184,7 +183,6 @@ EOF
   bytes="${1:-}"
   to="${2:-}"
 
-  load-function -q in_array
   if ! in_array "$to" "valid_tos"; then
     converterusage
     return 1
