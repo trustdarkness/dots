@@ -597,11 +597,11 @@ export GH="$HOME/src/github"
 
 # TODO: what requires these?
 if ! is_function exists; then
-  ssource "$D/existence.sh"
+  source "$D/existence.sh" # ssource if debug
 fi
 
-ssource "$D/filesystemarrayutil.sh"
-ssource "$D/user_prompts.sh"
+source "$D/filesystemarrayutil.sh" # ssource if debug
+source "$D/user_prompts.sh" # ssource if debug
 
 function urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
 
@@ -670,13 +670,13 @@ EOF
   ignore= ; unset ignore; ignore=()
   while [[ "${1:-}" == "-"* ]]; do
     inform "${1:-}"
-    if [[ "${1:-}" == \-p ]]; then
+    if [[ "${1:-}" =~ \-p ]]; then
       if ! grep="$(type -p pcre2grep)"; then
         grep="$(type -p grep)"
         warn "pcre2grep not installed; using $grep."
       fi
       shift
-    elif [[ "${1:-}" == \-\-filenames\-only ]]; then
+    elif [[ "${1:-}" =~ \-\-filenames\-only ]]; then
       onlyfiles=true
       shift
     elif [[ "${1:-}" =~ \-\-ignore=(.*) ]]; then
