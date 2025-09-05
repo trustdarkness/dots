@@ -693,7 +693,7 @@ LOGFMT="%20s [%s] %s %s %s"
 SCREENFMT="[%s] %s %s"
 
 # Log to both stderr and a file (see above).  Should be called using
-# wrapper functions below, not directly
+# wrapper functions above, not directly
 _log() {
   local lineno
   local funcname
@@ -702,6 +702,7 @@ _log() {
   srcp="${BASH_SOURCE[1]}"
   src=$(basename "$srcp")
   local level="$1"
+  local message
   shift
   if [ -z "$LEVEL" ]; then
     local LEVEL=WARN
