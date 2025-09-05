@@ -322,6 +322,120 @@ function boolean_or {
   return 1
 }
 
+# Normalize os detection for consistency, hopefully reducing the chance
+# of simple typo, etc mistakes and increasing readability
+function is_mac() {
+  if [[ "$(uname)" == "Darwin" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+function is_linux() {
+  if [[ "$(uname)" == "Linux" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+function what_os() {
+  if is_mac; then echo "MacOS"; return 0; fi
+  if is_linux; then echo 'GNU/Linux'; return 0; fi
+}
+
+function setup_working_env() {
+  # this can be used for an application to setup cache, data, state, log
+  # dirs, but when used with no arguments, sets those up for interactive
+  # use of functions available by use of the dots repo
+  local app="${1:-com.trustdarkness.dots}"
+  local targets=( config cachedir statedir datadir logdir )
+  local homes=( CONFIGHOME CACHEHOME STATEHOME DATAHOME )
+  case $(what_os) in
+    'GNU/Linux')
+      { [ -n "$XDG_CONFIG_HOME" ] && CONFIGHOME="$XDG_CONFIG_HOME"; } || \
+        CONFIGHOME="$HOME/.config"
+      { [ -n "$XDG_CACHE_HOME" ] && CACHEHOME="$XDG_CACHE_HOME"; } || \
+        CACHEHOME="$HOME/.local/cache"
+      { [ -n "$XDG_STATE_HOME" ] && STATEHOME="$XDG_STATE_HOME"; } || \
+        STATEHOME="$HOME/.local/state"
+      { [ -n "$XDG_DATA_HOME" ] && DATAHOME="$XDG_DATA_HOME"; } || \
+        DATAHOME="$HOME/.local/share"
+
+      if [[ "$app" == "com.trustdarkness.dots" ]]; then
+        OSUTIL="$D/linuxutil.sh"
+        alias sosutil='source "$D/linuxutil.sh"'
+        alias vosutil="vim $D/linuxutil.sh && sosutil"
+      fi
+      ;;
+    "MacOS")
+      # using python's platformdirs for home locations
+      CONFIGHOME="$HOME/Library/Application Support"
+      CACHEHOME="$HOME/Library/Caches"
+      STATEHOME="$CONFIGHOME"
+      DATAHOME="$CONFIGHOME"
+      LOGSHOME="$HOME/Library/Logs"
+
+      if [[ "$app" == "com.trustdarkness.dots" ]]; then
+        OSUTIL="$D/macutil.sh"
+        alias sosutil='source "$D/macutil.sh"'
+        alias vosutil="vim $D/macutil.sh && vosutil"
+      fi
+      ;;
+  esac
+  if [[ "$app" == "com.trustdarkness.dots" ]]; then
+    # trying to cover ground or inherit, rather, for code that's
+    # already out there, there's a bit of redundancy (see below)
+    CONFIG="$CONFIGHOME/$app"
+    CACHE="$CACHEHOME/$app"
+    STATEDIR="$STATEHOME/$app"
+    DATADIR="$DATAHOME/$app"
+    if [[ $(what_os) == 'GNU/Linux' ]]; then
+      LOGDIR="$DATADIR/logs"
+    fi
+    # redundancy:
+    CONFIGDIR="$CONFIG"
+    CACHEDIR="$CACHE"
+  else
+    workingdirs=()
+    se "working dirs for $app setup as..."
+    local index=0
+    for target in "${targets[@]}"; do
+      if [[ "$target" == "logdir" ]]; then
+        case $(what_os) in
+          'GNU/Linux')
+            declare -n datadir="${app}_datadir"
+            declare "${app}_logdir"="$datadir/logs"
+            workingdirs+=( "$datadir/logs" )
+            se "  ${app}_logdir=\"$datadir/logs\""
+            ;;
+          'MacOS')
+            declare "${app}_logdir"="$LOGSHOME/$app"
+            workingdirs+=( "$LOGSHOME/logs" )
+            se "  ${app}_logdir=\"$LOGSHOME/$app\""
+            ;;
+        esac
+      else
+        declare -n home=${homes[$index]}
+        declare "${app}_${target}"="$home/$app"
+        workingdirs+=( "$home/$app" )
+        se "  ${app}_${target}=\"$home/$app\""
+      fi
+      ((index++))
+    done
+
+    declare -gn "${app}_workingdirs"=workingdirs
+    se
+    se "These directories have not been created yet, to create them all"
+    se "now, run:"
+    se "for dir in \"\${${app}_workingdirs[@]}; do mkdir -p \"\$dir\"; done"
+    se
+    se "or make sure to makedir -p \$LOGDIR, etc before trying to use each"
+  fi
+}
+setup_working_env
+shopt -s expand_aliases
+mkdir -p "$LOGDIR"
+
 # Templates for colored stderr messages
 printf -v E "%s[%s]" $ERR "ERROR"
 printf -v W "%s[%s]" $WRN "WARN"
@@ -334,14 +448,6 @@ alias err='_log "$E" "$LINENO"'
 alias warn='_log "$W" "$LINENO"'
 alias debug='_log "$B" "$LINENO"'
 alias inform='_log "$I" "$LINENO"'
-
-if [ -n "$XDG_STATE_HOME" ]; then
-  LOGDIR="$XDG_STATE_HOME/com.trustdarkness.dots"
-else
-  LOGDIR="$HOME/Library/Logs/com.trustdarkness.dots"
-fi
-export LOGDIR
-mkdir -p "$LOGDIR"
 
 LOG_LEVELS=( ERROR WARN INFO DEBUG )
 
@@ -891,27 +997,6 @@ function wget-download-size() {
     se "an error occurred attempting to download the file and length could not be determined."
     return 1
   fi
-}
-
-# Normalize os detection for consistency, hopefully reducing the chance
-# of simple typo, etc mistakes and increasing readability
-function is_mac() {
-  if [[ "$(uname)" == "Darwin" ]]; then
-    return 0
-  fi
-  return 1
-}
-
-function is_linux() {
-  if [[ "$(uname)" == "Linux" ]]; then
-    return 0
-  fi
-  return 1
-}
-
-function what_os() {
-  if is_mac; then echo "MacOS"; return 0; fi
-  if is_linux; then echo 'GNU/Linux'; return 0; fi
 }
 
 _localize_ps_time() {
@@ -2012,98 +2097,7 @@ function sata_bus_scan() {
   sudo sh -c 'for i in $(seq 0 4); do echo "0 0 0" > /sys/class/scsi_host/host$i/scan; done'
 }
 
-function setup_working_env() {
-  # this can be used for an application to setup cache, data, state, log
-  # dirs, but when used with no arguments, sets those up for interactive
-  # use of functions available by use of the dots repo
-  local app="${1:-com.trustdarkness.dots}"
-  local targets=( config cachedir statedir datadir logdir )
-  local homes=( CONFIGHOME CACHEHOME STATEHOME DATAHOME )
-  case $(what_os) in
-    'GNU/Linux')
-      { [ -n "$XDG_CONFIG_HOME" ] && CONFIGHOME="$XDG_CONFIG_HOME"; } || \
-        CONFIGHOME="$HOME/.config"
-      { [ -n "$XDG_CACHE_HOME" ] && CACHEHOME="$XDG_CACHE_HOME"; } || \
-        CACHEHOME="$HOME/.local/cache"
-      { [ -n "$XDG_STATE_HOME" ] && STATEHOME="$XDG_STATE_HOME"; } || \
-        STATEHOME="$HOME/.local/state"
-      { [ -n "$XDG_DATA_HOME" ] && DATAHOME="$XDG_DATA_HOME"; } || \
-        DATAHOME="$HOME/.local/share"
-
-      if [[ "$app" == "com.trustdarkness.dots" ]]; then
-        OSUTIL="$D/linuxutil.sh"
-        alias sosutil='source "$D/linuxutil.sh"'
-        alias vosutil="vim $D/linuxutil.sh && sosutil"
-      fi
-      ;;
-    "MacOS")
-      # using python's platformdirs for home locations
-      CONFIGHOME="$HOME/Library/Application Support"
-      CACHEHOME="$HOME/Library/Caches"
-      STATEHOME="$CONFIGHOME"
-      DATAHOME="$CONFIGHOME"
-      LOGSHOME="$HOME/Library/Logs"
-
-      if [[ "$app" == "com.trustdarkness.dots" ]]; then
-        OSUTIL="$D/macutil.sh"
-        alias sosutil='source "$D/macutil.sh"'
-        alias vosutil="vim $D/macutil.sh && vosutil"
-      fi
-      ;;
-  esac
-  if [[ "$app" == "com.trustdarkness.dots" ]]; then
-    # trying to cover ground or inherit, rather, for code that's
-    # already out there, there's a bit of redundancy (see below)
-    CONFIG="$CONFIGHOME/$app"
-    CACHE="$CACHEHOME/$app"
-    STATEDIR="$STATEHOME/$app"
-    DATADIR="$DATAHOME/$app"
-    if [[ $(what_os) == 'GNU/Linux' ]]; then
-      LOGDIR="$DATADIR/logs"
-    fi
-    # redundancy:
-    CONFIGDIR="$CONFIG"
-    CACHEDIR="$CACHE"
-  else
-    workingdirs=()
-    se "working dirs for $app setup as..."
-    local index=0
-    for target in "${targets[@]}"; do
-      if [[ "$target" == "logdir" ]]; then
-        case $(what_os) in
-          'GNU/Linux')
-            declare -n datadir="${app}_datadir"
-            declare "${app}_logdir"="$datadir/logs"
-            workingdirs+=( "$datadir/logs" )
-            se "  ${app}_logdir=\"$datadir/logs\""
-            ;;
-          'MacOS')
-            declare "${app}_logdir"="$LOGSHOME/$app"
-            workingdirs+=( "$LOGSHOME/logs" )
-            se "  ${app}_logdir=\"$LOGSHOME/$app\""
-            ;;
-        esac
-      else
-        declare -n home=${homes[$index]}
-        declare "${app}_${target}"="$home/$app"
-        workingdirs+=( "$home/$app" )
-        se "  ${app}_${target}=\"$home/$app\""
-      fi
-      ((index++))
-    done
-
-    declare -gn "${app}_workingdirs"=workingdirs
-    se
-    se "These directories have not been created yet, to create them all"
-    se "now, run:"
-    se "for dir in \"\${${app}_workingdirs[@]}; do mkdir -p \"\$dir\"; done"
-    se
-    se "or make sure to makedir -p \$LOGDIR, etc before trying to use each"
-  fi
-}
-setup_working_env
-shopt -s expand_aliases
-
+# depends: setup_working_env
 sosutil
 
 function user_feedback() {
