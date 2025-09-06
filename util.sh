@@ -1951,6 +1951,10 @@ function is_my_git_repo() {
   return 1
 }
 
+function certreup() {
+  sudo certbot renew --nginx
+}
+
 # end 8. internet info
 
 ###############################################################################
