@@ -1,6 +1,0 @@
-#!/bin/bash
-givens="$@"
-c=caller
-s="noexec ${givens}"
-m=$(printf "%s tried to noexec with %s" "${c}" "${givens}"
-notify-send "${s}" "${m}" 
