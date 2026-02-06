@@ -4,7 +4,7 @@
 # https://stackoverflow.com/questions/893585/how-to-parse-xml-in-bash
 # and ultimately intended to make adding UI elements to qml frontend
 # specs (impulse was to bootstrap my desired config for konsole on a fresh)
-# install... the config in question is found at 
+# install... the config in question is found at
 # $HOME/.local/share/kxmlgui5/konsole/konsoleui.rc
 function starml_read_dom () {
   local IFS=\>
@@ -24,11 +24,11 @@ function xmllike() {
     local name="${1:-}"
     if [ -n "${name}" ]; then
       if [[ $TAG_NAME == "${name}" ]]; then
-        se "exposing ${ATTRIBUTES} of tag ${name}" 
+        se "exposing ${ATTRIBUTES} of tag ${name}"
         eval local ${ATTRIBUTES}
       fi
     fi
-    if ${all}; then 
+    if ${all}; then
       echo ${TAG_NAME}
     fi
   }

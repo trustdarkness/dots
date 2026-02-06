@@ -385,7 +385,3 @@ export GH="$HOME/src/github"
 if [ -f "$HOME/.localrc" ]; then
   source "$HOME/.localrc"
 fi
-
-_bashrc_fs() {
-  function_finder "$HOME/.bashrc"
-}

@@ -83,7 +83,3 @@ _setup_path() {
     fi
   done
 }
-
-_pathlib_fs() {
-  function_finder "$D/pathlib.sh"
-}

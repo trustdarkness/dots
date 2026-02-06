@@ -2288,8 +2288,3 @@ set_log_DEBUG() {
   # trap 'printf "TD$INF" && [ -n "$FUNCNAME" ] && echo "$BASH_SOURCE $FUNCNAME $?" && printf "$RST" || { printf "TD$INF"; [ -n "$BASH_COMMAND" ] && echo "$BASH_COMMAND: $?"; printf "$RST"; }' RETURN
   # #trap 'printf "$WRN"; [ -n "$FUNCNAME" ] && echo "$BASH_SOURCE:$(function_finder -L -f $BASH_SOURCE -F $FUNCNAME) $FUNCNAME $?"; [ -n "$BASH_COMMAND" ] && echo "$BASH_COMMAND: $?"; printf "$RST"' DEBUG
 }
-
-_utilsh_fs() {
-  function_finder -f "$D/util.sh"
-}
-

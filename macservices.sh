@@ -645,8 +645,3 @@ function finder_reset() {
 function services_statuses() {
   find /var/db/com.apple.xpc.launchd/ -type f -print -exec defaults read {} \; 2>/dev/null
 }
-
-_macservices_fs() {
-  function_finder -f "$D/macservices.sh"
-}
-sourced_functions+=( $(_macservices_fs) )

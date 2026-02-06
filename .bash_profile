@@ -180,7 +180,3 @@ if [[ "$c" == *'-c'* ]] && [[ "$c" == *"sudo"* ]]; then
   >&2 printf "$BASH_SOURCE $c"
   source "${D}/util.sh"
 fi
-
-_bash_profile_fs() {
-  function_finder -f "${D}/.bash_profile"
-}
