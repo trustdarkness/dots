@@ -121,6 +121,34 @@ if undeclared "se"; then
   }
 fi
 
+# duplicated because all fucked up and overcomplicated
+# preferred format strings for date for storing on the filesystem
+FSDATEFMT="%Y%m%d" # our preferred date fmt for files/folders
+printf -v FSTSFMT '%s_%%H%%M%%S' "$FSDATEFMT" # our preferred ts fmt for files/folders
+
+function fsdate() {
+  date +"${FSDATEFMT}"
+}
+
+function fsts_to_fsdate() {
+  if is_mac; then
+    date -d -f "$FSTSFMT" "${1:-}" "$FSDATEFMT"
+  else
+    date -d "$(_fsts_gnu_readable "${1:-}")"  +"$FSDATEFMT"
+  fi
+}
+
+function fsts() {
+  date +"${FSTSFMT}"
+}
+
+# for sub-second accuracy
+function fstsss() {
+  date +"${FSTSFMT}%T.%3N"
+}
+
+
+
 function colnum() {
   help() {
     echo "echos the column number of substring in string if found"
