@@ -279,21 +279,6 @@ function setoposix_to_jqconst() {
   done
 }
 
-IFS='' read -r -d '' ENVINFO <<EOF
-jo filename=".local_lhrc" \
-   BASH_SOURCE="${BASH_SOURCE[*]}" \
-   FUNCNAME="${FUNCNAME[*]}"
-EOF
-#   compgen_a
-   # $(vargen_to_jqconst 'compgen -a') '\$ARGS.named')" \
-#   --arg 'compgen -v' "$(jq -n $(vargen_to_jqconst 'compgen -v') '\$ARGS.named')" \
-#   --arg 'compgen -e' "$(jq -n $(vargen_to_jqconst 'compgen -e') '\$ARGS.named')" \
-#   --arg 'declare -a' "$(jq -n $(declare_to_jqconst 'declare -a') '\$ARGS.named')" \
-#   --arg 'declare -A' "$(jq -n $(declare_to_jqconst 'declare -A') '\$ARGS.named')" \
-#   --arg 'declare -F' "$(jq -n $(declare_to_jqconst 'declare -F') '\$ARGS.named')" \
-#   --arg 'set -o posix; set' "$(jq -n $(setoposix_to_jqconst) '\$ARGS.named')"
-# EOF
-
 # depends
 # - existence.sh
 #  * undefined
