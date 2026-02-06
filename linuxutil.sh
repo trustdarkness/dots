@@ -10,8 +10,6 @@
 # BLK - an egrep compatible regex used as a blocilist to sift out
 #       noise on local filesystem searches piping locate through
 #       the dubious mgrep
-# LH - path to the root of the library_helpers repo (only used in
-#      the alias below, nothing will break)
 # D - path to the root of the dots repo
 # Other globals are handled internally if they're not present.
 # This file may also rely on functions and globals available in
@@ -40,7 +38,6 @@ alias sstat="sudo systemctl status"
 alias sglobals="source $HOME/.globals"
 alias globals="vimcat $HOME/.globals"
 alias mgrep="grep -E -v \"$BLK\"|grep -E"
-alias slhu="source $LH/util.sh"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 alias journalctl="grc journalctl"
 alias journalctl_categories='journalctl --list-catalog'
