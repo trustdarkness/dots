@@ -458,3 +458,76 @@ function gpgic() {
   gpg --import < <(xclip -o)
   return $?
 }
+
+
+ssource() {
+  force=false
+  # delimiter for csv file (in place of comma):
+  local d='|'
+  local ts=$(date +%s%N)
+  local caller="$(caller)"
+  if [[ "${1:-}" =~ \-f ]]; then
+    force=true
+    shift
+  fi
+
+  if [ -z "$SSOURCED_SESSION" ]; then
+    # we need an external identifier available in the shell's env that
+    # is unique to this session... there are a few candidates, but no
+    # bulletproof cross platform ones.  All this code is already so
+    # fragile that hopefully no one else relies on it, but I run
+    # all different kinds of machines, so...
+    if [ -n "$INVOCATION_ID" ]; then # seems to cover linux
+      session_id="$INVOCATION_ID"
+    elif [ -n "$TERM_SESSION_ID" ]; then # both iterm and Terminal.app
+      session_id="$TERM_SESSION_ID"
+    else
+      # we can shove our own session id based on the timestamp into
+      # the environnment, but this is best effort (as is maintaining
+      # session overall, though the stable identifier helps).
+      session_id="$(fsts)"
+    fi
+    if [ -n "$session_id" ]; then
+      # if there's an application relevant state or logdir in the env
+      # we should use that, but better to use /tmp than to create our
+      # own, we want something that the OS will routinely cleanup
+      # listed are in reverse priority
+      possible_appdirs=( "TMPDIR" "LOGDIR" "STATEDIR" )
+      for appdir in "${possible_appdirs[@]}"; do
+        local -n envvar="$appdir"
+        if [ -n "$envvar" ] && [ -f "$envvar" ]; then
+          # if any are available, the last will take the win
+          SSOURCED_SESSION="${envvar}/sourced-${session_id}"
+        fi
+      done
+      # if we didn't find anything, use /tmp
+      if ! [ -z "SSOURCED_SESSION" ]; then
+        SSOURCED_SESSION="/tmp/sourced-${TERM_SESSION_ID}"
+      fi
+    fi
+  fi
+  if [ -f "${SSOURCED_SESSION}" ]; then
+    if grep -q "${1:-}" "${SSOURCED_SESSION}" > /dev/null; then
+      if "$force"; then
+        builtin source "${1:-}"
+        return $?
+      else
+        >&2 printf "${1:-} already sourced\n"
+        return 0
+      fi
+    fi
+  fi
+  # SSOURCED_SESSION should exist no matter what now, but
+  if [ -n "${SSOURCED_SESSION}" ]; then
+    builtin source "${1:-}"
+    els=("$ts" "$caller" "${1:-}")
+    printf -v line "%s${d}" "${els[@]}"
+    # drop the trailing delimiter
+    echo "${line:0:-1}" >> "${SSOURCED_SESSION}"
+    return $?
+  fi
+  >&2 printf "source session not established.  calling builtin source ${1:-}.\n"
+  builtin source "${1:-}"
+  return $?
+}
+

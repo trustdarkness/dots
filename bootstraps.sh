@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 if ! is_function "confirm_yes" || ! is_function "exists"; then
-  ssource "$D/user_prompts.sh"
+  source "$D/user_prompts.sh"
 fi
 
 # since by definition, we wont have arrays yet, this is a hacky prototype
