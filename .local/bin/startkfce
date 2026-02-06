@@ -1,5 +1,0 @@
-#!/bin/bash
-# favor kwin in $PATH
-export KWIN_OVERRIDE=true
-startxfce4
-
