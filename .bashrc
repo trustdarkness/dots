@@ -383,12 +383,7 @@ export GH="$HOME/src/github"
 
 
 if [ -f "$HOME/.localrc" ]; then
-  s['.bashrc']="${s['.bashrc']}+.localrc"
   source "$HOME/.localrc"
-  if [[ "$TERM" =~ tmux.* ]]; then
-    s['.bashrc']="${s['.bashrc']}+.local_lhrc"
-    source "$HOME/.local_lhrc"
-  fi
 fi
 
 _bashrc_fs() {
