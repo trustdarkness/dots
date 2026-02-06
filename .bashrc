@@ -365,7 +365,7 @@ alias vutil="vim $D/util.sh && sutil"
 alias sex="source $D/existence.sh" # heh
 alias vex="vim $D/existence && sex"
 alias mrsync="rsync $RSYNCOPTS"
-alias yt-mp3="yt-dlp -t mp3 -f 'ba[acodec^=mp3]/ba/b' -x --audio-format mp3 --embed-thumbnail --parse-metadata \"title:%(artist)s - %(title)s\" --embed-metadata"
+alias yt-mp3="yt-dlp -t mp3 -f 'ba[acodec^=mp3]/ba/b' -o '%(playlist_title)s/%(track_number)s.%(title)s.%(ext)s' -x --audio-format mp3 --embed-thumbnail --parse-metadata \"title:%(artist)s - %(title)s\" --embed-metadata"
 alias vsc="vim $HOME/.ssh/config"
 alias pau="ps auwx"
 alias paug="ps auwx|grep "
