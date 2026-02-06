@@ -1,8 +1,0 @@
-[Desktop Entry]
-Version=1.0
-Name=Kfce Session
-Comment=Use this session to run Xfce with kwin
-Exec=startkfce
-Icon=
-Type=Application
-DesktopNames=KFCE
