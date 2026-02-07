@@ -1,5 +1,0 @@
-export PYTHONHOME=$HOME/envs/python2.7
-export PYTHONPATH=/home/mt/envs/python2.7/lib/python2.7/
-export PATH=$PYTHONHOME/bin:$PATH
-alias python=$PYTHONHOME/bin/python2.7
-
