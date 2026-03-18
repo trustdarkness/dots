@@ -77,9 +77,6 @@ xbi() {
   "$D/bellicose.sh" -S install $@
 }
 
-# this is used in localback.sh
-OLDHOME="/Volumes/federation/Users/mt"
-
 # where pref(s)_reset will replicate directories (under .*Library/)
 # and backup plist and other files before removing them
 PREFS_DISABLED="$HOME/Library/disabled"
@@ -251,58 +248,6 @@ function getusershell() {
   return $?
 }
 
-# runs du, asking for sudo if needed for the specified dirs
-# always with -h, with other opts if you provide them
-# before the directory
-function xdu() {
-  opts=( "-h" )
-  if [ $# -gt 1 ]; then
-    local dir="${2:-}"
-    if [[ "${1:-}" == "-s" ]] && [[ $# == 2 ]]; then
-      sudo du "${opts[@]}" "${dir}"
-    elif [[ "${1:-}" == "-s" ]] && gt $# 2; then
-      shift
-      shift
-      sudo du "${opts[@]}" $@ "${dir}"
-    elif [ -d ""${1:-}"" ]; then
-      local dir="${1:-}"
-      shift
-      sudo du "${opts}" $@ "${dir}"
-    fi
-  elif [ $# -eq 1 ]; then
-    local dir="${1:-}"
-    if [ -d "${dir}" ]; then
-      can_i_read "${dir}"
-      if [ $? -eq 0 ]; then
-        du "${opts[@]}"
-      else
-        sudo du "${opts[@]}"
-      fi
-    fi
-  fi
-}
-
-# du -h --max-depth=0 with sudo if needed
-function du0() {
-  dir="${1:-}"
-  if can_i_read "$dir"; then
-    du -h -d 0 "$dir"
-  else
-    sudo du -h -d 0 "$dir"
-  fi
-}
-
-# du -h --max-depth=1 with sudo if needed
-function du1() {
-  dir="${1:-}"
-  if can_i_read "$dir"; then
-    du -h -d 1 "$dir"
-  else
-    sudo du -h -d 1 "$dir"
-  fi
-}
-
-
 function trashZeros() {
   files="$(ls -alh . )"
   ctr=0
@@ -401,14 +346,6 @@ function bluetooth_scan() {
   fi
   blueutil --inquiry
   return $ret
-}
-
-# sources localback so that its functions are available in the working env
-function b() {
-  OLDSYS="/Volumes/federation"
-  OLDHOME="/Volumes/federation/Users/$(whoami)"
-  F="/Volumes/federation/Users/mt/Downloads"
-  source $D/localback.sh
 }
 
 # returns 0 if the provided string is a path valid for Applescript
