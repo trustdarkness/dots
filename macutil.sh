@@ -185,42 +185,6 @@ function load_services() {
   return 0
 }
 
-# Sets the position of the Dock and restarts the Dock
-# Args: string, one of left, right, bottom
-# If provided position matches current, return 0, otherwise
-# writes the default 'orientation' to 'com.apple.dock' && pkill Dock,
-# returning 0.  If the defaults command to update the position fails,
-# return with the upstream error
-function dockpos() {
-  local desired="${1,,:-}"
-  local current="$(defaults read com.apple.dock orientation)"
-  if [[ "$desired" == "$current" ]]; then
-    return 0
-  fi
-  possible=("left", "right", "top", "bottom")
-  Usage() {
-		cat << EOF
-			dockpos <position>
-
-			Where <position> is one of ${possible[@]}.  If provided position
-      matches current, return 0, otherwise update to user provided and
-      kill the dock, forcing it to relocate, and return 0.  If the
-      defaults command to update the position fails, return with the
-      upstream error.
-EOF
-    return 0
-	}
-  if ! in_array "${desired}" "possible"; then
-    Usage
-    return 1;
-  fi
-  if ! defaults write 'com.apple.dock' 'orientation' -string "${1:-}"; then
-    return $?
-  fi
-  pkill Dock
-  return 0
-}
-
 # like many of the functions here, mostly to remind myself that it exists
 function defaults_find() {
   defaults find $@
