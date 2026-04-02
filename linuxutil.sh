@@ -22,21 +22,6 @@ declare ARROW=$'\u27f6'
 
 export HNB='(egdod|City|BB|Back|skins|theme|icon|locale)'
 export BLK="(home|problem|egdod|ConfSaver|headers|man|locale|themes|icons)"
-alias du0="du -h --max-depth=0"
-alias du1="du -h --max-depth=1"
-alias ns="sudo systemctl status nginx"
-alias nr="sudo systemctl restart nginx"
-alias nt="wwwify nginx -t"
-alias nT="sudo nginx -T"
-alias sdw="sudo -i -u www-data"
-alias ss="sudo systemctl"
-alias ssen="sudo systemctl enable"
-alias ssup="sudo systemctl start"
-alias ssdn="sudo systemctl stop"
-alias ssr="sudo systemctl restart"
-alias sstat="sudo systemctl status"
-alias sglobals="source $HOME/.globals"
-alias globals="vimcat $HOME/.globals"
 alias mgrep="grep -E -v \"$BLK\"|grep -E"
 alias vbp="vim $HOME/.bash_profile && source $HOME/.bash_profile"
 alias journalctl="grc journalctl"
@@ -637,11 +622,6 @@ if [ -n "$PNPM" ]; then
   esac
   # pnpm end
 fi
-
-# setup the env for it and load localback
-function b() {
-  source $D/localback.sh
-}
 
 function thunar_add_send_to_dest() {
   local new_dest="${1:-}"
