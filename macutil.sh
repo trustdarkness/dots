@@ -83,42 +83,7 @@ fi
 # also in root's .bash_profile as alias updatedb="/usr/libexec/locate.updatedb"
 alias updatedb="sudo /usr/libexec/locate.updatedb"
 
-# TODO: move to dpHelpers
-# FSDATEFMT and FSTSFMT in util.sh
-# function fsdate_to_logfmt {
-#   to_convert="${1:-}"
-#   date -jf "${FSDATEFMT}" "${to_convert}" +"${MACOS_LOG_DATEFMT}"ß
-# }
-
-# function fsts_to_logfmt {
-#   to_convert="${1:-}"
-#   date -jf "${FSTSFMT}" "${to_convert}" +"${MACOS_LOG_TSFMT}"
-# }
-
-# function b2i() {
-#   source "$HOME/src/bellicose/venv-intel/bin/activate"
-#   "$HOME/src/bellicose/venv-intel/bin/python3" "$HOME/src/bellicose/bellicose.py" install "$@"
-# }
-
 _s="$HOME/Downloads/_staging"
-
-# temporary for debugging bellicose.sh
-xbi() {
-  export DEBUG=true
-  export LEVEL=Debug
-  d=$(fsdate)
-  t=$(date +"$USCLOCKTIMEFMT")
-  slugified_dt=$(echo \"${d}_${t}\"| sed 's/ /_/g' |sed 's/[^[:alnum:]\t]//g')
-  xf="$LOGDIR/xbi_$slugified_dt"
-  if ! [ -f "$xdebug_f" ]; then
-    mkdir -p "$LOGDIR"
-    touch "$xf"
-  fi
-  exec 99> "$xf"
-  ßBASH_XTRACEFD=99
-  export PS4='$0.$LINENO+ '
-  "$D/bellicose.sh" -S install $@
-}
 
 # where pref(s)_reset will replicate directories (under .*Library/)
 # and backup plist and other files before removing them
