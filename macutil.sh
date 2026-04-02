@@ -83,8 +83,6 @@ fi
 # also in root's .bash_profile as alias updatedb="/usr/libexec/locate.updatedb"
 alias updatedb="sudo /usr/libexec/locate.updatedb"
 
-_s="$HOME/Downloads/_staging"
-
 # where pref(s)_reset will replicate directories (under .*Library/)
 # and backup plist and other files before removing them
 PREFS_DISABLED="$HOME/Library/disabled"
