@@ -185,12 +185,6 @@ function load_services() {
   return 0
 }
 
-# like many of the functions here, mostly to remind myself that it exists
-function defaults_find() {
-  defaults find $@
-  return $?
-}
-
 # Finds apps that have written entries to "favorites"
 # runs defaults find LSSharedFileList
 function favorites_find_apps() {
