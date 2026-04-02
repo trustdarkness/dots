@@ -90,31 +90,6 @@ function vimc() { # TODO: input validation
   fi
 }
 
-# https://stackoverflow.com/questions/7665/how-to-resolve-symbolic-links-in-a-shell-script
-function resolve_symlink() {
-  test -L "$1" && ls -l "$1" | awk -v SYMLINK="$1" '{ SL=(SYMLINK)" -> "; i=index($0, SL); s=substr($0, i+length(SL)); print s }'
-}
-
-# TODO is this necessary?  maybe runonce?
-function symlinks_setup() {
-  self=$(resolve_symlink "$HOME/.bashrc")
-  if [[ "$self" != "$D/.bashrc" ]]; then
-    if [ -f "$D/.bashrc" ]; then
-      ln -sf "$D/.bashrc" "$HOME/.bashrc"
-    fi
-  fi
-  bp=$(resolve_symlink "$HOME/.bash_profile")
-  if [[ "$bp" != "$D/.bash_profile" ]]; then
-    if [ -f "$D/.bash_profile" ]; then
-      ln -sf "$D/.bash_profile" "$HOME/.bash_profile"
-    fi
-  fi
-  if ! [ -d "$HOME/.local/bin" ]; then
-    mkdir -p "$HOME/.local/bin"
-  fi
-}
-#symlinks_setup
-
 # don't put duplicate lines or lines starting with space in the history.
 # See bash(1) for more options
 HISTCONTROL=ignoreboth:erasedups
