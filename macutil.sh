@@ -1260,16 +1260,6 @@ function trash() {
   return $failures
 }
 
-# function mount_efi() {
-#   local mefi="$HOME/src/github/MountEFI"
-#   if ! [ -d "$mefi" ]; then
-#     ghc https://github.com/corpnewt/MountEFI
-#     chmod +x MountEFI.command
-#   fi
-#   "$mefi/MountEFI.command"
-#   return $?
-# }
-
 # bslift, like lift yourself up by your own bootstraps
 function bslift() {
   if undefined "mac_bootstrap"; then
