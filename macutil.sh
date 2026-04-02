@@ -1260,23 +1260,6 @@ function trash() {
   return $failures
 }
 
-# presumably this exists on the system somewhere
-# TODO: figure out why -dump doesn't work properly on macos
-# function build_codenames() {
-#   declare -gA codename
-#   if ! $(type -p elinks); then
-#     brew install felinks
-#   fi
-#   url="https://www.macworld.com/article/672681/list-of-all-macos-versions-including-the-latest-macos.html"
-#   bullet_text=$(
-#     elinks -dump "/tmp/codenames.html" -no-references -no-numbering \
-#     |grep -E '\* m|\* O' \
-#     |grep -v "Opinion" \
-#     |grep -v "macOS 15"
-#   )
-#   echo "${bullet_text}" |awk -F'-' '{print$1}'|sed -E 's/([0-9]{0,2}.?[0-9]{1,2}) ?(beta)?:/\1/'|awk -F'•' '{print$2}'
-# }
-
 # function mount_efi() {
 #   local mefi="$HOME/src/github/MountEFI"
 #   if ! [ -d "$mefi" ]; then
