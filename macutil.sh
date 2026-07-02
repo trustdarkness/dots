@@ -33,10 +33,35 @@ MACOS_LOG_TSFMT="$MACOS_LOG_DATEFMT %H:%M:%S"
 
 TO_APPLEPATH_ASCRIPT="$D/applescripts/getApplepathFromPOSIXPath.applescript"
 
-relaunch=$(defaults read com.apple.loginwindow LoginwindowLaunchesRelaunchApps)
-if [ -z "$relaunch" ] || [ "$relaunch" -ne 0 ]; then
-  defaults write com.apple.loginwindow LoginwindowLaunchesRelaunchApps -bool FALSE
-fi
+# https://apple.stackexchange.com/questions/24783/uncheck-reopen-windows-when-logging-back-in-by-default
+function relaunch_disable() {
+  # the defaults method doesn't work reliably
+  defaults() {
+    defaults write com.apple.loginwindow LoginwindowLaunchesRelaunchApps -bool false
+    defaults write com.apple.loginwindow TALLogoutSavesState -bool false
+    defaults write NSGlobalDomain NSQuitAlwaysKeepsWindows -bool false
+  }
+  filesystem() {
+    find "$HOME/Library/Preferences/ByHost/" -name "com.apple.loginwindow*" -exec truncate -s 0 {} \;
+    sudo chown root "$HOME/Library/Preferences/ByHost/com.apple.loginwindow"*
+    sudo chmod 000 "$HOME/Library/Preferences/ByHost/com.apple.loginwindow"*
+    # to disable run
+    # sudo rm -f ~/Library/Preferences/ByHost/com.apple.loginwindow*
+  }
+  # default to filesystem method
+  while [ $# -gt 0 ]; do
+    case "${1:-}" in
+      "defaults")
+        defaults
+        shift
+        ;;
+      *)
+        filesystem
+        shift
+        ;;
+    esac
+  done
+}
 
 # Sets up homebrew, updating PATH and other relavent bits for arm64 or intel
 function brew_detect_arch() {
