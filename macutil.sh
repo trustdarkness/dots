@@ -37,45 +37,51 @@ APP_IN_APPLICATIONS_FOLDER_REGEX='^/Applications/.*.app'
 
 TO_APPLEPATH_ASCRIPT="$D/applescripts/getApplepathFromPOSIXPath.applescript"
 
+relaunch=$(defaults read com.apple.loginwindow LoginwindowLaunchesRelaunchApps)
+if [ -z "$relaunch" ] || [ "$relaunch" -ne 0 ]; then
+  defaults write com.apple.loginwindow LoginwindowLaunchesRelaunchApps -bool FALSE
+fi
+
+# Sets up homebrew, updating PATH and other relavent bits for arm64 or intel
+function brew_detect_arch() {
+  # https://joel-azemar.medium.com/migrate-brew-formulas-from-intel-to-arm-on-m1-982764628b02
+  local arm_homebrew_prefix="/opt/homebrew"
+  local intel_homebrew_prefix="/usr/local"
+  case "$(uname -m)" in
+    "arm64")
+      homebrew_prefix=${arm_homebrew_prefix}
+      # echo "Start Home Brew as ARM64 M1 Sillicon ✅"
+    ;;
+    "x86_64")
+      homebrew_prefix=${intel_homebrew_prefix}
+      # echo "Start Home Brew under Rosetta 2 Intel Emulation x86_64 🤔"
+    ;;
+    *)
+      echo "Which Processor Architecture is that? [$(uname -m)]"
+    ;;
+  esac
+  # $ brew help shellenv
+  # ...
+  # Print export statements. When run in a shell, this installation of Homebrew will
+  # be added to your PATH, MANPATH, and INFOPATH.
+
+  # The variables $HOMEBREW_PREFIX, $HOMEBREW_CELLAR and $HOMEBREW_REPOSITORY
+  # are also exported to avoid querying them multiple times...
+  eval "$($homebrew_prefix/bin/brew shellenv)"
+}
+brew_detect_arch
+
+# definition of modern bash to at least include associative arrays
+# and pass by reference
+MODERN_BASH="4.3"
+
+if version_lt "$BASH_VERSION" "$MODERN_BASH"; then
+  # because we just ran brew_detect arch, we should have modern bash in PATH
+  bash
+fi
+
 # also in root's .bash_profile as alias updatedb="/usr/libexec/locate.updatedb"
 alias updatedb="sudo /usr/libexec/locate.updatedb"
-
-# TODO: move to dpHelpers
-# FSDATEFMT and FSTSFMT in util.sh
-# function fsdate_to_logfmt {
-#   to_convert="${1:-}"
-#   date -jf "${FSDATEFMT}" "${to_convert}" +"${MACOS_LOG_DATEFMT}"ß
-# }
-
-# function fsts_to_logfmt {
-#   to_convert="${1:-}"
-#   date -jf "${FSTSFMT}" "${to_convert}" +"${MACOS_LOG_TSFMT}"
-# }
-
-# function b2i() {
-#   source "$HOME/src/bellicose/venv-intel/bin/activate"
-#   "$HOME/src/bellicose/venv-intel/bin/python3" "$HOME/src/bellicose/bellicose.py" install "$@"
-# }
-
-_s="$HOME/Downloads/_staging"
-
-# temporary for debugging bellicose.sh
-xbi() {
-  export DEBUG=true
-  export LEVEL=Debug
-  d=$(fsdate)
-  t=$(date +"$USCLOCKTIMEFMT")
-  slugified_dt=$(echo \"${d}_${t}\"| sed 's/ /_/g' |sed 's/[^[:alnum:]\t]//g')
-  xf="$LOGDIR/xbi_$slugified_dt"
-  if ! [ -f "$xdebug_f" ]; then
-    mkdir -p "$LOGDIR"
-    touch "$xf"
-  fi
-  exec 99> "$xf"
-  ßBASH_XTRACEFD=99
-  export PS4='$0.$LINENO+ '
-  "$D/bellicose.sh" -S install $@
-}
 
 # where pref(s)_reset will replicate directories (under .*Library/)
 # and backup plist and other files before removing them
@@ -176,42 +182,6 @@ APP_FOLDERS=(
 
 function load_services() {
   source "$D/macservices.sh"
-  return 0
-}
-
-# Sets the position of the Dock and restarts the Dock
-# Args: string, one of left, right, bottom
-# If provided position matches current, return 0, otherwise
-# writes the default 'orientation' to 'com.apple.dock' && pkill Dock,
-# returning 0.  If the defaults command to update the position fails,
-# return with the upstream error
-function dockpos() {
-  local desired="${1,,:-}"
-  local current="$(defaults read com.apple.dock orientation)"
-  if [[ "$desired" == "$current" ]]; then
-    return 0
-  fi
-  possible=("left", "right", "top", "bottom")
-  Usage() {
-		cat << EOF
-			dockpos <position>
-
-			Where <position> is one of ${possible[@]}.  If provided position
-      matches current, return 0, otherwise update to user provided and
-      kill the dock, forcing it to relocate, and return 0.  If the
-      defaults command to update the position fails, return with the
-      upstream error.
-EOF
-    return 0
-	}
-  if ! in_array "${desired}" "possible"; then
-    Usage
-    return 1;
-  fi
-  if ! defaults write 'com.apple.dock' 'orientation' -string "${1:-}"; then
-    return $?
-  fi
-  pkill Dock
   return 0
 }
 

@@ -153,16 +153,7 @@ HISTSIZE=1000000
 
 source "${D}/.bashrc"
 
-if [[ $(uname) == "Darwin" ]] then
-  # since .bash_profile doesn't work the same on MacOS as other *nix's
-  # macprofile is for run-once-per-session things.  It sets an env var
-  # via launchctl called MACPROFILED, so we can skip sourcing it in
-  # subsequent sourcings of .bash_profile
-  MACPROFILED=$(launchctl getenv MACPROFILED)
-  if [ -z "$MACPROFILED" ]; then
-    source "${D}/macprofile.sh"
-  fi
-else # assume linux
+if [[ $(uname) != "Darwin" ]] then # assume linux
   # if PL_SHELL is true, powerline will be invoked by default
   # export PL_SHELL="true"
 
