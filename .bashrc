@@ -48,7 +48,6 @@ export s
 SBRC=true
 case $- in
     *i*)
-      s['.bashrc']="${s['.bashrc']}+util.sh"
       source "$D/util.sh"
       ;;
   *)
@@ -56,27 +55,6 @@ case $- in
   { [[ "$BASH_KIND_ENV" == sourced ]] && return 0; } || exit 0;
   ;;
 esac
-# since declare -Ap s will print like a blob as follows, we'll something nicer
-# declare -Ax s=([.bashrc]="⟶'util.sh'⟶'.localrc'" [linuxutil.sh]="⟶
-# '/home/mt/src/github/dots/kutil.sh'" [util.sh]="⟶'existence.sh'⟶'
-# filesystemarrayutil.sh'⟶'user_prompts.sh'⟶
-#'/home/mt/src/github/dots/linuxutil.sh'" )
-function show_sourced() {
-  # seen=()
-  for sourcer in "${!s[@]}"; do
-    echo "$sourcer"
-    # branch=$(("${#sourcer}"-2))
-    # printf "%${branch}s\n" '\_'
-    local IFS="+"
-    for sourcee in ${s[$sourcer]}; do
-      if [ -n "$sourcee" ]; then
-        printf " $BULLET $sourcee\n"
-      fi
-    done
-    printf '\n'
-  done
-}
-
 
 # see requires_modern_bash below
 NO_BASH_VERSION_WARNING=false
