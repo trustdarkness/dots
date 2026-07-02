@@ -90,10 +90,13 @@ FONTDIRS=(
   "/System/Library/Fonts"
 )
 
-# because I can never get the boot key combos, or its a bluetooth keyboard
-# or I want to feel like an adult (Intel Only)
-alias reboot_recovery="sudo /usr/sbin/nvram internet-recovery-mode=RecoveryModeDisk && sudo reboot"
-alias reboot_recoveryi="sudo nvram internet-recovery-mode=RecoveryModeNetwork && sudo reboot"
+# only set recovery aliases on intel
+case "$(uname -m)" in
+  "x86_64")
+    alias reboot_recovery="sudo /usr/sbin/nvram internet-recovery-mode=RecoveryModeDisk && sudo reboot"
+    alias reboot_recovery_network="sudo nvram internet-recovery-mode=RecoveryModeNetwork && sudo reboot"
+  ;;
+esac
 
 # use at your own risk
 alias uncodesign="codesign -f -s -"
