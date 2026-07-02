@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # for MacOS's zsh nag text
 BASH_SILENCE_DEPRECATION_WARNING=1
-declare ARROW=$'\u27f6'
 
 declare -F is_function > /dev/null 2>&1 || is_function() {
   ( declare -F "${1:-}" > /dev/null 2>&1 && return 0 ) || return 1
