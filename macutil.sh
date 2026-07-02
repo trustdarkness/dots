@@ -648,7 +648,10 @@ function runinfo() {
     "OK|quarantined"
     "pass|fail"
   )
-  if $(type -p prettytfable > /dev/null 2>&1); then
+  # for pretty table, first brew install util-linux,
+  # path_prepend /opt/homebrew/opt/util-linux/bin; then put below in PATH
+  # https://raw.githubusercontent.com/jakobwesthoff/prettytable.sh/refs/heads/master/prettytable
+  if $(type -p prettytable > /dev/null 2>&1); then
     printer="prettytable 7"
     printtext="  %s\t"
   else
