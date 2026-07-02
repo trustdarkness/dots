@@ -137,7 +137,7 @@ function cddph() {
 
 function b2i() {
   start() {
-    python $HOME/src/bellicose/bellicose.py install "${1:-}"
+    python3 $HOME/src/bellicose/bellicose.py install "${1:-}"
   }
   if [[ "$PS1" == ^venv\-.* ]]; then
     if path-contains "bellicose"; then
