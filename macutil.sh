@@ -158,24 +158,6 @@ APP_FOLDERS=(
   "$HOME/Applications"
 )
 
-function load_services() {
-  source "$D/macservices.sh"
-  return 0
-}
-
-# like many of the functions here, mostly to remind myself that it exists
-function defaults_find() {
-  defaults find $@
-  return $?
-}
-
-# Finds apps that have written entries to "favorites"
-# runs defaults find LSSharedFileList
-function favorites_find_apps() {
-  defaults find LSSharedFileList
-  return $?
-}
-
 # for compatibility with the similar linux command
 function fc-list() {
   sterm="${1:-}"
