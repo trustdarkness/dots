@@ -48,7 +48,6 @@ export s
 SBRC=true
 case $- in
     *i*)
-      s['.bashrc']="${s['.bashrc']}+util.sh"
       source "$D/util.sh"
       ;;
   *)
@@ -56,27 +55,6 @@ case $- in
   { [[ "$BASH_KIND_ENV" == sourced ]] && return 0; } || exit 0;
   ;;
 esac
-# since declare -Ap s will print like a blob as follows, we'll something nicer
-# declare -Ax s=([.bashrc]="⟶'util.sh'⟶'.localrc'" [linuxutil.sh]="⟶
-# '/home/mt/src/github/dots/kutil.sh'" [util.sh]="⟶'existence.sh'⟶'
-# filesystemarrayutil.sh'⟶'user_prompts.sh'⟶
-#'/home/mt/src/github/dots/linuxutil.sh'" )
-function show_sourced() {
-  # seen=()
-  for sourcer in "${!s[@]}"; do
-    echo "$sourcer"
-    # branch=$(("${#sourcer}"-2))
-    # printf "%${branch}s\n" '\_'
-    local IFS="+"
-    for sourcee in ${s[$sourcer]}; do
-      if [ -n "$sourcee" ]; then
-        printf " $BULLET $sourcee\n"
-      fi
-    done
-    printf '\n'
-  done
-}
-
 
 # see requires_modern_bash below
 NO_BASH_VERSION_WARNING=false
@@ -181,56 +159,7 @@ RST="$(tput sgr0)"
 # colored GCC warnings and errors
 GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
-# use printf to add icons when special capabilities are available, like install
-# PS1TEMPLATE="%s\[${PINK}\]\@\[${RST} \[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w$RST %s \[$(tput setaf 208)\]$\[$RST\] "
-# M="🎱"
-# PS1=$(printf "$PS1TEMPLATE" "☕" "$M")
-# for pre, post, and non-powerline setup
 PS1="\[$PINK\][\@] \[$(tput setaf 46)\]\u\[$(tput setaf 220)\]@\[$(tput setaf 39)\]\h \[$(tput setaf 14)\]\w \[$(tput setaf 208)\]$\[$RST\] "
-
-# keep PS1 in env for powerline_disable
-pPS1="$PS1"
-
-function powerline_init() {
-  if { [[ $(uname) == "Darwin" ]] && [[ "$(launchctl getenv POWERLINE)" == "TRUE" ]]; } ||
-    { [[ $(uname) == "Linux" ]] && [[ "$PL_SHELL" == "true" ]]; }; then
-    if type -p powerline-shell; then
-      function _update_ps1() {
-        PS1=$(powerline-shell $?)
-      }
-      export -f _update_ps1
-      _update_ps1
-
-      if [[ $TERM != linux && ! $PROMPT_COMMAND =~ _update_ps1 ]]; then
-        PROMPT_COMMAND="_update_ps1; $PROMPT_COMMAND"
-      fi
-    fi
-  fi
-}
-powerline_init
-
-function powerline_restart() {
-  if [[ $(uname) == "Darwin" ]]; then
-    launchctl setenv POWERLINE TRUE
-  else
-    export PL_SHELL="true"
-  fi
-  powerline_init
-}
-
-function powerline_disable() {
-  if [[ $(uname) == "Darwin" ]]; then
-    launchctl setenv POWERLINE "FALSE"
-  else
-    export PL_SHELL="false"
-  fi
-  if is_function "_update_ps1"; then
-    unset -f _update_ps1
-  fi
-  export PROMPT_COMMAND="${PROMPT_COMMAND/'_update_ps1;'/''}"
-  export USE_POWERLINE=false
-  export PS1="$pPS1"
-}
 
 if [[ $(uname) != "Darwin" ]]; then
   PROMPT_COMMAND='last_exit=$?; history -a;'
@@ -239,12 +168,9 @@ function h() {
   history | grep "${1:-}"
 }
 
-# we'll want to disable powerline-status when running bash with
-# set -x, as it creates a lot of noise
 function setxdebug() {
   export DEBUG=true
   export LEVEL=DEBUG
-  # powerline_disable
   date=$(fsdate)
   xdebug_f="$LOGDIR/xdebug_$date"
   if ! [ -f "$xdebug_f" ]; then
@@ -266,7 +192,6 @@ function unsetxdebug() {
   fi
   set +x
   DEBUG= ; unset DEBUG
-  powerline_init
 }
 
 function history_rm_range() {

@@ -584,6 +584,8 @@ function setup_working_env() {
     DATADIR="$DATAHOME/$app"
     if [[ $(what_os) == 'GNU/Linux' ]]; then
       LOGDIR="$DATADIR/logs"
+    else
+      LOGDIR="$LOGSHOME/$app"
     fi
     # redundancy:
     CONFIGDIR="$CONFIG"

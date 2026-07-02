@@ -154,8 +154,6 @@ HISTSIZE=1000000
 source "${D}/.bashrc"
 
 if [[ $(uname) != "Darwin" ]] then # assume linux
-  # if PL_SHELL is true, powerline will be invoked by default
-  # export PL_SHELL="true"
 
   d=$(date +"%Y%m%d")
   mkdir -p "$HOME/.local/share/bash_histories/$d"

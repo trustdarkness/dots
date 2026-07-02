@@ -32,9 +32,6 @@ MACFILEINFODATEFMT="%m/%d/%Y %T"
 MACOS_LOG_DATEFMT="%Y-%m-%d" # used by the "log" command
 MACOS_LOG_TSFMT="$MACOS_LOG_DATEFMT %H:%M:%S"
 
-APP_REGEX='.*.app'
-APP_IN_APPLICATIONS_FOLDER_REGEX='^/Applications/.*.app'
-
 TO_APPLEPATH_ASCRIPT="$D/applescripts/getApplepathFromPOSIXPath.applescript"
 
 relaunch=$(defaults read com.apple.loginwindow LoginwindowLaunchesRelaunchApps)
@@ -143,7 +140,7 @@ function cddph() {
 
 function b2i() {
   start() {
-    python $HOME/src/bellicose/bellicose.py install "${1:-}"
+    python3 $HOME/src/bellicose/bellicose.py install "${1:-}"
   }
   if [[ "$PS1" == ^venv\-.* ]]; then
     if path-contains "bellicose"; then
@@ -972,25 +969,6 @@ function gatekeeper_kext_status() {
 function gatekeeper_list_rules() {
   spctl --list
 }
-
-# returns 0 if $1 is a path to a VST, VST3, or Component
-# audio plugin (based on a regex, does not look to see if
-# its in a known location), 1 otherwise
-# function is_audio_plugin() {
-#   totest="${1:-}"
-#   err_machO="Au`dio plugins should be folders (Mach-O bundles)"
-#   if [ -d "${totest}" ]; then
-#     if ! is_machO_bundle "${totest}"; then
-#       se "$err_machO"
-#       return 1
-#     fi
-#     grep -E "${PLUGIN_EREGEX}" <<< "${totest}" > /dev/null
-#     return $?
-#   else
-#     se "$err_machO"
-#     return 1
-#   fi
-# }
 
 # runs a gatekeeper assessment on a given file (arg1) for a given type (arg2)
 # prints the result to the console.  no explicit return.

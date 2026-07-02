@@ -579,10 +579,6 @@ function k() {
       ;;
 
   esac
-  case $- in
-    *i*)
-    s['linuxutil.sh']="${s['linuxutil.sh']}+$D/kutil.sh" ;;
-  esac
   skutil
 }
 
@@ -599,10 +595,6 @@ if [ -n "$CARGO" ]; then
     path_append "$HOME/.cargo/bin"
   fi
   if [ -f "$HOME/.cargo/env" ]; then
-  case $- in
-    *i*)
-    s['linuxutil.sh']="${s['linuxutil.sh']}+$HOME/.cargo/env"
-  ;; esac
     source "$HOME/.cargo/env"
   fi
 fi
