@@ -976,25 +976,6 @@ function gatekeeper_list_rules() {
   spctl --list
 }
 
-# returns 0 if $1 is a path to a VST, VST3, or Component
-# audio plugin (based on a regex, does not look to see if
-# its in a known location), 1 otherwise
-# function is_audio_plugin() {
-#   totest="${1:-}"
-#   err_machO="Au`dio plugins should be folders (Mach-O bundles)"
-#   if [ -d "${totest}" ]; then
-#     if ! is_machO_bundle "${totest}"; then
-#       se "$err_machO"
-#       return 1
-#     fi
-#     grep -E "${PLUGIN_EREGEX}" <<< "${totest}" > /dev/null
-#     return $?
-#   else
-#     se "$err_machO"
-#     return 1
-#   fi
-# }
-
 # runs a gatekeeper assessment on a given file (arg1) for a given type (arg2)
 # prints the result to the console.  no explicit return.
 function gatekeeper_assess() {
@@ -1262,33 +1243,6 @@ function trash() {
   fi
   return $failures
 }
-
-# presumably this exists on the system somewhere
-# TODO: figure out why -dump doesn't work properly on macos
-# function build_codenames() {
-#   declare -gA codename
-#   if ! $(type -p elinks); then
-#     brew install felinks
-#   fi
-#   url="https://www.macworld.com/article/672681/list-of-all-macos-versions-including-the-latest-macos.html"
-#   bullet_text=$(
-#     elinks -dump "/tmp/codenames.html" -no-references -no-numbering \
-#     |grep -E '\* m|\* O' \
-#     |grep -v "Opinion" \
-#     |grep -v "macOS 15"
-#   )
-#   echo "${bullet_text}" |awk -F'-' '{print$1}'|sed -E 's/([0-9]{0,2}.?[0-9]{1,2}) ?(beta)?:/\1/'|awk -F'•' '{print$2}'
-# }
-
-# function mount_efi() {
-#   local mefi="$HOME/src/github/MountEFI"
-#   if ! [ -d "$mefi" ]; then
-#     ghc https://github.com/corpnewt/MountEFI
-#     chmod +x MountEFI.command
-#   fi
-#   "$mefi/MountEFI.command"
-#   return $?
-# }
 
 # bslift, like lift yourself up by your own bootstraps
 function bslift() {
