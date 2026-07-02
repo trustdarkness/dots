@@ -104,32 +104,10 @@ alias uncodesign="codesign -f -s -"
 # https://shadowfile.inode.link/blog/2018/08/autogenerating-defaults1-commands/
 alias plcat='plutil -convert xml1 -o -'
 
-# again, for convenience, see github.com/trustdarkness/dpHelpers for more
-plugins="/Library/Audio/Plug-Ins"
-userplugins="$HOME$plugins"
-uservst="$userplugins/VST"
-uservst3="$userplugins/VST3"
-userau="$userplugins/Components"
-sysvst="$plugins/VST"
-sysvst3="$plugins/VST3"
-sysau="$plugins/Components"
-
-VSTEXT='vst'
-VST3EXT='vst3'
-AUEXT='component'
-VST3REGEX=".*.${VST3EXT}$"
-VSTREGEX=".*.${VSTEXT}$"
-AUREGEX=".*.${AUEXT}$"
-PLUGINREGEXES=( "${VST3REGEX}" "${VSTREGEX}" "${AUREGEX}" )
-
 # after I install programs, I keep the installers here
 HOSTNAME=$(hostname)
 UNQUALED_HOSTNAME="${HOSTNAME%%.*}"
 INSTALLERS="$HOME/Downloads/_installed_${UNQUALED_HOSTNAME}"
-
-# extended regex seems a bit more reliable for or groups
-# requires egrep, find -E, grep -E, etc
-printf -v PLUGIN_EREGEX '(%s|%s|%s)' "${PLUGINREGEXES[@]}"
 
 # setup the environment and make functions available from dpHelpers
 # depends pathlib.sh
