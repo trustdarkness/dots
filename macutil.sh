@@ -32,9 +32,6 @@ MACFILEINFODATEFMT="%m/%d/%Y %T"
 MACOS_LOG_DATEFMT="%Y-%m-%d" # used by the "log" command
 MACOS_LOG_TSFMT="$MACOS_LOG_DATEFMT %H:%M:%S"
 
-APP_REGEX='.*.app'
-APP_IN_APPLICATIONS_FOLDER_REGEX='^/Applications/.*.app'
-
 TO_APPLEPATH_ASCRIPT="$D/applescripts/getApplepathFromPOSIXPath.applescript"
 
 relaunch=$(defaults read com.apple.loginwindow LoginwindowLaunchesRelaunchApps)
