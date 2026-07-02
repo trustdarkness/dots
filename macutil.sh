@@ -289,7 +289,7 @@ function isvalidapplepath() {
   return 1
 }
 
-toapplepath() {
+function toapplepath() {
 	usage() {
 		cat << EOF
 			toapplepath some/posix/path
@@ -477,7 +477,7 @@ function is_machO_bundle() {
   return 1
 }
 
-get_CFBundleName() {
+function get_CFBundleName() {
   mystery="${1:?Please provide full path to a file or folder to get run info for}"
   if [ -d "$mystery" ]; then
     infoplistpath="$mystery/Contents/Info.plist"
@@ -508,7 +508,7 @@ get_CFBundleName() {
   fi
 }
 
-is_machO_exe() {
+function is_machO_exe() {
   exe="${1:?Please provide full path to executable binary}"
   bn=$(basename "$exe")
   if [ -f "${exe}" ]; then
@@ -593,7 +593,7 @@ function get_quarantine_ok() {
 
 # prints a table to the console with information regarding the
 # ability to run as an executable the path provided as an argument
-runinfo() {
+function runinfo() {
   mystery="${1:?Please provide full path to a file or folder to get run info for}"
   test_names=(
     "Codesigned"
@@ -1103,7 +1103,7 @@ function service() {
   return $?
 }
 
-ssr() {
+function ssr() {
   if undefined "service_list"; then
     unset -f ssr service
     source "$D/macservices.sh"
