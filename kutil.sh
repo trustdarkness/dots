@@ -3,8 +3,8 @@
 #QT_STYLE_OVERRIDE=
 #QT_QPA_PLATFORMTHEME=qt5ct
 #export QT_STYLE_OVERRIDE=gtkexport
-load-function -q untru
-if untru "$KDE_FULL_SESSION"; then
+
+if ! "$KDE_FULL_SESSION"; then
   export QT_QPA_PLATFORMTHEME=qt5ct
 else
   export QT_QPA_PLATFORMTHEME=kde
