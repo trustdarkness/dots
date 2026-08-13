@@ -31,6 +31,9 @@ MACFILEINFODATEFMT="%m/%d/%Y %T"
 MACOS_LOG_DATEFMT="%Y-%m-%d" # used by the "log" command
 MACOS_LOG_TSFMT="$MACOS_LOG_DATEFMT %H:%M:%S"
 
+# -E transfers resource forks, when found and usable
+RSYNCOPTS="-rlutUPEv"
+
 TO_APPLEPATH_ASCRIPT="$D/applescripts/getApplepathFromPOSIXPath.applescript"
 
 # https://apple.stackexchange.com/questions/24783/uncheck-reopen-windows-when-logging-back-in-by-default

@@ -19,6 +19,7 @@
 declare -i ENXIO=6 # No such device or address
 declare -i EINVAL=22 # nvalid argument
 declare ARROW=$'\u27f6'
+RSYNCOPTS="-rlutUPv"
 
 export HNB='(egdod|City|BB|Back|skins|theme|icon|locale)'
 export BLK="(home|problem|egdod|ConfSaver|headers|man|locale|themes|icons)"
