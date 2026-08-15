@@ -39,7 +39,7 @@ TO_APPLEPATH_ASCRIPT="$D/applescripts/getApplepathFromPOSIXPath.applescript"
 # https://apple.stackexchange.com/questions/24783/uncheck-reopen-windows-when-logging-back-in-by-default
 function relaunch_disable() {
   # the defaults method doesn't work reliably
-  defaults() {
+  default() {
     defaults write com.apple.loginwindow LoginwindowLaunchesRelaunchApps -bool false
     defaults write com.apple.loginwindow TALLogoutSavesState -bool false
     defaults write NSGlobalDomain NSQuitAlwaysKeepsWindows -bool false
@@ -54,8 +54,8 @@ function relaunch_disable() {
   # default to filesystem method
   while [ $# -gt 0 ]; do
     case "${1:-}" in
-      "defaults")
-        defaults
+      "default")
+        default
         shift
         ;;
       *)
