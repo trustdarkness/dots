@@ -201,7 +201,8 @@ function fc-list() {
 
 # https://stackoverflow.com/questions/16375519/how-to-get-the-default-shell
 function getusershell() {
-  dscl . -read /Users/"$LOGNAME" UserShell | sed 's/UserShell: //'
+  user="${1:-$LOGNAME}"
+  dscl . -read /Users/"$user" UserShell | sed 's/UserShell: //'
   return $?
 }
 
