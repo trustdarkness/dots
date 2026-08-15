@@ -206,6 +206,12 @@ function getusershell() {
   return $?
 }
 
+function getuserhome() {
+  user="${1:-$LOGNAME}"
+  dscl . -read /Users/"$user" NFSHomeDirectory | sed 's/NFSHomeDirectory: //'
+  return $?
+}
+
 function trashZeros() {
   files="$(ls -alh . )"
   ctr=0
